@@ -85,9 +85,19 @@ Here is a complete example of a `config.json` file. It is broken into two main s
       "camera_system": "my_plaintext_password",
       "router": "$5$rounds=5000$saltstring$hashedpassword..."
     },
-    "listen": "0.0.0.0:25",
+    "listeners": [
+      {
+        "bind": "0.0.0.0:25"
+      },
+      {
+        "bind": "0.0.0.0:587",
+        "starttls": true,
+        "tls_cert_file": "/etc/ssl/certs/mail.pem",
+        "tls_key_file": "/etc/ssl/private/mail.key"
+      }
+    ],
     "queue_dir": "/tmp/pushover_queue",
-    "enable_starttls": false,
+    "hostname": "gateway.local",
     "max_retry_backoff": 21600,
     "loglevel": "info"
   }
@@ -119,11 +129,8 @@ This section controls the server infrastructure. All of these settings are optio
 | Variable | Default | Description |
 | --- | --- | --- |
 | `auth` | (None) | A dictionary mapping usernames to passwords (plain text or Linux crypt hashes). If empty, the server allows anyone to send emails. |
-| `listen` | `0.0.0.0:25` | The IP address and port the server will bind to. |
+| `listeners` | `0.0.0.0:25` | A list of listener objects. Each object takes a `bind` string and optional STARTTLS parameters (`starttls`, `tls_cert_file`, `tls_key_file`). |
 | `queue_dir` | `queue` | Directory path where pending messages are stored on the hard drive before being sent to Pushover. |
-| `enable_starttls` | `false` | Set to `true` to allow encrypted network connections. |
-| `tls_cert_file` | (None) | Path to your SSL certificate. If omitted while TLS is enabled, the script generates a self-signed cert on the fly. |
-| `tls_key_file` | (None) | Path to your SSL private key file. |
 | `hostname` | (UUID) | The name the server calls itself, used when auto-generating fallback certificates. |
 | `max_retry_backoff` | `21600` | Maximum wait time (in seconds) between retries if Pushover goes offline (default is 6 hours). |
 | `loglevel` | `info` | Terminal output verbosity. Options are `debug`, `info`, `warning`, or `error`. |
@@ -134,13 +141,15 @@ This section controls the server infrastructure. All of these settings are optio
 
 If you prefer using OS environment variables (like in a `docker-compose.yml` file), you can override infrastructure settings globally. If a setting exists in both the JSON file and an environment variable, the **environment variable always wins**.
 
+*Note on Listeners: If you use any of the four listener environment variables below, they will override the entire JSON `listeners` array and configure a single endpoint.*
+
 | Environment Variable | JSON Equivalent | Example |
 | --- | --- | --- |
 | `QUEUE_DIR` | `smtp` -> `queue_dir` | `/var/lib/pushover_queue` |
-| `LISTEN` | `smtp` -> `listen` | `127.0.0.1:2525` |
-| `ENABLE_STARTTLS` | `smtp` -> `enable_starttls` | `true` |
-| `TLS_CERT_FILE` | `smtp` -> `tls_cert_file` | `/etc/ssl/certs/mail.pem` |
-| `TLS_KEY_FILE` | `smtp` -> `tls_key_file` | `/etc/ssl/private/mail.key` |
+| `LISTEN` | `smtp` -> `listeners` -> `bind` | `127.0.0.1:2525` |
+| `STARTTLS` | `smtp` -> `listeners` -> `starttls` | `true` |
+| `TLS_CERT_FILE` | `smtp` -> `listeners` -> `tls_cert_file` | `/etc/ssl/certs/mail.pem` |
+| `TLS_KEY_FILE` | `smtp` -> `listeners` -> `tls_key_file` | `/etc/ssl/private/mail.key` |
 | `HOSTNAME` | `smtp` -> `hostname` | `mail.example.com` |
 | `FORCE_PLAINTEXT` | `pushover` -> `force_plaintext` | `true` |
 | `DISABLE_PERSISTENCE` | `pushover` -> `disable_persistence` | `true` |
@@ -156,5 +165,5 @@ If you need to change your configuration while the server is running, you can se
 | Signal | Command Example | Action |
 | --- | --- | --- |
 | `SIGUSR2` | `kill -SIGUSR2 <pid>` | Reloads `GATEWAY_CONFIG` to apply new routing rules, tokens, or passwords without dropping connections. |
-| `SIGUSR1` | `kill -SIGUSR1 <pid>` | Restarts the network listener to apply a new `listen` port or fresh TLS certificates. |
+| `SIGUSR1` | `kill -SIGUSR1 <pid>` | Restarts the network listener to apply a new `bind` port or fresh TLS certificates. |
 | `SIGINT` / `SIGTERM` | `kill -SIGTERM <pid>` | Gracefully shuts the server down, safely writing pending emails to disk before exiting. |

@@ -58,11 +58,12 @@ GATEWAY_CONFIG (Required):
        - "auth": A dictionary mapping SMTP authentication usernames to passwords.
          Passwords can be raw strings or standard Linux modular crypt hashes ($5$, $6$).
          If "auth" is omitted or empty, permissive access is granted to all clients.
-       - "listen": Address and port (e.g., "0.0.0.0:25") to bind the SMTP server.
+       - "listeners": A list of endpoint objects to bind the SMTP server to.
+           * "bind": Address and port (e.g., "0.0.0.0:25")
+           * "starttls": Boolean to enable STARTTLS support on this listener.
+           * "tls_cert_file": Path to PEM certificate (can contain private key).
+           * "tls_key_file": Path to private key file.
        - "queue_dir": Path to store messages on disk.
-       - "enable_starttls": Boolean to enable STARTTLS support.
-       - "tls_cert_file": Path to PEM certificate (can contain private key).
-       - "tls_key_file": Path to private key file.
        - "hostname": Common Name (CN) for fallback self-signed TLS certificates.
        - "max_retry_backoff": Max seconds to wait during exponential retries.
        - "loglevel": Logging verbosity (DEBUG, INFO, WARNING, ERROR).
@@ -82,14 +83,6 @@ GATEWAY_CONFIG (Required):
           "token": "APP_SPECIFIC_TOKEN_A",
           "device": "buddys_iphone",
           "priority": 1
-        },
-        "max@example.com": {
-          "match": "both",
-          "user": "DIFFERENT_PUSHOVER_USER_KEY",
-          "token": "APP_SPECIFIC_TOKEN_B",
-          "force_plaintext": false,
-          "disable_persistence": true,
-          "ttl": 3600
         }
       },
       "smtp": {
@@ -97,11 +90,18 @@ GATEWAY_CONFIG (Required):
           "rocky": "plaintext_password_123",
           "bella": "$5$rounds=5000$staticsaltstring$UoK8w6yQ61VvG3V..."
         },
+        "listeners": [
+          {
+            "bind": "0.0.0.0:25"
+          },
+          {
+            "bind": "0.0.0.0:587",
+            "starttls": true,
+            "tls_cert_file": "/etc/ssl/certs/mail.pem",
+            "tls_key_file": "/etc/ssl/private/mail.key"
+          }
+        ],
         "queue_dir": "/tmp/queue",
-        "listen": "0.0.0.0:25",
-        "enable_starttls": true,
-        "tls_cert_file": "/tmp/tls_cert.pem",
-        "tls_key_file": "/tmp/tls_key.pem",
         "hostname": "gateway.local",
         "max_retry_backoff": 21600,
         "loglevel": "info"
@@ -114,8 +114,8 @@ ENVIRONMENT VARIABLE OVERRIDES:
     by defining the corresponding OS environment variable. Environment variables always
     take precedence.
     - QUEUE_DIR
-    - LISTEN
-    - ENABLE_STARTTLS
+    - LISTEN (Overrides the listeners list to a single endpoint)
+    - STARTTLS
     - TLS_CERT_FILE
     - TLS_KEY_FILE
     - HOSTNAME
@@ -128,7 +128,7 @@ ENVIRONMENT VARIABLE OVERRIDES:
 SIGNALS
 ================================================================================
 SIGINT / SIGTERM: Gracefully shuts down the SMTP listener and waits for queue to empty.
-SIGUSR1: Atomically restarts the SMTP listener and reloads TLS certificates from disk.
+SIGUSR1: Atomically restarts all SMTP listeners and reloads TLS certificates from disk.
 SIGUSR2: Reloads GATEWAY_CONFIG from disk (only works if configured as a file path).
 """
 
@@ -591,24 +591,42 @@ def load_config(is_reload=False):
         new_state.smtp = {
             "auth": smtp_json.get("auth", {}),
             "queue_dir": smtp_json.get("queue_dir", "queue"),
-            "listen": smtp_json.get("listen", "0.0.0.0:25"),
-            "enable_starttls": get_bool(smtp_json.get("enable_starttls")),
-            "tls_cert_file": smtp_json.get("tls_cert_file"),
-            "tls_key_file": smtp_json.get("tls_key_file"),
             "hostname": smtp_json.get("hostname"),
             "max_retry_backoff": int(smtp_json.get("max_retry_backoff", 21600)),
             "loglevel": smtp_json.get("loglevel", "INFO").upper()
         }
 
+        # Parse listener definitions
+        listeners = smtp_json.get("listeners")
+        if not isinstance(listeners, list) or len(listeners) == 0:
+            listeners = [{"bind": "0.0.0.0:25", "starttls": False}]
+
+        # Clean listener inputs
+        for l in listeners:
+            l["bind"] = l.get("bind", "0.0.0.0:25")
+            l["starttls"] = get_bool(l.get("starttls"))
+
         # Layer OS Environment Variables on top (these take strict precedence)
         if "QUEUE_DIR" in os.environ: new_state.smtp["queue_dir"] = os.environ["QUEUE_DIR"]
-        if "LISTEN" in os.environ: new_state.smtp["listen"] = os.environ["LISTEN"]
-        if "ENABLE_STARTTLS" in os.environ: new_state.smtp["enable_starttls"] = get_bool(os.environ["ENABLE_STARTTLS"])
-        if "TLS_CERT_FILE" in os.environ: new_state.smtp["tls_cert_file"] = os.environ["TLS_CERT_FILE"]
-        if "TLS_KEY_FILE" in os.environ: new_state.smtp["tls_key_file"] = os.environ["TLS_KEY_FILE"]
         if "HOSTNAME" in os.environ: new_state.smtp["hostname"] = os.environ["HOSTNAME"]
         if "MAX_RETRY_BACKOFF" in os.environ: new_state.smtp["max_retry_backoff"] = int(os.environ["MAX_RETRY_BACKOFF"])
         if "LOGLEVEL" in os.environ: new_state.smtp["loglevel"] = os.environ["LOGLEVEL"].upper()
+
+        # Handle Listener Env Var Overrides (forces a single listener setup)
+        env_bind = os.environ.get("LISTEN")
+        env_tls = os.environ.get("STARTTLS")
+        env_cert = os.environ.get("TLS_CERT_FILE")
+        env_key = os.environ.get("TLS_KEY_FILE")
+
+        if any(v is not None for v in [env_bind, env_tls, env_cert, env_key]):
+            new_state.smtp["listeners"] = [{
+                "bind": env_bind if env_bind else "0.0.0.0:25",
+                "starttls": get_bool(env_tls),
+                "tls_cert_file": env_cert,
+                "tls_key_file": env_key
+            }]
+        else:
+            new_state.smtp["listeners"] = listeners
 
         # Clean absolute/relative paths for the active queue directory
         new_state.smtp["queue_dir"] = os.path.normpath(os.path.join(SCRIPT_DIR, new_state.smtp["queue_dir"]))
@@ -713,13 +731,13 @@ def file_contains_private_key(filepath):
         return False
 
 
-def get_tls_context(smtp_state):
+def get_tls_context(listener_conf, fallback_hostname):
     """Sets up the SSL context based on config vars, handles overloads, or generates fallback certs."""
-    if not smtp_state.get("enable_starttls"):
+    if not listener_conf.get("starttls"):
         return None
 
-    cert_file = smtp_state.get("tls_cert_file")
-    key_file = smtp_state.get("tls_key_file")
+    cert_file = listener_conf.get("tls_cert_file")
+    key_file = listener_conf.get("tls_key_file")
     cert_has_key = False
 
     # Check if a provided certificate file already contains its own private key
@@ -737,8 +755,8 @@ def get_tls_context(smtp_state):
 
     # If the user requested TLS but provided bad or no files, we safely generate our own to satisfy the requirement
     if not files_ok:
-        hostname = smtp_state.get("hostname") or str(uuid.uuid4())
-        logging.warning("TLS files missing/unreadable. Generating self-signed secp384r1 fallback cert...")
+        hostname = fallback_hostname or str(uuid.uuid4())
+        logging.warning(f"TLS files missing/unreadable for listener. Generating self-signed secp384r1 fallback cert for {hostname}...")
         cert_file, key_file = generate_secp384r1_cert(hostname)
 
     tls_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
@@ -769,10 +787,10 @@ def apply_logging_level(loglevel_str):
     """Applies the configured log level to the main script and dynamically throttles aiosmtpd chatter."""
     log_level = getattr(logging, loglevel_str, logging.INFO)
 
-    # Update the Root Logger (Gate 1)
+    # 1. Update the Root Logger (Gate 1)
     logging.getLogger().setLevel(log_level)
 
-    # Update ALL attached Handlers (Gate 2) to prevent third-party lock-out
+    # 2. Update ALL attached Handlers (Gate 2) to prevent third-party lock-out
     for handler in logging.getLogger().handlers:
         handler.setLevel(log_level)
 
@@ -832,26 +850,29 @@ if __name__ == "__main__":
     worker_thread = threading.Thread(target=pushover_worker, args=(msg_queue, app_state), daemon=True)
     worker_thread.start()
 
-    # 4. Configure and spin up the aiosmtpd listener
-    listen_address, listen_port = get_listen_params(app_state.smtp["listen"])
-
-    tls_context = get_tls_context(app_state.smtp)
+    # 4. Configure and spin up the aiosmtpd listener(s)
     handler = PushoverSMTPHandler(app_state, msg_queue)
     authenticator = GatewayAuthenticator(app_state)
 
-    # Passing authenticator handles built-in ESMTP auth advertisement automatically
-    controller = Controller(
-        handler,
-        hostname=listen_address,
-        port=listen_port,
-        tls_context=tls_context,
-        authenticator=authenticator,
-        auth_require_tls=False
-    )
+    controllers = []
+    for l_conf in app_state.smtp["listeners"]:
+        listen_address, listen_port = get_listen_params(l_conf["bind"])
+        tls_context = get_tls_context(l_conf, app_state.smtp.get("hostname"))
 
-    starttls_status = "enabled" if tls_context else "disabled"
-    logging.info(f"Starting SMTP server on {listen_address}:{listen_port} (STARTTLS: {starttls_status})")
-    controller.start()
+        # Passing authenticator handles built-in ESMTP auth advertisement automatically
+        controller = Controller(
+            handler,
+            hostname=listen_address,
+            port=listen_port,
+            tls_context=tls_context,
+            authenticator=authenticator,
+            auth_require_tls=False
+        )
+
+        starttls_status = "enabled" if tls_context else "disabled"
+        logging.info(f"Starting SMTP server on {listen_address}:{listen_port} (STARTTLS: {starttls_status})")
+        controller.start()
+        controllers.append(controller)
 
     try:
         # 5. Enter main loop to monitor for OS signals
@@ -860,22 +881,25 @@ if __name__ == "__main__":
             # TCP Listener / TLS Hot-Reload (SIGUSR1)
             if reload_event.is_set():
                 reload_event.clear()
-                logging.info("Stopping current SMTP controller...")
-                controller.stop()
+                logging.info("Stopping active SMTP controllers...")
+                for ctrl in controllers:
+                    ctrl.stop()
+                controllers.clear()
 
-                logging.info("Rebuilding TLS context and restarting controller...")
-                tls_context = get_tls_context(app_state.smtp)
+                logging.info("Rebuilding TLS contexts and restarting controllers...")
+                for l_conf in app_state.smtp["listeners"]:
+                    listen_address, listen_port = get_listen_params(l_conf["bind"])
+                    tls_context = get_tls_context(l_conf, app_state.smtp.get("hostname"))
 
-                # Fetch fresh listening params in case they were hot-reloaded previously
-                new_address, new_port = get_listen_params(app_state.smtp["listen"])
+                    ctrl = Controller(
+                        handler, hostname=listen_address, port=listen_port, tls_context=tls_context,
+                        authenticator=authenticator, auth_require_tls=False
+                    )
+                    ctrl.start()
+                    controllers.append(ctrl)
 
-                controller = Controller(
-                    handler, hostname=new_address, port=new_port, tls_context=tls_context,
-                    authenticator=authenticator, auth_require_tls=False
-                )
-                controller.start()
-                starttls_status = "enabled" if tls_context else "disabled"
-                logging.info(f"Server listener hot-reload complete on {new_address}:{new_port} (STARTTLS: {starttls_status}).")
+                    starttls_status = "enabled" if tls_context else "disabled"
+                    logging.info(f"Server listener hot-reload complete on {listen_address}:{listen_port} (STARTTLS: {starttls_status}).")
 
             # Full Config Data Hot-Reload (SIGUSR2)
             if mappings_reload_event.is_set():
@@ -912,7 +936,8 @@ if __name__ == "__main__":
         logging.info("Keyboard interrupt received.")
     finally:
         logging.info("Shutting down... Flashing queues to disk safely...")
-        controller.stop()
+        for ctrl in controllers:
+            ctrl.stop()
 
         # Inject the None payload to signal the worker thread to break its loop
         msg_queue.put(None)
