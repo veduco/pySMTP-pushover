@@ -1,0 +1,32 @@
+{
+  /* Global routing and fallback rules */
+  "pushover": {
+    "user": "uYourGlobalUserKeyHere",
+    "token": "aYourGlobalAppTokenHere",
+    "force_plaintext": false,
+    "device": "my_iphone", # Optional global device restriction
+    "alerts@my-domain.com": {
+      "match": "to",
+      "token": "aSpecificAppTokenForAlerts"
+    },
+    "backup-server@local.network": {
+      "match": "from",
+      "user": "uADifferentUserKey",
+      "token": "aSpecificAppTokenForBackups",
+      "force_plaintext": true, // Ignores HTML formatting for this sender
+      "device": "desktop_pc"
+    }
+  },
+  // Infrastructure and server settings
+  "smtp": {
+    "auth": {
+      "camera_system": "my_plaintext_password",
+      "router": "$5$rounds=5000$saltstring$hashedpassword..."
+    },
+    "listen": "0.0.0.0:25",
+    "queue_dir": "/tmp/pushover_queue",
+    "enable_starttls": false,
+    "max_retry_backoff": 21600,
+    "loglevel": "info"
+  }
+}
