@@ -173,6 +173,17 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 aiosmtpd_logger = logging.getLogger('mail.log')
 
+class SuppressUnrecognisedFilter(logging.Filter):
+    """Silently drops aiosmtpd warnings caused by binary TLS probes unless in DEBUG mode."""
+    def filter(self, record):
+        # If the root logger is in DEBUG mode (level 10), let everything through
+        if logging.getLogger().getEffectiveLevel() <= logging.DEBUG:
+            return True
+        # Otherwise, drop the log if it contains the TLS gibberish warning
+        return "unrecognised" not in record.getMessage()
+
+aiosmtpd_logger.addFilter(SuppressUnrecognisedFilter())
+
 PUSHOVER_API_URL = "https://api.pushover.net/1/messages.json"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
