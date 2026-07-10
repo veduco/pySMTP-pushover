@@ -38,6 +38,7 @@ GATEWAY_CONFIG (Required):
        - If an email hits an unmapped address, it acts as a Catch-All using these
          global API keys. If a global "token" is omitted, unmapped addresses are dropped.
        - Root-level "force_plaintext" (bool) sets a global preference for skipping HTML payloads.
+       - Root-level "disable_persistence" (bool) disables writing payloads to the disk queue.
        - Email routing objects accept an optional "user" (to target different accounts),
          a required "token" (to target different Pushover apps), and optional formatting overrides.
        - Optional formatting keys for Pushover payload:
@@ -74,6 +75,7 @@ GATEWAY_CONFIG (Required):
         "user": "GLOBAL_PUSHOVER_USER_KEY",
         "token": "GLOBAL_CATCH_ALL_APP_TOKEN",
         "force_plaintext": true,
+        "disable_persistence": false,
         "sound": "magic",
         "buddy@example.com": {
           "match": "to",
@@ -86,6 +88,7 @@ GATEWAY_CONFIG (Required):
           "user": "DIFFERENT_PUSHOVER_USER_KEY",
           "token": "APP_SPECIFIC_TOKEN_B",
           "force_plaintext": false,
+          "disable_persistence": true,
           "ttl": 3600
         }
       },
@@ -107,8 +110,9 @@ GATEWAY_CONFIG (Required):
 
 ENVIRONMENT VARIABLE OVERRIDES:
     Any infrastructure setting defined in the "smtp" JSON block, as well as the global
-    "force_plaintext" setting, can be explicitly overridden by defining the corresponding
-    OS environment variable. Environment variables always take precedence.
+    "force_plaintext" and "disable_persistence" settings, can be explicitly overridden
+    by defining the corresponding OS environment variable. Environment variables always
+    take precedence.
     - QUEUE_DIR
     - LISTEN
     - ENABLE_STARTTLS
@@ -116,6 +120,7 @@ ENVIRONMENT VARIABLE OVERRIDES:
     - TLS_KEY_FILE
     - HOSTNAME
     - FORCE_PLAINTEXT
+    - DISABLE_PERSISTENCE
     - MAX_RETRY_BACKOFF
     - LOGLEVEL
 
@@ -383,8 +388,9 @@ class PushoverSMTPHandler:
 
             # 4. Contextual Formatting & Queuing
             for route in unique_routes:
-                # Prioritize route-specific force_plaintext, fallback to the global setting
+                # Prioritize route-specific flags, fallback to the global setting
                 force_pt = route.get("force_plaintext", self.state.pushover.get("force_plaintext", False))
+                disable_persist = route.get("disable_persistence", self.state.pushover.get("disable_persistence", False))
 
                 # Determine which pre-processed body format this specific route should get
                 if not force_pt and body_html_processed is not None:
@@ -406,6 +412,7 @@ class PushoverSMTPHandler:
                     "title": title,
                     "timestamp": timestamp,
                     "is_html": is_html,
+                    "disable_persistence": disable_persist,
                     "retry_count": 0
                 }
 
@@ -414,14 +421,15 @@ class PushoverSMTPHandler:
                     if param in route:
                         payload[param] = route[param]
 
-                # Step 1: Save it to disk for crash resilience
-                filepath = os.path.join(self.state.smtp["queue_dir"], f"{payload['id']}.json")
-                with open(filepath, 'w') as f:
-                    json.dump(payload, f)
+                # Step 1: Save it to disk for crash resilience (unless persistence is disabled)
+                if not disable_persist:
+                    filepath = os.path.join(self.state.smtp["queue_dir"], f"{payload['id']}.json")
+                    with open(filepath, 'w') as f:
+                        json.dump(payload, f)
 
                 # Step 2: Queue it into memory for the background worker to pick up
                 self.msg_queue.put(payload)
-                logging.debug(f"Queued notification payload (ID: {payload['id']}, HTML: {is_html})")
+                logging.debug(f"Queued notification payload (ID: {payload['id']}, HTML: {is_html}, Persistent: {not disable_persist})")
 
             # Always return a 250 OK to the SMTP client so it stops trying to send the email
             return '250 Message accepted for delivery'
@@ -478,12 +486,13 @@ def pushover_worker(msg_queue, state):
 
         if success:
             # Clean up the persistence file on disk now that it's safely delivered
-            filepath = os.path.join(state.smtp["queue_dir"], f"{payload['id']}.json")
-            if os.path.exists(filepath):
-                try:
-                    os.remove(filepath)
-                except OSError as e:
-                    logging.error(f"Failed to delete disk queue file {filepath}: {e}")
+            if not payload.get("disable_persistence"):
+                filepath = os.path.join(state.smtp["queue_dir"], f"{payload['id']}.json")
+                if os.path.exists(filepath):
+                    try:
+                        os.remove(filepath)
+                    except OSError as e:
+                        logging.error(f"Failed to delete disk queue file {filepath}: {e}")
         else:
             # Handle failure with exponential backoff: 2^retry_count, capped by max_retry_backoff limit
             payload["retry_count"] = payload.get("retry_count", 0) + 1
@@ -491,13 +500,14 @@ def pushover_worker(msg_queue, state):
             logging.warning(f"Delivery failed for ID: {payload['id']}. Attempt #{payload['retry_count']}. Retrying in {backoff_delay}s.")
 
             # Update the disk file so if the app crashes during the sleep, we remember the retry count
-            filepath = os.path.join(state.smtp["queue_dir"], f"{payload['id']}.json")
-            if os.path.exists(filepath):
-                try:
-                    with open(filepath, 'w') as f:
-                        json.dump(payload, f)
-                except Exception as e:
-                    logging.error(f"Failed to update retry metadata on disk: {e}")
+            if not payload.get("disable_persistence"):
+                filepath = os.path.join(state.smtp["queue_dir"], f"{payload['id']}.json")
+                if os.path.exists(filepath):
+                    try:
+                        with open(filepath, 'w') as f:
+                            json.dump(payload, f)
+                    except Exception as e:
+                        logging.error(f"Failed to update retry metadata on disk: {e}")
 
             # Sleep the thread and push the item back to the end of the line
             time.sleep(backoff_delay)
@@ -602,17 +612,20 @@ def load_config(is_reload=False):
             "url_title": pushover_json.get("url_title"),
             "priority": pushover_json.get("priority"),
             "ttl": pushover_json.get("ttl"),
-            "force_plaintext": get_bool(pushover_json.get("force_plaintext"))
+            "force_plaintext": get_bool(pushover_json.get("force_plaintext")),
+            "disable_persistence": get_bool(pushover_json.get("disable_persistence"))
         }
 
-        # Again, env var takes precedence for global force_plaintext
+        # Again, env vars take precedence for global flags
         if "FORCE_PLAINTEXT" in os.environ:
             new_state.pushover["force_plaintext"] = get_bool(os.environ["FORCE_PLAINTEXT"])
+        if "DISABLE_PERSISTENCE" in os.environ:
+            new_state.pushover["disable_persistence"] = get_bool(os.environ["DISABLE_PERSISTENCE"])
 
         # 3. Parse Email Address Mappings
         for key, config in pushover_json.items():
             # Skip reserved root keys to focus purely on email addresses
-            if key in ("user", "token", "device", "sound", "url", "url_title", "priority", "ttl", "force_plaintext") or not isinstance(config, dict):
+            if key in ("user", "token", "device", "sound", "url", "url_title", "priority", "ttl", "force_plaintext", "disable_persistence") or not isinstance(config, dict):
                 continue
 
             email = key.lower()
@@ -632,9 +645,11 @@ def load_config(is_reload=False):
 
             route_config = {"user": user_key, "token": app_token}
 
-            # Apply route-specific force_plaintext override if it exists inside this email block
+            # Apply route-specific boolean overrides if they exist inside this email block
             if "force_plaintext" in config:
                 route_config["force_plaintext"] = get_bool(config["force_plaintext"])
+            if "disable_persistence" in config:
+                route_config["disable_persistence"] = get_bool(config["disable_persistence"])
 
             # Handle optional Pushover string parameters (device, sound, url, url_title)
             # If defined locally in this route, it overrides the global setting.

@@ -60,11 +60,13 @@ Here is a complete example of a `config.json` file. It is broken into two main s
     "user": "uYourGlobalUserKeyHere",
     "token": "aYourGlobalAppTokenHere",
     "force_plaintext": false,
+    "disable_persistence": false,
     "device": "my_iphone", # Optional global device restriction
     "sound": "magic", // Override the default sound
     "alerts@my-domain.com": {
       "match": "to",
-      "token": "aSpecificAppTokenForAlerts"
+      "token": "aSpecificAppTokenForAlerts",
+      "disable_persistence": true
     },
     "backup-server@local.network": {
       "match": "from",
@@ -102,6 +104,7 @@ This section controls who receives the push notifications. You can define global
 | `token` | Global / Route | Your Pushover application token. |
 | `match` | Route Only | When to trigger the alert: `to` (recipient), `from` (sender), or `both`. Default is `to`. |
 | `force_plaintext` | Global / Route | Set to `true` to skip HTML rendering entirely and use the raw text payload. |
+| `disable_persistence` | Global / Route | Set to `true` to prevent saving the notification to the disk queue, making it memory-only. |
 | `device` | Global / Route | Send the alert to a specific device name instead of all devices. |
 | `sound` | Global / Route | The name of a supported Pushover sound to override your default choice. |
 | `priority` | Global / Route | A number between `-2` (lowest) and `2` (emergency) to adjust alert urgency. |
@@ -140,6 +143,7 @@ If you prefer using OS environment variables (like in a `docker-compose.yml` fil
 | `TLS_KEY_FILE` | `smtp` -> `tls_key_file` | `/etc/ssl/private/mail.key` |
 | `HOSTNAME` | `smtp` -> `hostname` | `mail.example.com` |
 | `FORCE_PLAINTEXT` | `pushover` -> `force_plaintext` | `true` |
+| `DISABLE_PERSISTENCE` | `pushover` -> `disable_persistence` | `true` |
 | `MAX_RETRY_BACKOFF` | `smtp` -> `max_retry_backoff` | `3600` |
 | `LOGLEVEL` | `smtp` -> `loglevel` | `debug` |
 
