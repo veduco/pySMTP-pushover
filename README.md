@@ -73,8 +73,8 @@ Here is a complete example of a `config.json` file. It is broken into two main s
       "force_plaintext": true, // Ignores HTML formatting for this sender
       "device": "desktop_pc",
       "priority": 1,
-      "url": "[https://dashboard.local](https://dashboard.local)",
-      "url_title": "Open Server Dashboard"
+      "url": "twitter://direct_message?screen_name=someuser",
+      "url_title": "Reply to @someuser"
     }
   },
   // Infrastructure and server settings
