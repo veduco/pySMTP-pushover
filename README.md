@@ -25,6 +25,7 @@ sudo apt-get install python3 python3-pip python3-requests python3-cryptography p
 ```
 
 **Alpine Linux:**
+
 ```bash
 apk update
 apk add python3 py3-pip py3-requests py3-cryptography py3-aiosmtpd py3-passlib
@@ -45,12 +46,13 @@ You can set this variable to either:
 
 ### Inline Comments
 
-Unlike standard JSON, this configuration file supports comments! You can use `//`, `#`, or `/* */`.
+Unlike standard JSON, this configuration file supports comments. You can use `//`, `#`, or `/* */`.
 **Rule:** Comments must either be at the very beginning of a line, or have at least one space before them.
 
 ### Example Configuration File
 
 Here is a complete example of a `config.json` file. It is broken into two main sections: `pushover` (where alerts go) and `smtp` (how the server runs).
+
 ```json
 {
   /* Global routing and fallback rules */
@@ -92,59 +94,54 @@ Here is a complete example of a `config.json` file. It is broken into two main s
 
 ### 1. The "pushover" Section
 
-This section controls who receives the push notifications.
+This section controls who receives the push notifications. You can define global fallback variables at the top of the block, and then define specific email addresses with their own custom variables below.
 
-* **Global Fallbacks:** You can define `user`, `token`, `device`, `sound`, `url`, `url_title`, `priority`, or `ttl` at the very top of the `pushover` block. Any email sent to an address that isn't explicitly mapped will fall back to using these configurations.
-* **Email Mappings:** You can define specific email addresses. Inside each address, you must provide a `token` (and optionally any other settings to override the global fallback).
-* **The `match` rule:**
-* `"to"` (Default): Sends the notification if the email was sent *to* this address.
-* `"from"`: Sends the notification if the email was sent *by* this address.
-* `"both"`: Sends the notification if the address shows up in either the sender or receiver fields.
-
-
-* **Optional Formatting Flags:**
-* `"force_plaintext"`: Pushover tries to render HTML emails. If an email looks terrible, you can set `"force_plaintext": true` to ignore the HTML entirely and use the raw text payload.
-* `"device"` (string): Target a specific device.
-* `"sound"` (string): The name of a supported sound to override your default choice.
-* `"priority"` (integer): A number between -2 and 2 to adjust alert priority.
-* `"ttl"` (integer): Number of seconds the message will live before being automatically deleted.
-* `"url"` (string): A supplementary URL to show with your message.
-* `"url_title"` (string): A title for the URL.
-
-
+| Variable | Scope | Description |
+| --- | --- | --- |
+| `user` | Global / Route | The Pushover user or group key. |
+| `token` | Global / Route | Your Pushover application token. |
+| `match` | Route Only | When to trigger the alert: `to` (recipient), `from` (sender), or `both`. Default is `to`. |
+| `force_plaintext` | Global / Route | Set to `true` to skip HTML rendering entirely and use the raw text payload. |
+| `device` | Global / Route | Send the alert to a specific device name instead of all devices. |
+| `sound` | Global / Route | The name of a supported Pushover sound to override your default choice. |
+| `priority` | Global / Route | A number between `-2` (lowest) and `2` (emergency) to adjust alert urgency. |
+| `ttl` | Global / Route | Time to Live. Number of seconds the message will stay on the device before being automatically deleted. |
+| `url` | Global / Route | A supplementary URL to show alongside your message. |
+| `url_title` | Global / Route | A custom title for the supplementary URL. |
 
 ### 2. The "smtp" Section
 
 This section controls the server infrastructure. All of these settings are optional and have safe defaults.
 
-* **`auth`:** A dictionary of usernames and passwords. If you leave this empty, the server will allow anyone to send emails through it without a password. Passwords can be plain text, or you can use `mkpasswd -m sha-256` on a Linux command line to generate secure hashes.
-* **`listen`:** The IP address and port to run the server on. (Default: `0.0.0.0:25`).
-* **`queue_dir`:** Where to save messages on the hard drive while they are waiting to be sent to Pushover. (Default: creates a `queue` folder next to the script).
-* **`enable_starttls`:** Set to `true` to allow encrypted connections.
-* **`tls_cert_file` & `tls_key_file`:** Paths to your SSL certificates. If you enable STARTTLS but don't provide these files, the script will automatically generate its own self-signed certificates on the fly.
-* **`hostname`:** The name the server calls itself. Used when auto-generating certificates.
-* **`max_retry_backoff`:** If Pushover is down, the script waits longer and longer between each retry. This is the maximum wait time in seconds. (Default: `21600` seconds / 6 hours).
-* **`loglevel`:** How much text to print to the console. Options are `debug`, `info`, `warning`, or `error`. (Default: `info`).
+| Variable | Default | Description |
+| --- | --- | --- |
+| `auth` | (None) | A dictionary mapping usernames to passwords (plain text or Linux crypt hashes). If empty, the server allows anyone to send emails. |
+| `listen` | `0.0.0.0:25` | The IP address and port the server will bind to. |
+| `queue_dir` | `queue` | Directory path where pending messages are stored on the hard drive before being sent to Pushover. |
+| `enable_starttls` | `false` | Set to `true` to allow encrypted network connections. |
+| `tls_cert_file` | (None) | Path to your SSL certificate. If omitted while TLS is enabled, the script generates a self-signed cert on the fly. |
+| `tls_key_file` | (None) | Path to your SSL private key file. |
+| `hostname` | (UUID) | The name the server calls itself, used when auto-generating fallback certificates. |
+| `max_retry_backoff` | `21600` | Maximum wait time (in seconds) between retries if Pushover goes offline (default is 6 hours). |
+| `loglevel` | `info` | Terminal output verbosity. Options are `debug`, `info`, `warning`, or `error`. |
 
 ---
 
 ## Environment Variable Overrides
 
-If you prefer using OS environment variables (like in a `docker-compose.yml` file), you can override any of the infrastructure settings defined in the `smtp` block, as well as the global plaintext flag.
+If you prefer using OS environment variables (like in a `docker-compose.yml` file), you can override infrastructure settings globally. If a setting exists in both the JSON file and an environment variable, the **environment variable always wins**.
 
-If a setting exists in both the JSON file and an environment variable, the **environment variable always wins**.
-
-Supported override variables:
-
-* `QUEUE_DIR`
-* `LISTEN` (e.g., `127.0.0.1:2525`)
-* `ENABLE_STARTTLS` (`true` or `false`)
-* `TLS_CERT_FILE`
-* `TLS_KEY_FILE`
-* `HOSTNAME`
-* `FORCE_PLAINTEXT` (`true` or `false`)
-* `MAX_RETRY_BACKOFF` (in seconds)
-* `LOGLEVEL`
+| Environment Variable | JSON Equivalent | Example |
+| --- | --- | --- |
+| `QUEUE_DIR` | `smtp` -> `queue_dir` | `/var/lib/pushover_queue` |
+| `LISTEN` | `smtp` -> `listen` | `127.0.0.1:2525` |
+| `ENABLE_STARTTLS` | `smtp` -> `enable_starttls` | `true` |
+| `TLS_CERT_FILE` | `smtp` -> `tls_cert_file` | `/etc/ssl/certs/mail.pem` |
+| `TLS_KEY_FILE` | `smtp` -> `tls_key_file` | `/etc/ssl/private/mail.key` |
+| `HOSTNAME` | `smtp` -> `hostname` | `mail.example.com` |
+| `FORCE_PLAINTEXT` | `pushover` -> `force_plaintext` | `true` |
+| `MAX_RETRY_BACKOFF` | `smtp` -> `max_retry_backoff` | `3600` |
+| `LOGLEVEL` | `smtp` -> `loglevel` | `debug` |
 
 ---
 
@@ -152,6 +149,8 @@ Supported override variables:
 
 If you need to change your configuration while the server is running, you can send signals to the process to reload settings without dropping active email connections.
 
-* **`kill -SIGUSR2 <pid>`:** Reloads your `GATEWAY_CONFIG` file. Use this if you added new email addresses, updated Pushover tokens, changed a password, or adjusted the logging level.
-* **`kill -SIGUSR1 <pid>`:** Restarts the network listener. Use this if you changed the `listen` port/IP, updated your SSL certificate files, or toggled STARTTLS.
-* **`kill -SIGINT <pid>` / `SIGTERM`:** Gracefully shuts the server down. It will stop accepting new emails and wait for the background worker to finish saving any pending messages to disk before exiting.
+| Signal | Command Example | Action |
+| --- | --- | --- |
+| `SIGUSR2` | `kill -SIGUSR2 <pid>` | Reloads `GATEWAY_CONFIG` to apply new routing rules, tokens, or passwords without dropping connections. |
+| `SIGUSR1` | `kill -SIGUSR1 <pid>` | Restarts the network listener to apply a new `listen` port or fresh TLS certificates. |
+| `SIGINT` / `SIGTERM` | `kill -SIGTERM <pid>` | Gracefully shuts the server down, safely writing pending emails to disk before exiting. |
