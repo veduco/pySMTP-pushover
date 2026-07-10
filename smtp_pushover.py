@@ -52,6 +52,8 @@ GATEWAY_CONFIG (Required):
            * "to" (Default): Matches when the key is found in the email recipients.
            * "from": Matches when the key is the email's envelope sender.
            * "both": Triggers if the address is present as either the sender or receiver.
+       - Regex Routing: Prefix a routing key with "regex:" to evaluate it as a regular
+         expression instead of an exact string match (e.g., "regex:.*@domain\\.com$").
 
     2. "smtp" (Optional):
        Configures the infrastructure, logging, TLS, and client authentication.
@@ -86,6 +88,12 @@ GATEWAY_CONFIG (Required):
           "token": "APP_SPECIFIC_TOKEN_A",
           "device": "buddys_iphone",
           "priority": 1
+        },
+        "regex:^server-(alpha|beta|gamma)@local\\.lan$": {
+          "match": "from",
+          "token": "APP_SPECIFIC_TOKEN_B",
+          "priority": 2,
+          "sound": "siren"
         }
       },
       "smtp": {
@@ -210,6 +218,7 @@ class GatewayState:
         self.smtp = {}
         self.pushover = {}
         self.mappings = {"to": {}, "from": {}}
+        self.regex_mappings = {"to": [], "from": []}
         self.config_file = None
 
 
@@ -380,11 +389,21 @@ class PushoverSMTPHandler:
                 logging.info(f"Matched sender address: {sender}")
                 routes_to_trigger.append(self.state.mappings["from"][sender])
 
+            for pattern, route_config in self.state.regex_mappings.get("from", []):
+                if pattern.search(sender):
+                    logging.info(f"Matched sender regex '{pattern.pattern}' to: {sender}")
+                    routes_to_trigger.append(route_config)
+
             for recipient in envelope.rcpt_tos:
                 recipient = recipient.lower()
                 if recipient in self.state.mappings.get("to", {}):
                     logging.info(f"Matched recipient address: {recipient}")
                     routes_to_trigger.append(self.state.mappings["to"][recipient])
+
+                for pattern, route_config in self.state.regex_mappings.get("to", []):
+                    if pattern.search(recipient):
+                        logging.info(f"Matched recipient regex '{pattern.pattern}' to: {recipient}")
+                        routes_to_trigger.append(route_config)
 
             # If nobody matched, check if the global fallback catch-all is configured
             if not routes_to_trigger:
@@ -672,19 +691,18 @@ def load_config(is_reload=False):
             if key in ("user", "token", "device", "sound", "url", "url_title", "priority", "ttl", "force_plaintext", "disable_persistence") or not isinstance(config, dict):
                 continue
 
-            email = key.lower()
             match_type = config.get("match", "to").lower()
 
             # Explicit input validation requirement for "match" parameter values
             if match_type not in ("to", "from", "both"):
-                logging.error(f"Validation Failed: Configuration entry '{email}' has invalid match rule '{match_type}'. Ignored.")
+                logging.error(f"Validation Failed: Configuration entry '{key}' has invalid match rule '{match_type}'. Ignored.")
                 continue
 
-            user_key = config.get("user", new_state.pushover["user"])
+            user_key = config.get("user", new_state.pushover.get("user"))
             app_token = config.get("token")
 
             if not user_key or not app_token:
-                logging.error(f"Missing required 'user' or 'token' definitions for address: {email}. Ignored.")
+                logging.error(f"Missing required 'user' or 'token' definitions for address: {key}. Ignored.")
                 continue
 
             route_config = {"user": user_key, "token": app_token}
@@ -710,19 +728,40 @@ def load_config(is_reload=False):
                         parsed_val = int(val)
                         # Priority must strictly be between -2 and 2 inclusive
                         if int_param == "priority" and not (-2 <= parsed_val <= 2):
-                            logging.warning(f"Priority {parsed_val} for {email} is out of bounds (-2 to 2). Ignored.")
+                            logging.warning(f"Priority {parsed_val} for {key} is out of bounds (-2 to 2). Ignored.")
                             continue
                         route_config[int_param] = parsed_val
                     except ValueError:
-                        logging.warning(f"Invalid integer '{val}' for {int_param} on {email}. Ignored.")
+                        logging.warning(f"Invalid integer '{val}' for {int_param} on {key}. Ignored.")
 
-            if match_type in ("to", "both"):
-                new_state.mappings["to"][email] = route_config
-            if match_type in ("from", "both"):
-                new_state.mappings["from"][email] = route_config
+            # Regex vs String detection
+            is_regex = False
+            email_key = key
+
+            if key.lower().startswith("regex:"):
+                is_regex = True
+                pattern_str = key[6:].strip()
+                try:
+                    compiled_pattern = re.compile(pattern_str, re.IGNORECASE)
+                except re.error as e:
+                    logging.error(f"Invalid regex pattern '{pattern_str}' for key '{key}': {e}. Ignored.")
+                    continue
+            else:
+                email_key = key.lower()
+
+            if is_regex:
+                if match_type in ("to", "both"):
+                    new_state.regex_mappings["to"].append((compiled_pattern, route_config))
+                if match_type in ("from", "both"):
+                    new_state.regex_mappings["from"].append((compiled_pattern, route_config))
+            else:
+                if match_type in ("to", "both"):
+                    new_state.mappings["to"][email_key] = route_config
+                if match_type in ("from", "both"):
+                    new_state.mappings["from"][email_key] = route_config
 
         # Ensure we have at least *some* viable configuration before returning success
-        has_mappings = bool(new_state.mappings["to"] or new_state.mappings["from"])
+        has_mappings = bool(new_state.mappings["to"] or new_state.mappings["from"] or new_state.regex_mappings["to"] or new_state.regex_mappings["from"])
         if not has_mappings and not (new_state.pushover.get("user") and new_state.pushover.get("token")):
             logging.error("No valid email routing matrices survived validation, and no global catch-all is defined.")
             if not is_reload: exit(1)
@@ -878,7 +917,7 @@ if __name__ == "__main__":
 
     auth_status = "Enabled" if app_state.smtp.get("auth") else "Disabled (Permissive)"
     catch_all_status = bool(app_state.pushover.get("user") and app_state.pushover.get("token"))
-    total_mapped = len(app_state.mappings["to"]) + len(app_state.mappings["from"])
+    total_mapped = len(app_state.mappings["to"]) + len(app_state.mappings["from"]) + len(app_state.regex_mappings["to"]) + len(app_state.regex_mappings["from"])
 
     src = f"file '{app_state.config_file}'" if app_state.config_file else "environment context"
     logging.info(f"Loaded config from {src}. Explicit rules: {total_mapped}. Catch-all: {catch_all_status}. SMTP Auth: {auth_status}")
@@ -994,6 +1033,7 @@ if __name__ == "__main__":
                         app_state.smtp.clear(); app_state.smtp.update(new_state.smtp)
                         app_state.pushover.clear(); app_state.pushover.update(new_state.pushover)
                         app_state.mappings.clear(); app_state.mappings.update(new_state.mappings)
+                        app_state.regex_mappings.clear(); app_state.regex_mappings.update(new_state.regex_mappings)
 
                         # Apply immediate dynamic system effects
                         apply_logging_level(app_state.smtp["loglevel"])
@@ -1001,7 +1041,7 @@ if __name__ == "__main__":
 
                         new_auth_status = "Enabled" if app_state.smtp.get("auth") else "Disabled (Permissive)"
                         new_catch_all = bool(app_state.pushover.get("user") and app_state.pushover.get("token"))
-                        new_total = len(app_state.mappings["to"]) + len(app_state.mappings["from"])
+                        new_total = len(app_state.mappings["to"]) + len(app_state.mappings["from"]) + len(app_state.regex_mappings["to"]) + len(app_state.regex_mappings["from"])
 
                         logging.info(f"Reload success. Mappings tracked: {new_total}. Catch-all: {new_catch_all}. SMTP Auth: {new_auth_status}")
                         logging.info("Note: Changes to listener endpoints or TLS settings require a SIGUSR1 to take effect.")

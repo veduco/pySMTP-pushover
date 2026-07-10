@@ -7,7 +7,7 @@ It is designed to be a bridge for systems, scripts, network hardware (like route
 ## Key Features
 
 * **No Lost Alerts:** If the internet goes down or the Pushover API rate-limits you, the script saves pending notifications to your hard drive and retries them automatically using exponential backoff until they succeed.
-* **Smart Routing:** Route alerts to different Pushover apps or specific devices depending on the `To:` address or the `From:` address of the email.
+* **Smart Routing:** Route alerts to different Pushover apps or specific devices depending on the `To:` address or the `From:` address of the email. You can use exact strings or powerful Regular Expressions.
 * **Clean HTML:** Pushover's native HTML support is very messy. This script acts like a mini web browser, stripping out invisible formatting and fixing line breaks so your notifications look perfectly formatted.
 * **Secure:** Supports SMTP Authentication (so random devices on your network can't abuse it) and STARTTLS encryption.
 * **Hot-Reloading:** Update your routing rules, add new devices, or selectively restart specific listener endpoints without turning the server off.
@@ -77,6 +77,12 @@ Here is a complete example of a `config.json` file. It is broken into two main s
       "priority": 1,
       "url": "twitter://direct_message?screen_name=someuser",
       "url_title": "Reply to @someuser"
+    },
+    "regex:^server-(alpha|beta|gamma)@local\\.lan$": {
+      "match": "from",
+      "token": "aSpecificAppTokenForServers",
+      "priority": 2,
+      "sound": "siren"
     }
   },
   // Infrastructure and server settings
@@ -116,6 +122,7 @@ This section controls who receives the push notifications. You can define global
 | `user` | Global / Route | The Pushover user or group key. |
 | `token` | Global / Route | Your Pushover application token. |
 | `match` | Route Only | When to trigger the alert: `to` (recipient), `from` (sender), or `both`. Default is `to`. |
+| `regex:` | Routing Key | Prefix your routing key with `regex:` to have the engine parse it as a case-insensitive regular expression instead of an exact string. |
 | `force_plaintext` | Global / Route | Set to `true` to skip HTML rendering entirely and use the raw text payload. |
 | `disable_persistence` | Global / Route | Set to `true` to prevent saving the notification to the disk queue, making it memory-only. |
 | `device` | Global / Route | Send the alert to a specific device name instead of all devices. |
