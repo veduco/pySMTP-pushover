@@ -757,7 +757,13 @@ def generate_secp384r1_cert(hostname):
 def apply_logging_level(loglevel_str):
     """Applies the configured log level to the main script and dynamically throttles aiosmtpd chatter."""
     log_level = getattr(logging, loglevel_str, logging.INFO)
+
+    # Update the Root Logger (Gate 1)
     logging.getLogger().setLevel(log_level)
+
+    # Update ALL attached Handlers (Gate 2) to prevent third-party lock-out
+    for handler in logging.getLogger().handlers:
+        handler.setLevel(log_level)
 
     # Suppress verbose aiosmtpd TCP connection logging unless explicitly debugging
     if log_level > logging.DEBUG:
