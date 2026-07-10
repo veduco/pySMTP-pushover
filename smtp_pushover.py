@@ -33,13 +33,20 @@ GATEWAY_CONFIG (Required):
 
     1. "pushover" (Required):
        Coordinates routing logic and Pushover API token sets.
-       - Root-level "user", "token", and "device" values establish a global fallback state.
+       - Root-level "user", "token", and optional formatting parameters ("device",
+         "sound", "url", "url_title", "priority", "ttl") establish a global fallback state.
        - If an email hits an unmapped address, it acts as a Catch-All using these
          global API keys. If a global "token" is omitted, unmapped addresses are dropped.
        - Root-level "force_plaintext" (bool) sets a global preference for skipping HTML payloads.
        - Email routing objects accept an optional "user" (to target different accounts),
-         a required "token" (to target different Pushover apps), an optional "device"
-         (to target specific devices), and an optional "force_plaintext" flag.
+         a required "token" (to target different Pushover apps), and optional formatting overrides.
+       - Optional formatting keys for Pushover payload:
+           * "device": string (target specific devices)
+           * "sound": string (override default alert sound)
+           * "url": string (supplementary URL to attach)
+           * "url_title": string (title for the supplementary URL)
+           * "priority": int (between -2 and 2)
+           * "ttl": int (time to live in seconds)
        - Email routing objects support a "match" filter key:
            * "to" (Default): Matches when the key is found in the email recipients.
            * "from": Matches when the key is the email's envelope sender.
@@ -67,17 +74,19 @@ GATEWAY_CONFIG (Required):
         "user": "GLOBAL_PUSHOVER_USER_KEY",
         "token": "GLOBAL_CATCH_ALL_APP_TOKEN",
         "force_plaintext": true,
-
+        "sound": "magic",
         "buddy@example.com": {
           "match": "to",
           "token": "APP_SPECIFIC_TOKEN_A",
-          "device": "buddys_iphone" // Only send to this specific device
+          "device": "buddys_iphone",
+          "priority": 1
         },
         "max@example.com": {
           "match": "both",
           "user": "DIFFERENT_PUSHOVER_USER_KEY",
           "token": "APP_SPECIFIC_TOKEN_B",
-          "force_plaintext": false
+          "force_plaintext": false,
+          "ttl": 3600
         }
       },
       "smtp": {
@@ -86,7 +95,7 @@ GATEWAY_CONFIG (Required):
           "bella": "$5$rounds=5000$staticsaltstring$UoK8w6yQ61VvG3V..."
         },
         "queue_dir": "/tmp/queue",
-        "listen": "0.0.0.0:25", /* Port 25 is standard */
+        "listen": "0.0.0.0:25",
         "enable_starttls": true,
         "tls_cert_file": "/tmp/tls_cert.pem",
         "tls_key_file": "/tmp/tls_key.pem",
@@ -388,7 +397,7 @@ class PushoverSMTPHandler:
                     final_body = "(No message body)"
                     is_html = False
 
-                # Build the final payload dictionary
+                # Build the base payload dictionary
                 payload = {
                     "id": uuid.uuid4().hex,
                     "user": route["user"],
@@ -400,9 +409,10 @@ class PushoverSMTPHandler:
                     "retry_count": 0
                 }
 
-                # Pass device constraint along if it exists for this route
-                if "device" in route:
-                    payload["device"] = route["device"]
+                # Pass optional configuration constraints along if they exist for this route
+                for param in ["device", "sound", "url", "url_title", "priority", "ttl"]:
+                    if param in route:
+                        payload[param] = route[param]
 
                 # Step 1: Save it to disk for crash resilience
                 filepath = os.path.join(self.state.smtp["queue_dir"], f"{payload['id']}.json")
@@ -449,8 +459,10 @@ def pushover_worker(msg_queue, state):
         else:
             api_payload["html"] = 0
 
-        if "device" in payload:
-            api_payload["device"] = payload["device"]
+        # Extract and apply any optional API parameters mapped to this notification
+        for param in ["device", "sound", "url", "url_title", "priority", "ttl"]:
+            if param in payload:
+                api_payload[param] = payload[param]
 
         success = False
         try:
@@ -585,6 +597,11 @@ def load_config(is_reload=False):
             "user": pushover_json.get("user"),
             "token": pushover_json.get("token"),
             "device": pushover_json.get("device"),
+            "sound": pushover_json.get("sound"),
+            "url": pushover_json.get("url"),
+            "url_title": pushover_json.get("url_title"),
+            "priority": pushover_json.get("priority"),
+            "ttl": pushover_json.get("ttl"),
             "force_plaintext": get_bool(pushover_json.get("force_plaintext"))
         }
 
@@ -595,7 +612,7 @@ def load_config(is_reload=False):
         # 3. Parse Email Address Mappings
         for key, config in pushover_json.items():
             # Skip reserved root keys to focus purely on email addresses
-            if key in ("user", "token", "device", "force_plaintext") or not isinstance(config, dict):
+            if key in ("user", "token", "device", "sound", "url", "url_title", "priority", "ttl", "force_plaintext") or not isinstance(config, dict):
                 continue
 
             email = key.lower()
@@ -619,10 +636,26 @@ def load_config(is_reload=False):
             if "force_plaintext" in config:
                 route_config["force_plaintext"] = get_bool(config["force_plaintext"])
 
-            # Handle optional Pushover device targeting
-            device_val = config.get("device", new_state.pushover.get("device"))
-            if device_val and str(device_val).strip():
-                route_config["device"] = str(device_val).strip()
+            # Handle optional Pushover string parameters (device, sound, url, url_title)
+            # If defined locally in this route, it overrides the global setting.
+            for string_param in ["device", "sound", "url", "url_title"]:
+                val = config.get(string_param, new_state.pushover.get(string_param))
+                if val and str(val).strip():
+                    route_config[string_param] = str(val).strip()
+
+            # Handle optional Pushover integer parameters (priority, ttl)
+            for int_param in ["priority", "ttl"]:
+                val = config.get(int_param, new_state.pushover.get(int_param))
+                if val is not None and str(val).strip():
+                    try:
+                        parsed_val = int(val)
+                        # Priority must strictly be between -2 and 2 inclusive
+                        if int_param == "priority" and not (-2 <= parsed_val <= 2):
+                            logging.warning(f"Priority {parsed_val} for {email} is out of bounds (-2 to 2). Ignored.")
+                            continue
+                        route_config[int_param] = parsed_val
+                    except ValueError:
+                        logging.warning(f"Invalid integer '{val}' for {int_param} on {email}. Ignored.")
 
             if match_type in ("to", "both"):
                 new_state.mappings["to"][email] = route_config

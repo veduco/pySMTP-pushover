@@ -59,6 +59,7 @@ Here is a complete example of a `config.json` file. It is broken into two main s
     "token": "aYourGlobalAppTokenHere",
     "force_plaintext": false,
     "device": "my_iphone", # Optional global device restriction
+    "sound": "magic", // Override the default sound
     "alerts@my-domain.com": {
       "match": "to",
       "token": "aSpecificAppTokenForAlerts"
@@ -68,7 +69,10 @@ Here is a complete example of a `config.json` file. It is broken into two main s
       "user": "uADifferentUserKey",
       "token": "aSpecificAppTokenForBackups",
       "force_plaintext": true, // Ignores HTML formatting for this sender
-      "device": "desktop_pc"
+      "device": "desktop_pc",
+      "priority": 1,
+      "url": "[https://dashboard.local](https://dashboard.local)",
+      "url_title": "Open Server Dashboard"
     }
   },
   // Infrastructure and server settings
@@ -90,15 +94,24 @@ Here is a complete example of a `config.json` file. It is broken into two main s
 
 This section controls who receives the push notifications.
 
-* **Global Fallbacks (`user`, `token`, `device`):** If you define these at the very top of the `pushover` block, any email sent to an address that isn't explicitly mapped will fall back to using these keys.
-* **Email Mappings:** You can define specific email addresses. Inside each address, you must provide a `token` (and optionally a `user` or `device` if you want to override the global settings).
+* **Global Fallbacks:** You can define `user`, `token`, `device`, `sound`, `url`, `url_title`, `priority`, or `ttl` at the very top of the `pushover` block. Any email sent to an address that isn't explicitly mapped will fall back to using these configurations.
+* **Email Mappings:** You can define specific email addresses. Inside each address, you must provide a `token` (and optionally any other settings to override the global fallback).
 * **The `match` rule:**
 * `"to"` (Default): Sends the notification if the email was sent *to* this address.
 * `"from"`: Sends the notification if the email was sent *by* this address.
 * `"both"`: Sends the notification if the address shows up in either the sender or receiver fields.
 
 
-* **`force_plaintext`:** Pushover tries to render HTML emails. If an email looks terrible, you can set `"force_plaintext": true` either globally or on a specific email address. This tells the script to ignore the HTML entirely and use the raw text payload.
+* **Optional Formatting Flags:**
+* `"force_plaintext"`: Pushover tries to render HTML emails. If an email looks terrible, you can set `"force_plaintext": true` to ignore the HTML entirely and use the raw text payload.
+* `"device"` (string): Target a specific device.
+* `"sound"` (string): The name of a supported sound to override your default choice.
+* `"priority"` (integer): A number between -2 and 2 to adjust alert priority.
+* `"ttl"` (integer): Number of seconds the message will live before being automatically deleted.
+* `"url"` (string): A supplementary URL to show with your message.
+* `"url_title"` (string): A title for the URL.
+
+
 
 ### 2. The "smtp" Section
 

@@ -1,31 +1,34 @@
 {
-  /* Global routing and fallback rules */
   "pushover": {
-    "user": "uYourGlobalUserKeyHere",
-    "token": "aYourGlobalAppTokenHere",
-    "force_plaintext": false,
-    "device": "my_iphone", # Optional global device restriction
-    "alerts@my-domain.com": {
+    "user": "GLOBAL_PUSHOVER_USER_KEY",
+    "token": "GLOBAL_CATCH_ALL_APP_TOKEN",
+    "force_plaintext": true,
+    "sound": "magic",
+    "buddy@example.com": {
       "match": "to",
-      "token": "aSpecificAppTokenForAlerts"
+      "token": "APP_SPECIFIC_TOKEN_A",
+      "device": "buddys_iphone",
+      "priority": 1
     },
-    "backup-server@local.network": {
-      "match": "from",
-      "user": "uADifferentUserKey",
-      "token": "aSpecificAppTokenForBackups",
-      "force_plaintext": true, // Ignores HTML formatting for this sender
-      "device": "desktop_pc"
+    "max@example.com": {
+      "match": "both",
+      "user": "DIFFERENT_PUSHOVER_USER_KEY",
+      "token": "APP_SPECIFIC_TOKEN_B",
+      "force_plaintext": false,
+      "ttl": 3600
     }
   },
-  // Infrastructure and server settings
   "smtp": {
     "auth": {
-      "camera_system": "my_plaintext_password",
-      "router": "$5$rounds=5000$saltstring$hashedpassword..."
+      "rocky": "plaintext_password_123",
+      "bella": "$5$rounds=5000$staticsaltstring$UoK8w6yQ61VvG3V..."
     },
+    "queue_dir": "/tmp/queue",
     "listen": "0.0.0.0:25",
-    "queue_dir": "/tmp/pushover_queue",
-    "enable_starttls": false,
+    "enable_starttls": true,
+    "tls_cert_file": "/tmp/tls_cert.pem",
+    "tls_key_file": "/tmp/tls_key.pem",
+    "hostname": "gateway.local",
     "max_retry_backoff": 21600,
     "loglevel": "info"
   }
