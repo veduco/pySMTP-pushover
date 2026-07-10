@@ -10,7 +10,7 @@ It is designed to be a bridge for systems, scripts, network hardware (like route
 * **Smart Routing:** Route alerts to different Pushover apps or specific devices depending on the `To:` address or the `From:` address of the email.
 * **Clean HTML:** Pushover's native HTML support is very messy. This script acts like a mini web browser, stripping out invisible formatting and fixing line breaks so your notifications look perfectly formatted.
 * **Secure:** Supports SMTP Authentication (so random devices on your network can't abuse it) and STARTTLS encryption.
-* **Hot-Reloading:** Update your routing rules, add new devices, or swap TLS certificates without turning the server off or dropping active connections.
+* **Hot-Reloading:** Update your routing rules, add new devices, or selectively restart specific listener endpoints without turning the server off.
 
 ---
 
@@ -85,6 +85,8 @@ Here is a complete example of a `config.json` file. It is broken into two main s
       "camera_system": "my_plaintext_password",
       "router": "$5$rounds=5000$saltstring$hashedpassword..."
     },
+    "tls_cert_file": "/etc/ssl/certs/global.pem",
+    "tls_key_file": "/etc/ssl/private/global.key",
     "listeners": [
       {
         "bind": "0.0.0.0:25"
@@ -93,8 +95,8 @@ Here is a complete example of a `config.json` file. It is broken into two main s
         "bind": "0.0.0.0:587",
         "hostname": "secure.gateway.local",
         "starttls": true,
-        "tls_cert_file": "/etc/ssl/certs/mail.pem",
-        "tls_key_file": "/etc/ssl/private/mail.key"
+        "tls_cert_file": "/etc/ssl/certs/custom.pem",
+        "tls_key_file": "/etc/ssl/private/custom.key"
       }
     ],
     "queue_dir": "/tmp/pushover_queue",
@@ -130,9 +132,11 @@ This section controls the server infrastructure. All of these settings are optio
 | Variable | Default | Description |
 | --- | --- | --- |
 | `auth` | (None) | A dictionary mapping usernames to passwords (plain text or Linux crypt hashes). If empty, the server allows anyone to send emails. |
-| `listeners` | `0.0.0.0:25` | A list of listener objects. Each object takes a `bind` string and optional parameters (`hostname`, `starttls`, `tls_cert_file`, `tls_key_file`). |
+| `listeners` | `0.0.0.0:25` | A list of listener objects. Each object takes a `bind` string and optional overrides (`hostname`, `starttls`, `tls_cert_file`, `tls_key_file`). |
 | `queue_dir` | `queue` | Directory path where pending messages are stored on the hard drive before being sent to Pushover. |
 | `hostname` | (UUID) | The global fallback string used for the SMTP greeting banner and auto-generating missing TLS certificates. |
+| `tls_cert_file` | (None) | Global fallback path to your SSL certificate (used for all `starttls` endpoints without explicit certs). |
+| `tls_key_file` | (None) | Global fallback path to your SSL private key file. |
 | `max_retry_backoff` | `21600` | Maximum wait time (in seconds) between retries if Pushover goes offline (default is 6 hours). |
 | `loglevel` | `info` | Terminal output verbosity. Options are `debug`, `info`, `warning`, or `error`. |
 
@@ -142,15 +146,15 @@ This section controls the server infrastructure. All of these settings are optio
 
 If you prefer using OS environment variables (like in a `docker-compose.yml` file), you can override infrastructure settings globally. If a setting exists in both the JSON file and an environment variable, the **environment variable always wins**.
 
-*Note on Listeners: If you use any of the four listener environment variables below, they will override the entire JSON `listeners` array and configure a single endpoint.*
+*Note on Listeners: If you use the `LISTEN` or `STARTTLS` environment variables below, they will completely bypass the JSON `listeners` array and constrain the script to a single network endpoint.*
 
 | Environment Variable | JSON Equivalent | Example |
 | --- | --- | --- |
 | `QUEUE_DIR` | `smtp` -> `queue_dir` | `/var/lib/pushover_queue` |
 | `LISTEN` | `smtp` -> `listeners` -> `bind` | `127.0.0.1:2525` |
 | `STARTTLS` | `smtp` -> `listeners` -> `starttls` | `true` |
-| `TLS_CERT_FILE` | `smtp` -> `listeners` -> `tls_cert_file` | `/etc/ssl/certs/mail.pem` |
-| `TLS_KEY_FILE` | `smtp` -> `listeners` -> `tls_key_file` | `/etc/ssl/private/mail.key` |
+| `TLS_CERT_FILE` | `smtp` -> `tls_cert_file` | `/etc/ssl/certs/mail.pem` |
+| `TLS_KEY_FILE` | `smtp` -> `tls_key_file` | `/etc/ssl/private/mail.key` |
 | `HOSTNAME` | `smtp` -> `hostname` | `mail.example.com` |
 | `FORCE_PLAINTEXT` | `pushover` -> `force_plaintext` | `true` |
 | `DISABLE_PERSISTENCE` | `pushover` -> `disable_persistence` | `true` |
@@ -165,6 +169,6 @@ If you need to change your configuration while the server is running, you can se
 
 | Signal | Command Example | Action |
 | --- | --- | --- |
-| `SIGUSR2` | `kill -SIGUSR2 <pid>` | Reloads `GATEWAY_CONFIG` to apply new routing rules, tokens, or passwords without dropping connections. |
-| `SIGUSR1` | `kill -SIGUSR1 <pid>` | Restarts all network listeners to apply a new `bind` port, `hostname`, or fresh TLS certificates. |
+| `SIGUSR2` | `kill -SIGUSR2 <pid>` | Reloads `GATEWAY_CONFIG` to apply new routing rules, tokens, or passwords without dropping network connections. |
+| `SIGUSR1` | `kill -SIGUSR1 <pid>` | Re-evaluates all listener endpoints. If a specific listener's configuration (or disk certificate SHA256 hash) has changed, it selectively restarts that listener port. |
 | `SIGINT` / `SIGTERM` | `kill -SIGTERM <pid>` | Gracefully shuts the server down, safely writing pending emails to disk before exiting. |
