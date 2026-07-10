@@ -60,11 +60,12 @@ GATEWAY_CONFIG (Required):
          If "auth" is omitted or empty, permissive access is granted to all clients.
        - "listeners": A list of endpoint objects to bind the SMTP server to.
            * "bind": Address and port (e.g., "0.0.0.0:25")
+           * "hostname": Optional string overriding the global SMTP greeting banner for this specific endpoint.
            * "starttls": Boolean to enable STARTTLS support on this listener.
            * "tls_cert_file": Path to PEM certificate (can contain private key).
            * "tls_key_file": Path to private key file.
        - "queue_dir": Path to store messages on disk.
-       - "hostname": Common Name (CN) for fallback self-signed TLS certificates.
+       - "hostname": Common Name (CN) for fallback self-signed TLS certificates and global SMTP greeting.
        - "max_retry_backoff": Max seconds to wait during exponential retries.
        - "loglevel": Logging verbosity (DEBUG, INFO, WARNING, ERROR).
 
@@ -96,6 +97,7 @@ GATEWAY_CONFIG (Required):
           },
           {
             "bind": "0.0.0.0:587",
+            "hostname": "secure.gateway.local",
             "starttls": true,
             "tls_cert_file": "/etc/ssl/certs/mail.pem",
             "tls_key_file": "/etc/ssl/private/mail.key"
@@ -183,6 +185,7 @@ class SuppressUnrecognisedFilter(logging.Filter):
         return "unrecognised" not in record.getMessage()
 
 aiosmtpd_logger.addFilter(SuppressUnrecognisedFilter())
+
 
 PUSHOVER_API_URL = "https://api.pushover.net/1/messages.json"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -605,6 +608,8 @@ def load_config(is_reload=False):
         for l in listeners:
             l["bind"] = l.get("bind", "0.0.0.0:25")
             l["starttls"] = get_bool(l.get("starttls"))
+            if "hostname" in l and str(l["hostname"]).strip():
+                l["hostname"] = str(l["hostname"]).strip()
 
         # Layer OS Environment Variables on top (these take strict precedence)
         if "QUEUE_DIR" in os.environ: new_state.smtp["queue_dir"] = os.environ["QUEUE_DIR"]
@@ -857,13 +862,15 @@ if __name__ == "__main__":
     controllers = []
     for l_conf in app_state.smtp["listeners"]:
         listen_address, listen_port = get_listen_params(l_conf["bind"])
-        tls_context = get_tls_context(l_conf, app_state.smtp.get("hostname"))
+        listener_hostname = l_conf.get("hostname", app_state.smtp.get("hostname"))
+        tls_context = get_tls_context(l_conf, listener_hostname)
 
         # Passing authenticator handles built-in ESMTP auth advertisement automatically
         controller = Controller(
             handler,
             hostname=listen_address,
             port=listen_port,
+            server_hostname=listener_hostname,
             tls_context=tls_context,
             authenticator=authenticator,
             auth_require_tls=False
@@ -889,11 +896,17 @@ if __name__ == "__main__":
                 logging.info("Rebuilding TLS contexts and restarting controllers...")
                 for l_conf in app_state.smtp["listeners"]:
                     listen_address, listen_port = get_listen_params(l_conf["bind"])
-                    tls_context = get_tls_context(l_conf, app_state.smtp.get("hostname"))
+                    listener_hostname = l_conf.get("hostname", app_state.smtp.get("hostname"))
+                    tls_context = get_tls_context(l_conf, listener_hostname)
 
                     ctrl = Controller(
-                        handler, hostname=listen_address, port=listen_port, tls_context=tls_context,
-                        authenticator=authenticator, auth_require_tls=False
+                        handler,
+                        hostname=listen_address,
+                        port=listen_port,
+                        server_hostname=listener_hostname,
+                        tls_context=tls_context,
+                        authenticator=authenticator,
+                        auth_require_tls=False
                     )
                     ctrl.start()
                     controllers.append(ctrl)

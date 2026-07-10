@@ -91,6 +91,7 @@ Here is a complete example of a `config.json` file. It is broken into two main s
       },
       {
         "bind": "0.0.0.0:587",
+        "hostname": "secure.gateway.local",
         "starttls": true,
         "tls_cert_file": "/etc/ssl/certs/mail.pem",
         "tls_key_file": "/etc/ssl/private/mail.key"
@@ -129,9 +130,9 @@ This section controls the server infrastructure. All of these settings are optio
 | Variable | Default | Description |
 | --- | --- | --- |
 | `auth` | (None) | A dictionary mapping usernames to passwords (plain text or Linux crypt hashes). If empty, the server allows anyone to send emails. |
-| `listeners` | `0.0.0.0:25` | A list of listener objects. Each object takes a `bind` string and optional STARTTLS parameters (`starttls`, `tls_cert_file`, `tls_key_file`). |
+| `listeners` | `0.0.0.0:25` | A list of listener objects. Each object takes a `bind` string and optional parameters (`hostname`, `starttls`, `tls_cert_file`, `tls_key_file`). |
 | `queue_dir` | `queue` | Directory path where pending messages are stored on the hard drive before being sent to Pushover. |
-| `hostname` | (UUID) | The name the server calls itself, used when auto-generating fallback certificates. |
+| `hostname` | (UUID) | The global fallback string used for the SMTP greeting banner and auto-generating missing TLS certificates. |
 | `max_retry_backoff` | `21600` | Maximum wait time (in seconds) between retries if Pushover goes offline (default is 6 hours). |
 | `loglevel` | `info` | Terminal output verbosity. Options are `debug`, `info`, `warning`, or `error`. |
 
@@ -165,5 +166,5 @@ If you need to change your configuration while the server is running, you can se
 | Signal | Command Example | Action |
 | --- | --- | --- |
 | `SIGUSR2` | `kill -SIGUSR2 <pid>` | Reloads `GATEWAY_CONFIG` to apply new routing rules, tokens, or passwords without dropping connections. |
-| `SIGUSR1` | `kill -SIGUSR1 <pid>` | Restarts the network listener to apply a new `bind` port or fresh TLS certificates. |
+| `SIGUSR1` | `kill -SIGUSR1 <pid>` | Restarts all network listeners to apply a new `bind` port, `hostname`, or fresh TLS certificates. |
 | `SIGINT` / `SIGTERM` | `kill -SIGTERM <pid>` | Gracefully shuts the server down, safely writing pending emails to disk before exiting. |
