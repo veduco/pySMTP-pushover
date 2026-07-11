@@ -129,8 +129,10 @@ This section controls who receives the push notifications. You can define global
 | `sound` | Global / Route | The name of a supported Pushover sound to override your default choice. |
 | `priority` | Global / Route | A number between `-2` (lowest) and `2` (emergency) to adjust alert urgency. |
 | `ttl` | Global / Route | Time to Live. Number of seconds the message will stay on the device before being automatically deleted. |
-| `url` | Global / Route | A supplementary URL to show alongside your message. |
-| `url_title` | Global / Route | A custom title for the supplementary URL. |
+| `url` | Global / Route | A supplementary URL to show alongside your message (Max: 512 characters). |
+| `url_title` | Global / Route | A custom title for the supplementary URL (Max: 100 characters). |
+
+*(Note: The message `title` is also dynamically truncated to a maximum of 250 characters per the API limits).*
 
 ### 2. The "smtp" Section
 

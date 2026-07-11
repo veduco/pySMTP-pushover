@@ -184,6 +184,11 @@ try:
 except ImportError:
     HAS_PASSLIB = False
 
+# API Constraints and Size Limits
+MAX_TITLE_CHARS = 250
+MAX_URL_CHARS = 512
+MAX_URL_TITLE_CHARS = 100
+
 # Establish baseline logging. The log level will be updated later once the config is parsed.
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 aiosmtpd_logger = logging.getLogger('mail.log')
@@ -313,7 +318,11 @@ class PushoverSMTPHandler:
         try:
             # Parse the raw email bytes into a structured Python object
             msg = message_from_bytes(envelope.content, policy=policy.default)
+
+            # Extract and gracefully truncate the title to meet API constraints
             title = msg.get("Subject", "No Subject")
+            if len(title) > MAX_TITLE_CHARS:
+                title = title[:MAX_TITLE_CHARS]
 
             # Extract the timestamp, falling back to current time if missing or malformed
             timestamp = int(time.time())
@@ -454,9 +463,15 @@ class PushoverSMTPHandler:
                 }
 
                 # Pass optional configuration constraints along if they exist for this route
-                for param in ["device", "sound", "url", "url_title", "priority", "ttl"]:
+                for param in ["device", "sound", "priority", "ttl"]:
                     if param in route:
                         payload[param] = route[param]
+
+                # Ensure dynamic API length limits are applied contextually before queuing
+                if "url" in route:
+                    payload["url"] = route["url"][:MAX_URL_CHARS]
+                if "url_title" in route:
+                    payload["url_title"] = route["url_title"][:MAX_URL_TITLE_CHARS]
 
                 # Step 1: Save it to disk for crash resilience (unless persistence is disabled)
                 if not disable_persist:
@@ -685,6 +700,12 @@ def load_config(is_reload=False):
         if "DISABLE_PERSISTENCE" in os.environ:
             new_state.pushover["disable_persistence"] = get_bool(os.environ["DISABLE_PERSISTENCE"])
 
+        # Validate Global String Constraints
+        if new_state.pushover.get("url") and len(new_state.pushover["url"]) > MAX_URL_CHARS:
+            logging.warning(f"Validation Warning: Global 'url' exceeds {MAX_URL_CHARS} characters. It will be truncated when sending.")
+        if new_state.pushover.get("url_title") and len(new_state.pushover["url_title"]) > MAX_URL_TITLE_CHARS:
+            logging.warning(f"Validation Warning: Global 'url_title' exceeds {MAX_URL_TITLE_CHARS} characters. It will be truncated when sending.")
+
         # 3. Parse Email Address Mappings
         for key, config in pushover_json.items():
             # Skip reserved root keys to focus purely on email addresses
@@ -719,6 +740,12 @@ def load_config(is_reload=False):
                 val = config.get(string_param, new_state.pushover.get(string_param))
                 if val and str(val).strip():
                     route_config[string_param] = str(val).strip()
+
+            # Validate Route String Constraints
+            if "url" in route_config and len(route_config["url"]) > MAX_URL_CHARS:
+                logging.warning(f"Validation Warning: Route '{key}' 'url' exceeds {MAX_URL_CHARS} characters. It will be truncated when sending.")
+            if "url_title" in route_config and len(route_config["url_title"]) > MAX_URL_TITLE_CHARS:
+                logging.warning(f"Validation Warning: Route '{key}' 'url_title' exceeds {MAX_URL_TITLE_CHARS} characters. It will be truncated when sending.")
 
             # Handle optional Pushover integer parameters (priority, ttl)
             for int_param in ["priority", "ttl"]:
