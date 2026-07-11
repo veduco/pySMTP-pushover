@@ -34,7 +34,8 @@ GATEWAY_CONFIG (Required):
     1. "pushover" (Required):
        Coordinates routing logic and Pushover API token sets.
        - Root-level "user", "token", and optional formatting parameters ("device",
-         "sound", "url", "url_title", "priority", "ttl") establish a global fallback state.
+         "sound", "url", "url_title", "priority", "ttl", "tags", "retry", "expire")
+         establish a global fallback state.
        - If an email hits an unmapped address, it acts as a Catch-All using these
          global API keys. If a global "token" is omitted, unmapped addresses are dropped.
        - Root-level "force_plaintext" (bool) sets a global preference for skipping HTML payloads.
@@ -47,8 +48,11 @@ GATEWAY_CONFIG (Required):
            * "sound": string (override default alert sound)
            * "url": string (supplementary URL to attach)
            * "url_title": string (title for the supplementary URL)
+           * "tags": string (comma-separated tags for receipt cancellation)
            * "priority": int (between -2 and 2)
            * "ttl": int (time to live in seconds)
+           * "retry": int (REQUIRED if priority=2, >= 30 seconds)
+           * "expire": int (REQUIRED if priority=2, <= 10800 seconds)
        - Email routing objects support a "match" filter key:
            * "to" (Default): Matches when the key is found in the email recipients.
            * "from": Matches when the key is the email's envelope sender.
@@ -96,6 +100,9 @@ GATEWAY_CONFIG (Required):
           "match": "from",
           "token": "APP_SPECIFIC_TOKEN_B",
           "priority": 2,
+          "retry": 30,
+          "expire": 3600,
+          "tags": "server_alert,critical",
           "sound": "siren"
         }
       },
@@ -430,6 +437,7 @@ class PushoverSMTPHandler:
                 logging.info(f"Matched sender address: {sender}")
                 routes_to_trigger.append(self.state.mappings["from"][sender])
 
+            # Regex Fallback for Senders
             for pattern, route_config in self.state.regex_mappings.get("from", []):
                 if pattern.search(sender):
                     logging.info(f"Matched sender regex '{pattern.pattern}' to: {sender}")
@@ -441,6 +449,7 @@ class PushoverSMTPHandler:
                     logging.info(f"Matched recipient address: {recipient}")
                     routes_to_trigger.append(self.state.mappings["to"][recipient])
 
+                # Regex Fallback for Recipients
                 for pattern, route_config in self.state.regex_mappings.get("to", []):
                     if pattern.search(recipient):
                         logging.info(f"Matched recipient regex '{pattern.pattern}' to: {recipient}")
@@ -496,7 +505,7 @@ class PushoverSMTPHandler:
                 }
 
                 # Pass optional configuration constraints along if they exist for this route
-                for param in ["device", "sound", "priority", "ttl"]:
+                for param in ["device", "sound", "url", "url_title", "priority", "ttl", "tags", "retry", "expire"]:
                     if param in route:
                         payload[param] = route[param]
 
@@ -559,7 +568,7 @@ def pushover_worker(msg_queue, state):
             api_payload["html"] = 0
 
         # Extract and apply any optional API parameters mapped to this notification
-        for param in ["device", "sound", "url", "url_title", "priority", "ttl"]:
+        for param in ["device", "sound", "url", "url_title", "priority", "ttl", "tags", "retry", "expire"]:
             if param in payload:
                 api_payload[param] = payload[param]
 
@@ -740,12 +749,33 @@ def load_config(is_reload=False):
             "sound": pushover_json.get("sound"),
             "url": pushover_json.get("url"),
             "url_title": pushover_json.get("url_title"),
+            "tags": pushover_json.get("tags"),
             "priority": pushover_json.get("priority"),
             "ttl": pushover_json.get("ttl"),
+            "retry": pushover_json.get("retry"),
+            "expire": pushover_json.get("expire"),
             "attachments": get_bool(pushover_json.get("attachments", True)),
             "force_plaintext": get_bool(pushover_json.get("force_plaintext")),
             "disable_persistence": get_bool(pushover_json.get("disable_persistence"))
         }
+
+        # Cast and validate global integers securely
+        for int_param in ["priority", "ttl", "retry", "expire"]:
+            val = new_state.pushover.get(int_param)
+            if val is not None and str(val).strip():
+                try:
+                    new_state.pushover[int_param] = int(val)
+                except ValueError:
+                    logging.warning(f"Invalid global integer '{val}' for {int_param}. Ignored.")
+                    new_state.pushover[int_param] = None
+
+        if new_state.pushover.get("priority") == 2:
+            r_val = new_state.pushover.get("retry")
+            e_val = new_state.pushover.get("expire")
+            if r_val is None or e_val is None or r_val < 30 or e_val > 10800:
+                logging.error("Global priority is 2, but valid 'retry' (>=30) and 'expire' (<=10800) are not properly defined.")
+                if not is_reload: exit(1)
+                return None
 
         # Again, env vars take precedence for global flags
         if "FORCE_PLAINTEXT" in os.environ:
@@ -764,7 +794,7 @@ def load_config(is_reload=False):
         # 3. Parse Email Address Mappings
         for key, config in pushover_json.items():
             # Skip reserved root keys to focus purely on email addresses
-            if key in ("user", "token", "device", "sound", "url", "url_title", "priority", "ttl", "force_plaintext", "disable_persistence", "attachments") or not isinstance(config, dict):
+            if key in ("user", "token", "device", "sound", "url", "url_title", "tags", "priority", "ttl", "retry", "expire", "force_plaintext", "disable_persistence", "attachments") or not isinstance(config, dict):
                 continue
 
             match_type = config.get("match", "to").lower()
@@ -791,9 +821,9 @@ def load_config(is_reload=False):
             if "attachments" in config:
                 route_config["attachments"] = get_bool(config["attachments"])
 
-            # Handle optional Pushover string parameters (device, sound, url, url_title)
+            # Handle optional Pushover string parameters (device, sound, url, url_title, tags)
             # If defined locally in this route, it overrides the global setting.
-            for string_param in ["device", "sound", "url", "url_title"]:
+            for string_param in ["device", "sound", "url", "url_title", "tags"]:
                 val = config.get(string_param, new_state.pushover.get(string_param))
                 if val and str(val).strip():
                     route_config[string_param] = str(val).strip()
@@ -804,8 +834,8 @@ def load_config(is_reload=False):
             if "url_title" in route_config and len(route_config["url_title"]) > MAX_URL_TITLE_CHARS:
                 logging.warning(f"Validation Warning: Route '{key}' 'url_title' exceeds {MAX_URL_TITLE_CHARS} characters. It will be truncated when sending.")
 
-            # Handle optional Pushover integer parameters (priority, ttl)
-            for int_param in ["priority", "ttl"]:
+            # Handle optional Pushover integer parameters (priority, ttl, retry, expire)
+            for int_param in ["priority", "ttl", "retry", "expire"]:
                 val = config.get(int_param, new_state.pushover.get(int_param))
                 if val is not None and str(val).strip():
                     try:
@@ -814,9 +844,20 @@ def load_config(is_reload=False):
                         if int_param == "priority" and not (-2 <= parsed_val <= 2):
                             logging.warning(f"Priority {parsed_val} for {key} is out of bounds (-2 to 2). Ignored.")
                             continue
+                        if int_param == "retry" and parsed_val < 30:
+                            logging.warning(f"Retry {parsed_val} for {key} is < 30. Ignored.")
+                            continue
+                        if int_param == "expire" and parsed_val > 10800:
+                            logging.warning(f"Expire {parsed_val} for {key} is > 10800. Ignored.")
+                            continue
                         route_config[int_param] = parsed_val
                     except ValueError:
                         logging.warning(f"Invalid integer '{val}' for {int_param} on {key}. Ignored.")
+
+            if route_config.get("priority") == 2:
+                if "retry" not in route_config or "expire" not in route_config:
+                    logging.error(f"Validation Failed: Route '{key}' has priority 2 but is missing valid 'retry' (>=30) or 'expire' (<=10800) parameters. Ignored.")
+                    continue
 
             # Regex vs String detection
             is_regex = False

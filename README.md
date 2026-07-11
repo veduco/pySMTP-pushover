@@ -84,6 +84,9 @@ Here is a complete example of a `config.json` file. It is broken into two main s
       "match": "from",
       "token": "aSpecificAppTokenForServers",
       "priority": 2,
+      "retry": 30,
+      "expire": 3600,
+      "tags": "server_alert,critical",
       "sound": "siren",
       "attachments": false
     }
@@ -131,8 +134,11 @@ This section controls who receives the push notifications. You can define global
 | `attachments` | Global / Route | Set to `false` to strip extracted image file attachments from the Pushover payload (Default: `true`). |
 | `device` | Global / Route | Send the alert to a specific device name instead of all devices. |
 | `sound` | Global / Route | The name of a supported Pushover sound to override your default choice. |
+| `tags` | Global / Route | A comma-separated string of arbitrary tags, used to categorize or cancel receipts. |
 | `priority` | Global / Route | A number between `-2` (lowest) and `2` (emergency) to adjust alert urgency. |
 | `ttl` | Global / Route | Time to Live. Number of seconds the message will stay on the device before being automatically deleted. |
+| `retry` | Global / Route | **(Required if `priority` is 2)**. Number of seconds between retries. Must be `>= 30`. |
+| `expire` | Global / Route | **(Required if `priority` is 2)**. Number of seconds before the notification gives up retrying. Must be `<= 10800`. |
 | `url` | Global / Route | A supplementary URL to show alongside your message (Max: 512 characters). |
 | `url_title` | Global / Route | A custom title for the supplementary URL (Max: 100 characters). |
 
