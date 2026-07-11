@@ -598,9 +598,9 @@ def pushover_worker(msg_queue, state):
                     except OSError as e:
                         logging.error(f"Failed to delete disk queue file {filepath}: {e}")
         else:
-            # Handle failure with exponential backoff: 2^retry_count, capped by max_retry_backoff limit
+            # Handle failure with exponential backoff: 5s base, then doubling, capped by max_retry_backoff limit
             payload["retry_count"] = payload.get("retry_count", 0) + 1
-            backoff_delay = min(2 ** payload["retry_count"], state.smtp["max_retry_backoff"])
+            backoff_delay = min(5 * (2 ** (payload["retry_count"] - 1)), state.smtp["max_retry_backoff"])
             logging.warning(f"Delivery failed for ID: {payload['id']}. Attempt #{payload['retry_count']}. Retrying in {backoff_delay}s.")
 
             # Update the disk file so if the app crashes during the sleep, we remember the retry count
