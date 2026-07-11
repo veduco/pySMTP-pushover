@@ -8,6 +8,7 @@ It is designed to be a bridge for systems, scripts, network hardware (like route
 
 * **No Lost Alerts:** If the internet goes down or the Pushover API rate-limits you, the script saves pending notifications to your hard drive and retries them automatically using exponential backoff until they succeed.
 * **Smart Routing:** Route alerts to different Pushover apps or specific devices depending on the `To:` address or the `From:` address of the email. You can use exact strings or powerful Regular Expressions.
+* **Image Attachments:** The gateway intercepts image files attached to incoming emails and passes them directly to Pushover (handling API size limits and conflicts automatically).
 * **Clean HTML:** Pushover's native HTML support is very messy. This script acts like a mini web browser, stripping out invisible formatting and fixing line breaks so your notifications look perfectly formatted.
 * **Secure:** Supports SMTP Authentication (so random devices on your network can't abuse it) and STARTTLS encryption.
 * **Hot-Reloading:** Update your routing rules, add new devices, or selectively restart specific listener endpoints without turning the server off.
@@ -61,6 +62,7 @@ Here is a complete example of a `config.json` file. It is broken into two main s
     "token": "aYourGlobalAppTokenHere",
     "force_plaintext": false,
     "disable_persistence": false,
+    "attachments": true,
     "device": "my_iphone", # Optional global device restriction
     "sound": "magic", // Override the default sound
     "alerts@my-domain.com": {
@@ -82,7 +84,8 @@ Here is a complete example of a `config.json` file. It is broken into two main s
       "match": "from",
       "token": "aSpecificAppTokenForServers",
       "priority": 2,
-      "sound": "siren"
+      "sound": "siren",
+      "attachments": false
     }
   },
   // Infrastructure and server settings
@@ -125,6 +128,7 @@ This section controls who receives the push notifications. You can define global
 | `regex:` | Routing Key | Prefix your routing key with `regex:` to have the engine parse it as a case-insensitive regular expression instead of an exact string. |
 | `force_plaintext` | Global / Route | Set to `true` to skip HTML rendering entirely and use the raw text payload. |
 | `disable_persistence` | Global / Route | Set to `true` to prevent saving the notification to the disk queue, making it memory-only. |
+| `attachments` | Global / Route | Set to `false` to strip extracted image file attachments from the Pushover payload (Default: `true`). |
 | `device` | Global / Route | Send the alert to a specific device name instead of all devices. |
 | `sound` | Global / Route | The name of a supported Pushover sound to override your default choice. |
 | `priority` | Global / Route | A number between `-2` (lowest) and `2` (emergency) to adjust alert urgency. |
@@ -143,7 +147,7 @@ This section controls the server infrastructure. All of these settings are optio
 | `auth` | (None) | A dictionary mapping usernames to passwords (plain text or Linux crypt hashes). If empty, the server allows anyone to send emails. |
 | `listeners` | `0.0.0.0:25` | A list of listener objects. Each object takes a `bind` string and optional overrides (`hostname`, `starttls`, `tls_cert_file`, `tls_key_file`). |
 | `queue_dir` | `queue` | Directory path where pending messages are stored on the hard drive before being sent to Pushover. |
-| `hostname` | (UUID) | The global fallback string used for the SMTP greeting banner and auto-generating missing TLS certificates. |
+| `hostname` | (UUID) | The fallback string used for the SMTP greeting banner and auto-generating missing TLS certificates. |
 | `tls_cert_file` | (None) | Global fallback path to your SSL certificate (used for all `starttls` endpoints without explicit certs). |
 | `tls_key_file` | (None) | Global fallback path to your SSL private key file. |
 | `max_retry_backoff` | `21600` | Maximum wait time (in seconds) between retries if Pushover goes offline (default is 6 hours). |
@@ -167,6 +171,7 @@ If you prefer using OS environment variables (like in a `docker-compose.yml` fil
 | `HOSTNAME` | `smtp` -> `hostname` | `mail.example.com` |
 | `FORCE_PLAINTEXT` | `pushover` -> `force_plaintext` | `true` |
 | `DISABLE_PERSISTENCE` | `pushover` -> `disable_persistence` | `true` |
+| `ATTACHMENTS` | `pushover` -> `attachments` | `true` |
 | `MAX_RETRY_BACKOFF` | `smtp` -> `max_retry_backoff` | `3600` |
 | `LOGLEVEL` | `smtp` -> `loglevel` | `debug` |
 

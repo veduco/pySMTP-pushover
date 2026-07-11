@@ -39,6 +39,7 @@ GATEWAY_CONFIG (Required):
          global API keys. If a global "token" is omitted, unmapped addresses are dropped.
        - Root-level "force_plaintext" (bool) sets a global preference for skipping HTML payloads.
        - Root-level "disable_persistence" (bool) disables writing payloads to the disk queue.
+       - Root-level "attachments" (bool) allows/disallows forwarding images (default: true).
        - Email routing objects accept an optional "user" (to target different accounts),
          a required "token" (to target different Pushover apps), and optional formatting overrides.
        - Optional formatting keys for Pushover payload:
@@ -82,12 +83,14 @@ GATEWAY_CONFIG (Required):
         "token": "GLOBAL_CATCH_ALL_APP_TOKEN",
         "force_plaintext": true,
         "disable_persistence": false,
+        "attachments": true,
         "sound": "magic",
         "buddy@example.com": {
           "match": "to",
           "token": "APP_SPECIFIC_TOKEN_A",
           "device": "buddys_iphone",
-          "priority": 1
+          "priority": 1,
+          "attachments": false
         },
         "regex:^server-(alpha|beta|gamma)@local\\.lan$": {
           "match": "from",
@@ -124,9 +127,9 @@ GATEWAY_CONFIG (Required):
 
 ENVIRONMENT VARIABLE OVERRIDES:
     Any infrastructure setting defined in the "smtp" JSON block, as well as the global
-    "force_plaintext" and "disable_persistence" settings, can be explicitly overridden
-    by defining the corresponding OS environment variable. Environment variables always
-    take precedence.
+    "force_plaintext", "disable_persistence", and "attachments" settings, can be
+    explicitly overridden by defining the corresponding OS environment variable.
+    Environment variables always take precedence.
     - QUEUE_DIR
     - LISTEN (Overrides the listeners list to a single endpoint)
     - STARTTLS
@@ -135,6 +138,7 @@ ENVIRONMENT VARIABLE OVERRIDES:
     - HOSTNAME
     - FORCE_PLAINTEXT
     - DISABLE_PERSISTENCE
+    - ATTACHMENTS
     - MAX_RETRY_BACKOFF
     - LOGLEVEL
 
@@ -160,6 +164,7 @@ import queue
 import signal
 import string
 import hashlib
+import base64
 
 # External HTTP request handling
 import requests
@@ -185,6 +190,7 @@ except ImportError:
     HAS_PASSLIB = False
 
 # API Constraints and Size Limits
+MAX_ATTACHMENT_BYTES = 5242880
 MAX_TITLE_CHARS = 250
 MAX_URL_CHARS = 512
 MAX_URL_TITLE_CHARS = 100
@@ -336,14 +342,25 @@ class PushoverSMTPHandler:
 
             plain_body_raw = ""
             html_body_raw = ""
+            valid_images = []
 
-            # 1. Extract raw payloads from the email structure
+            # 1. Extract raw payloads and attachments from the email structure
             if msg.is_multipart():
                 for part in msg.walk():
                     content_type = part.get_content_type()
                     content_disposition = str(part.get("Content-Disposition"))
 
-                    # We don't want to try and parse binary attachments as text
+                    # Safely intercept valid images regardless of disposition (inline or attachment)
+                    if content_type.startswith("image/"):
+                        payload_bytes = part.get_payload(decode=True)
+                        if payload_bytes:
+                            size = len(payload_bytes)
+                            if size <= MAX_ATTACHMENT_BYTES:
+                                filename = str(part.get_filename() or "image.jpg")
+                                valid_images.append((size, filename, content_type, payload_bytes))
+                        continue
+
+                    # We don't want to try and parse binary file attachments as text
                     if "attachment" in content_disposition:
                         continue
 
@@ -353,11 +370,26 @@ class PushoverSMTPHandler:
                         html_body_raw = part.get_payload(decode=True).decode(part.get_content_charset() or 'utf-8', errors='replace')
             else:
                 # Handle single-part emails that don't have boundaries
-                raw_payload = msg.get_payload(decode=True).decode(msg.get_content_charset() or 'utf-8', errors='replace')
-                if msg.get_content_type() == "text/html":
-                    html_body_raw = raw_payload
+                raw_payload = msg.get_payload(decode=True)
+                content_type = msg.get_content_type()
+                if content_type.startswith("image/"):
+                    if raw_payload:
+                        size = len(raw_payload)
+                        if size <= MAX_ATTACHMENT_BYTES:
+                            filename = str(msg.get_filename() or "image.jpg")
+                            valid_images.append((size, filename, content_type, raw_payload))
                 else:
-                    plain_body_raw = raw_payload
+                    decoded_str = raw_payload.decode(msg.get_content_charset() or 'utf-8', errors='replace') if raw_payload else ""
+                    if content_type == "text/html":
+                        html_body_raw = decoded_str
+                    else:
+                        plain_body_raw = decoded_str
+
+            # Sort valid images: descending by size (-x[0]), then ascending lexicographically by name (x[1])
+            best_image = None
+            if valid_images:
+                valid_images.sort(key=lambda x: (-x[0], x[1]))
+                best_image = valid_images[0]
 
             # 2. Pre-process formats for fast contextual assignment later
             body_html_processed = None
@@ -437,6 +469,7 @@ class PushoverSMTPHandler:
                 # Prioritize route-specific flags, fallback to the global setting
                 force_pt = route.get("force_plaintext", self.state.pushover.get("force_plaintext", False))
                 disable_persist = route.get("disable_persistence", self.state.pushover.get("disable_persistence", False))
+                attachments_enabled = route.get("attachments", self.state.pushover.get("attachments", True))
 
                 # Determine which pre-processed body format this specific route should get
                 if not force_pt and body_html_processed is not None:
@@ -472,6 +505,12 @@ class PushoverSMTPHandler:
                     payload["url"] = route["url"][:MAX_URL_CHARS]
                 if "url_title" in route:
                     payload["url_title"] = route["url_title"][:MAX_URL_TITLE_CHARS]
+
+                # Base64 encode the resolved image attachment for safe persistence queuing
+                if attachments_enabled and best_image:
+                    payload["attachment_base64"] = base64.b64encode(best_image[3]).decode('ascii')
+                    payload["attachment_name"] = best_image[1]
+                    payload["attachment_type"] = best_image[2]
 
                 # Step 1: Save it to disk for crash resilience (unless persistence is disabled)
                 if not disable_persist:
@@ -526,8 +565,21 @@ def pushover_worker(msg_queue, state):
 
         success = False
         try:
+            # Handle multipart form uploads if an attachment is configured
+            post_kwargs = {}
+            if payload.get("attachment_base64"):
+                img_bytes = base64.b64decode(payload["attachment_base64"])
+                files = {
+                    "attachment": (payload.get("attachment_name", "image.jpg"), img_bytes, payload.get("attachment_type", "image/jpeg"))
+                }
+                # When utilizing 'files', requests automatically formats 'data' to multipart/form-data
+                post_kwargs = {"data": api_payload, "files": files}
+            else:
+                post_kwargs = {"json": api_payload}
+
             # 10-second timeout ensures the worker thread doesn't hang indefinitely on a dead network connection
-            response = requests.post(PUSHOVER_API_URL, json=api_payload, timeout=10)
+            response = requests.post(PUSHOVER_API_URL, timeout=10, **post_kwargs)
+
             if response.status_code == 200:
                 logging.info(f"Successfully sent notification: '{payload['title']}' (ID: {payload['id']})")
                 success = True
@@ -690,6 +742,7 @@ def load_config(is_reload=False):
             "url_title": pushover_json.get("url_title"),
             "priority": pushover_json.get("priority"),
             "ttl": pushover_json.get("ttl"),
+            "attachments": get_bool(pushover_json.get("attachments", True)),
             "force_plaintext": get_bool(pushover_json.get("force_plaintext")),
             "disable_persistence": get_bool(pushover_json.get("disable_persistence"))
         }
@@ -699,6 +752,8 @@ def load_config(is_reload=False):
             new_state.pushover["force_plaintext"] = get_bool(os.environ["FORCE_PLAINTEXT"])
         if "DISABLE_PERSISTENCE" in os.environ:
             new_state.pushover["disable_persistence"] = get_bool(os.environ["DISABLE_PERSISTENCE"])
+        if "ATTACHMENTS" in os.environ:
+            new_state.pushover["attachments"] = get_bool(os.environ["ATTACHMENTS"])
 
         # Validate Global String Constraints
         if new_state.pushover.get("url") and len(new_state.pushover["url"]) > MAX_URL_CHARS:
@@ -709,7 +764,7 @@ def load_config(is_reload=False):
         # 3. Parse Email Address Mappings
         for key, config in pushover_json.items():
             # Skip reserved root keys to focus purely on email addresses
-            if key in ("user", "token", "device", "sound", "url", "url_title", "priority", "ttl", "force_plaintext", "disable_persistence") or not isinstance(config, dict):
+            if key in ("user", "token", "device", "sound", "url", "url_title", "priority", "ttl", "force_plaintext", "disable_persistence", "attachments") or not isinstance(config, dict):
                 continue
 
             match_type = config.get("match", "to").lower()
@@ -733,6 +788,8 @@ def load_config(is_reload=False):
                 route_config["force_plaintext"] = get_bool(config["force_plaintext"])
             if "disable_persistence" in config:
                 route_config["disable_persistence"] = get_bool(config["disable_persistence"])
+            if "attachments" in config:
+                route_config["attachments"] = get_bool(config["attachments"])
 
             # Handle optional Pushover string parameters (device, sound, url, url_title)
             # If defined locally in this route, it overrides the global setting.
