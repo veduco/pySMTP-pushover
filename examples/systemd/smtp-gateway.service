@@ -1,0 +1,27 @@
+[Unit]
+Description=SMTP to Pushover Gateway Worker
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/smtp-pushover
+Environment="GATEWAY_CONFIG=/opt/smtp-pushover/config.json"
+Environment="PYTHONDONTWRITEBYTECODE=1"
+ExecStart=/usr/bin/python3 /opt/smtp-pushover/smtp_pushover.py
+
+# Reliability and Shutdown
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Graceful hot reloads
+ExecReload=/bin/kill -SIGUSR2 $MAINPID
+
+# Security Hardening
+ProtectSystem=full
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

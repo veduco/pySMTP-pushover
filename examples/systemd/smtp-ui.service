@@ -1,0 +1,25 @@
+[Unit]
+Description=SMTP to Pushover FASH Control Panel
+After=smtp-gateway.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/smtp-pushover
+Environment="GATEWAY_CONFIG=/opt/smtp-pushover/config.json"
+Environment="UI_CONFIG=/opt/smtp-pushover/ui_config.json"
+Environment="PYTHONDONTWRITEBYTECODE=1"
+ExecStart=/usr/bin/python3 /opt/smtp-pushover/ui_server.py
+
+# Reliability and Shutdown
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Security Hardening
+ProtectSystem=full
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

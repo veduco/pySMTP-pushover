@@ -1,0 +1,32 @@
+services:
+  smtp-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    container_name: smtp-gateway
+    restart: always
+    ports:
+      - "25:25"
+      - "587:587"
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+    volumes:
+      - ./data:/data
+      - ./shared_tmp:/tmp
+
+  smtp-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    container_name: smtp-ui
+    restart: unless-stopped
+    pid: "service:smtp-gateway"
+    ports:
+      - "8443:8443"
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+    volumes:
+      - ./data:/data
+      - ./shared_tmp:/tmp
+    depends_on:
+      - smtp-gateway

@@ -6,6 +6,7 @@ It is designed to be a bridge for systems, scripts, network hardware (like route
 
 ## Key Features
 
+* **Web UI Control Panel:** Features a sleek, hot-reloading FASH-stack web interface that manages your configurations securely.
 * **No Lost Alerts:** If the internet goes down or the Pushover API rate-limits you, the script saves pending notifications to your hard drive and retries them automatically using exponential backoff until they succeed.
 * **Smart Routing:** Route alerts to different Pushover apps or specific devices depending on the `To:` address or the `From:` address of the email. You can use exact strings or powerful Regular Expressions.
 * **Image Attachments:** The gateway intercepts image files attached to incoming emails and passes them directly to Pushover (handling API size limits and conflicts automatically).
@@ -17,19 +18,23 @@ It is designed to be a bridge for systems, scripts, network hardware (like route
 
 ## Requirements and Installation
 
-You will need Python 3 installed on your system.
-
 **Debian / Ubuntu:**
 ```bash
 sudo apt-get update
-sudo apt-get install python3 python3-pip python3-requests python3-cryptography python3-aiosmtpd python3-passlib
+sudo apt-get install python3 python3-requests python3-cryptography python3-aiosmtpd python3-passlib
+# For the Web UI:
+sudo apt-get install python3-fastapi python3-uvicorn python3-jinja2 python3-multipart
+
 ```
 
 **Alpine Linux:**
 
 ```bash
 apk update
-apk add python3 py3-pip py3-requests py3-cryptography py3-aiosmtpd py3-passlib
+apk add python3 py3-requests py3-cryptography py3-aiosmtpd py3-passlib
+# For the Web UI:
+apk add py3-fastapi py3-uvicorn py3-jinja2 py3-multipart
+
 ```
 
 *Note: `passlib` is technically optional. It is only required if you want to use secure Linux crypt hashes for your SMTP passwords instead of storing them in plain text.*
@@ -38,28 +43,34 @@ apk add python3 py3-pip py3-requests py3-cryptography py3-aiosmtpd py3-passlib
 
 ## Configuration (`GATEWAY_CONFIG`)
 
-The entire gateway is configured using a single environment variable named `GATEWAY_CONFIG`.
+The entire core gateway relies on the `config.json` file. To ensure compatibility with the UI Control Panel, the `GATEWAY_CONFIG` environment variable **must** point directly to a file path. **Inline JSON strings and OS environment variable overrides have been disabled.**
 
-You can set this variable to either:
+**Example:** `GATEWAY_CONFIG=/opt/smtp-pushover/config.json`
 
-1. **A file path** pointing to a JSON file (e.g., `GATEWAY_CONFIG=config.json`). *Highly recommended.*
-2. **A raw JSON string** containing your settings.
+### The Web UI Control Panel
 
-### Inline Comments
+The UI service (`ui_server.py`) reads and manages your `config.json`. Once you log in, it provides four main tabs:
 
-Unlike standard JSON, this configuration file supports comments. You can use `//`, `#`, or `/* */`.
-**Rule:** Comments must either be at the very beginning of a line, or have at least one space before them.
+1. **Pushover Rules:** Modify your exact-match and regex email routing matrices via a dynamic web interface.
+2. **SMTP Server:** Manage SMTP authentication passwords, queue directories, and TCP `listeners` (including port bindings and TLS configurations).
+3. **Token Vault:** A secure JSON credential store. Define your raw Pushover tokens here as aliases, and inject those aliases securely into your Pushover Rules tab so the raw tokens are never exposed in the configuration text.
+4. **UI Settings:** Toggle HTTPS on or off, adjust the port the UI listens on, or define explicit TLS certificates for the control panel itself (defaults to an auto-generated UUID certificate).
 
-### Example Configuration File
+*Note: Saving changes in the UI automatically sends the required OS signals to the background worker to hot-reload the configuration seamlessly.*
 
-Here is a complete example of a `config.json` file. It is broken into two main sections: `pushover` (where alerts go) and `smtp` (how the server runs).
+---
+
+### Understanding the `config.json` Structure
+
+If you edit the configuration file manually instead of using the UI, here is the structure.
+*(Note: Unlike standard JSON, this file supports `//` or `#` comments).*
 
 ```json
 {
   /* Global routing and fallback rules */
   "pushover": {
-    "user": "uYourGlobalUserKeyHere",
-    "token": "aYourGlobalAppTokenHere",
+    "user": "GLOBAL_PUSHOVER_USER_KEY",
+    "token": "GLOBAL_CATCH_ALL_APP_TOKEN",
     "force_plaintext": false,
     "disable_persistence": false,
     "attachments": true,
@@ -69,16 +80,6 @@ Here is a complete example of a `config.json` file. It is broken into two main s
       "match": "to",
       "token": "aSpecificAppTokenForAlerts",
       "disable_persistence": true
-    },
-    "backup-server@local.network": {
-      "match": "from",
-      "user": "uADifferentUserKey",
-      "token": "aSpecificAppTokenForBackups",
-      "force_plaintext": true, // Ignores HTML formatting for this sender
-      "device": "desktop_pc",
-      "priority": 1,
-      "url": "twitter://direct_message?screen_name=someuser",
-      "url_title": "Reply to @someuser"
     },
     "regex:^server-(alpha|beta|gamma)@local\\.lan$": {
       "match": "from",
@@ -121,12 +122,10 @@ Here is a complete example of a `config.json` file. It is broken into two main s
 
 ### 1. The "pushover" Section
 
-This section controls who receives the push notifications. You can define global fallback variables at the top of the block, and then define specific email addresses with their own custom variables below.
-
 | Variable | Scope | Description |
 | --- | --- | --- |
 | `user` | Global / Route | The Pushover user or group key. |
-| `token` | Global / Route | Your Pushover application token. |
+| `token` | Global / Route | Your Pushover application token (or Vault Alias). |
 | `match` | Route Only | When to trigger the alert: `to` (recipient), `from` (sender), or `both`. Default is `to`. |
 | `regex:` | Routing Key | Prefix your routing key with `regex:` to have the engine parse it as a case-insensitive regular expression instead of an exact string. |
 | `force_plaintext` | Global / Route | Set to `true` to skip HTML rendering entirely and use the raw text payload. |
@@ -146,8 +145,6 @@ This section controls who receives the push notifications. You can define global
 
 ### 2. The "smtp" Section
 
-This section controls the server infrastructure. All of these settings are optional and have safe defaults.
-
 | Variable | Default | Description |
 | --- | --- | --- |
 | `auth` | (None) | A dictionary mapping usernames to passwords (plain text or Linux crypt hashes). If empty, the server allows anyone to send emails. |
@@ -161,31 +158,9 @@ This section controls the server infrastructure. All of these settings are optio
 
 ---
 
-## Environment Variable Overrides
-
-If you prefer using OS environment variables (like in a `docker-compose.yml` file), you can override infrastructure settings globally. If a setting exists in both the JSON file and an environment variable, the **environment variable always wins**.
-
-*Note on Listeners: If you use the `LISTEN` or `STARTTLS` environment variables below, they will completely bypass the JSON `listeners` array and constrain the script to a single network endpoint.*
-
-| Environment Variable | JSON Equivalent | Example |
-| --- | --- | --- |
-| `QUEUE_DIR` | `smtp` -> `queue_dir` | `/var/lib/pushover_queue` |
-| `LISTEN` | `smtp` -> `listeners` -> `bind` | `127.0.0.1:2525` |
-| `STARTTLS` | `smtp` -> `listeners` -> `starttls` | `true` |
-| `TLS_CERT_FILE` | `smtp` -> `tls_cert_file` | `/etc/ssl/certs/mail.pem` |
-| `TLS_KEY_FILE` | `smtp` -> `tls_key_file` | `/etc/ssl/private/mail.key` |
-| `HOSTNAME` | `smtp` -> `hostname` | `mail.example.com` |
-| `FORCE_PLAINTEXT` | `pushover` -> `force_plaintext` | `true` |
-| `DISABLE_PERSISTENCE` | `pushover` -> `disable_persistence` | `true` |
-| `ATTACHMENTS` | `pushover` -> `attachments` | `true` |
-| `MAX_RETRY_BACKOFF` | `smtp` -> `max_retry_backoff` | `3600` |
-| `LOGLEVEL` | `smtp` -> `loglevel` | `debug` |
-
----
-
 ## Live Reloading (Signals)
 
-If you need to change your configuration while the server is running, you can send signals to the process to reload settings without dropping active email connections.
+If you modify the configuration files via the terminal instead of the UI, you can manually trigger hot reloads via standard OS signals.
 
 | Signal | Command Example | Action |
 | --- | --- | --- |

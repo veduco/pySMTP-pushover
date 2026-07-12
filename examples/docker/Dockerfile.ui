@@ -1,0 +1,24 @@
+FROM alpine:3.24.1
+
+RUN apk update && \
+    apk add --no-cache \
+        python3 \
+        py3-fastapi \
+        py3-uvicorn \
+        py3-jinja2 \
+        py3-multipart \
+        py3-cryptography
+
+WORKDIR /app
+
+COPY ui_server.py .
+RUN chmod +x ui_server.py
+
+ENV GATEWAY_CONFIG="/data/config.json" \
+    UI_CONFIG="/data/ui_config.json" \
+    VAULT_FILE="/data/vault.json" \
+    VAULT_META_FILE="/data/vault_meta.json"
+
+EXPOSE 8443
+
+CMD ["python3", "ui_server.py"]

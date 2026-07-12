@@ -8,13 +8,14 @@ OS PACKAGE REQUIREMENTS
 
 Debian 13 (Trixie):
     $ sudo apt-get update
-    $ sudo apt-get install python3 python3-pip python3-requests python3-cryptography python3-aiosmtpd python3-passlib
+    $ sudo apt-get install python3 python3-requests python3-cryptography python3-aiosmtpd python3-passlib
 
 Alpine Linux:
     $ apk update
-    $ apk add python3 py3-pip py3-requests py3-cryptography py3-aiosmtpd py3-passlib
+    $ apk add python3 py3-requests py3-cryptography py3-aiosmtpd py3-passlib
 
-If native packages are missing, use pip (or a virtual environment):
+If native packages are missing on your distribution, you can install pip
+and use it (preferably within a virtual environment):
     $ pip install aiosmtpd requests cryptography passlib
 
 ================================================================================
@@ -22,8 +23,9 @@ ENVIRONMENT VARIABLES & JSON CONFIGURATION
 ================================================================================
 
 GATEWAY_CONFIG (Required):
-    Can be configured as an inline JSON string OR as a relative/absolute file path
-    pointing to a valid JSON configuration file (e.g., 'config.json').
+    Must be set to the file path of your configuration JSON (e.g., /opt/smtp-pushover/config.json).
+    Inline JSON strings and granular OS environment variable overrides have been
+    removed to ensure consistency with the FASH UI control panel.
 
     *NOTE:* This parser supports inline comments as long as they are at the beginning
     of a line, or preceded by at least one whitespace character.
@@ -78,83 +80,12 @@ GATEWAY_CONFIG (Required):
        - "max_retry_backoff": Max seconds to wait during exponential retries.
        - "loglevel": Logging verbosity (DEBUG, INFO, WARNING, ERROR).
 
-    ----------------------------------------------------------------------------
-    GATEWAY_CONFIG EXAMPLE:
-    ----------------------------------------------------------------------------
-    {
-      "pushover": {
-        "user": "GLOBAL_PUSHOVER_USER_KEY",
-        "token": "GLOBAL_CATCH_ALL_APP_TOKEN",
-        "force_plaintext": true,
-        "disable_persistence": false,
-        "attachments": true,
-        "sound": "magic",
-        "buddy@example.com": {
-          "match": "to",
-          "token": "APP_SPECIFIC_TOKEN_A",
-          "device": "buddys_iphone",
-          "priority": 1,
-          "attachments": false
-        },
-        "regex:^server-(alpha|beta|gamma)@local\\.lan$": {
-          "match": "from",
-          "token": "APP_SPECIFIC_TOKEN_B",
-          "priority": 2,
-          "retry": 30,
-          "expire": 3600,
-          "tags": "server_alert,critical",
-          "sound": "siren"
-        }
-      },
-      "smtp": {
-        "auth": {
-          "rocky": "plaintext_password_123",
-          "bella": "$5$rounds=5000$staticsaltstring$UoK8w6yQ61VvG3V..."
-        },
-        "tls_cert_file": "/etc/ssl/certs/global.pem",
-        "tls_key_file": "/etc/ssl/private/global.key",
-        "listeners": [
-          {
-            "bind": "0.0.0.0:25"
-          },
-          {
-            "bind": "0.0.0.0:587",
-            "hostname": "secure.gateway.local",
-            "starttls": true,
-            "tls_cert_file": "/etc/ssl/certs/custom.pem",
-            "tls_key_file": "/etc/ssl/private/custom.key"
-          }
-        ],
-        "queue_dir": "/tmp/queue",
-        "hostname": "gateway.local",
-        "max_retry_backoff": 21600,
-        "loglevel": "info"
-      }
-    }
-
-ENVIRONMENT VARIABLE OVERRIDES:
-    Any infrastructure setting defined in the "smtp" JSON block, as well as the global
-    "force_plaintext", "disable_persistence", and "attachments" settings, can be
-    explicitly overridden by defining the corresponding OS environment variable.
-    Environment variables always take precedence.
-    - QUEUE_DIR
-    - LISTEN (Overrides the listeners list to a single endpoint)
-    - STARTTLS
-    - TLS_CERT_FILE
-    - TLS_KEY_FILE
-    - HOSTNAME
-    - FORCE_PLAINTEXT
-    - DISABLE_PERSISTENCE
-    - ATTACHMENTS
-    - MAX_RETRY_BACKOFF
-    - LOGLEVEL
-
 ================================================================================
 SIGNALS
 ================================================================================
 SIGINT / SIGTERM: Gracefully shuts down the SMTP listener and waits for queue to empty.
 SIGUSR1: Atomically diffs and restarts SMTP listeners if their configs/certs have changed.
-SIGUSR2: Reloads GATEWAY_CONFIG from disk (only works if configured as a file path).
+SIGUSR2: Reloads GATEWAY_CONFIG from disk and dynamically updates routing rules.
 """
 
 # Standard library imports for system, regex, and threading operations
@@ -219,12 +150,12 @@ aiosmtpd_logger.addFilter(SuppressUnrecognisedFilter())
 
 PUSHOVER_API_URL = "https://api.pushover.net/1/messages.json"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PID_FILE = "/tmp/smtp_pushover.pid"
 
 # Global threading events used by OS signal handlers to safely communicate with the main loop
 shutdown_event = threading.Event()
 reload_event = threading.Event()
 mappings_reload_event = threading.Event()
-
 
 class GatewayState:
     """
@@ -239,13 +170,11 @@ class GatewayState:
         self.regex_mappings = {"to": [], "from": []}
         self.config_file = None
 
-
 def get_bool(val, default=False):
-    """Safely coerces strings, ints, or booleans from JSON/EnvVars into a Python boolean."""
+    """Safely coerces strings, ints, or booleans from JSON into a Python boolean."""
     if val is None:
         return default
     return str(val).lower() in ("1", "true", "yes")
-
 
 def sanitize_input(val, max_len=256):
     """
@@ -260,22 +189,23 @@ def sanitize_input(val, max_len=256):
     printable = set(string.printable) - set("\r\n\t\x0b\x0c")
     return "".join(ch for ch in val if ch in printable).strip()
 
-
 def verify_password(plain_password, stored_value):
-    """Verifies a plain text password against a stored entry (which can be plain or a crypt hash)."""
+    """Verifies a plain text password against a stored entry (which can be plain, sha256, or passlib hash)."""
     if not stored_value:
         return False
+
+    # Check for native SHA-256 match generated via the UI Control Panel
+    computed_sha = hashlib.sha256(plain_password.encode('utf-8')).hexdigest()
+    if computed_sha == stored_value:
+        return True
 
     # If it starts with a dollar sign, it's a Linux crypt hash (e.g., $5$ for SHA-256)
     if str(stored_value).startswith("$"):
         if HAS_PASSLIB:
             try:
-                if stored_value.startswith("$5$"):
-                    return sha256_crypt.verify(plain_password, stored_value)
-                elif stored_value.startswith("$6$"):
-                    return sha512_crypt.verify(plain_password, stored_value)
-                elif stored_value.startswith("$1$"):
-                    return md5_crypt.verify(plain_password, stored_value)
+                if stored_value.startswith("$5$"): return sha256_crypt.verify(plain_password, stored_value)
+                elif stored_value.startswith("$6$"): return sha512_crypt.verify(plain_password, stored_value)
+                elif stored_value.startswith("$1$"): return md5_crypt.verify(plain_password, stored_value)
             except Exception as e:
                 logging.error(f"Error checking hash with passlib: {e}")
                 return False
@@ -285,7 +215,6 @@ def verify_password(plain_password, stored_value):
 
     # Fallback to plain text exact matching
     return plain_password == stored_value
-
 
 class GatewayAuthenticator:
     """Implements custom validation and sanitization hooks for the aiosmtpd AUTH logic."""
@@ -319,7 +248,6 @@ class GatewayAuthenticator:
 
         logging.warning(f"Failed SMTP Authentication attempt for username: {username}")
         return False
-
 
 class PushoverSMTPHandler:
     """The core logic module triggered by aiosmtpd every time an email arrives."""
@@ -429,9 +357,7 @@ class PushoverSMTPHandler:
                 body_plain_processed = re.sub(r'(\r?\n[ \t]*){3,}', '\n\n', plain_body_raw).strip()
 
             # 3. Match Routes
-            # We determine who gets the notification based on the sender or recipients
             routes_to_trigger = []
-
             sender = envelope.mail_from.lower() if envelope.mail_from else ""
             if sender in self.state.mappings.get("from", {}):
                 logging.info(f"Matched sender address: {sender}")
@@ -537,7 +463,6 @@ class PushoverSMTPHandler:
             logging.error(f"Error processing email: {e}", exc_info=True)
             return '500 Internal Server Error'
 
-
 def pushover_worker(msg_queue, state):
     """
     Background worker thread running continuously.
@@ -559,13 +484,9 @@ def pushover_worker(msg_queue, state):
             "user": payload["user"],
             "message": payload["message"],
             "title": payload["title"],
-            "timestamp": payload["timestamp"]
+            "timestamp": payload["timestamp"],
+            "html": 1 if payload.get("is_html") else 0
         }
-
-        if payload.get("is_html"):
-            api_payload["html"] = 1
-        else:
-            api_payload["html"] = 0
 
         # Extract and apply any optional API parameters mapped to this notification
         for param in ["device", "sound", "url", "url_title", "priority", "ttl", "tags", "retry", "expire"]:
@@ -590,7 +511,7 @@ def pushover_worker(msg_queue, state):
             response = requests.post(PUSHOVER_API_URL, timeout=10, **post_kwargs)
 
             if response.status_code == 200:
-                logging.info(f"Successfully sent notification: '{payload['title']}' (ID: {payload['id']})")
+                logging.info(f"Successfully sent notification: '{payload['title']}'")
                 success = True
             else:
                 logging.error(f"Pushover API returned {response.status_code}: {response.text}")
@@ -610,7 +531,7 @@ def pushover_worker(msg_queue, state):
             # Handle failure with exponential backoff: 5s base, then doubling, capped by max_retry_backoff limit
             payload["retry_count"] = payload.get("retry_count", 0) + 1
             backoff_delay = min(5 * (2 ** (payload["retry_count"] - 1)), state.smtp["max_retry_backoff"])
-            logging.warning(f"Delivery failed for ID: {payload['id']}. Attempt #{payload['retry_count']}. Retrying in {backoff_delay}s.")
+            logging.warning(f"Delivery failed for ID: {payload['id']}. Retrying in {backoff_delay}s.")
 
             # Update the disk file so if the app crashes during the sleep, we remember the retry count
             if not payload.get("disable_persistence"):
@@ -628,26 +549,22 @@ def pushover_worker(msg_queue, state):
 
         msg_queue.task_done()
 
-
 def load_queue_from_disk(msg_queue, state):
     """Runs once on startup to grab any pending messages off the disk and put them back into memory."""
     if not os.path.exists(state.smtp["queue_dir"]):
         return
-
     for filename in os.listdir(state.smtp["queue_dir"]):
         if filename.endswith(".json"):
             filepath = os.path.join(state.smtp["queue_dir"], filename)
             try:
                 with open(filepath, 'r') as f:
-                    payload = json.load(f)
-                    msg_queue.put(payload)
+                    msg_queue.put(json.load(f))
             except Exception as e:
                 logging.error(f"Failed to load queued file {filepath}: {e}")
 
-
 def load_config(is_reload=False):
     """
-    Loads and merges the GATEWAY_CONFIG JSON and any environment variable overrides.
+    Loads and merges the GATEWAY_CONFIG JSON.
     Returns a populated GatewayState object. If is_reload is False (i.e. startup),
     any severe validation failures will cause the script to exit.
     """
@@ -657,23 +574,35 @@ def load_config(is_reload=False):
         if not is_reload: exit(1)
         return None
 
-    raw_env = raw_env.strip()
+    # ENFORCEMENT: We now require a strict file path for proper UI interaction.
+    file_path = os.path.normpath(os.path.join(SCRIPT_DIR, raw_env.strip()))
+    if not os.path.isfile(file_path):
+        logging.error(f"GATEWAY_CONFIG must point to a valid file path. File not found: {file_path}")
+        if not is_reload: exit(1)
+        return None
 
-    # If it doesn't look like JSON, assume it's a file path
-    is_file = not raw_env.startswith("{")
-    file_path = None
+    try:
+        with open(file_path, 'r') as f:
+            json_str = f.read()
+    except Exception as e:
+        logging.error(f"Failed to read GATEWAY_CONFIG file '{file_path}': {e}")
+        if not is_reload: exit(1)
+        return None
 
-    if is_file:
-        file_path = os.path.normpath(os.path.join(SCRIPT_DIR, raw_env))
+    # Load the JSON Vault to swap out API token aliases securely
+    vault_file = os.environ.get("VAULT_FILE", os.path.join(SCRIPT_DIR, "vault.json"))
+    vault_data = {"app": {}, "user": {}}
+    if os.path.exists(vault_file):
         try:
-            with open(file_path, 'r') as f:
-                json_str = f.read()
+            with open(vault_file, 'r') as f:
+                raw_v = json.load(f)
+                # Handle seamless migration from legacy flat vault arrays dynamically
+                if "app" not in raw_v and "user" not in raw_v:
+                    vault_data["app"] = raw_v
+                else:
+                    vault_data = {"app": raw_v.get("app", {}), "user": raw_v.get("user", {})}
         except Exception as e:
-            logging.error(f"Failed to read GATEWAY_CONFIG file '{file_path}': {e}")
-            if not is_reload: exit(1)
-            return None
-    else:
-        json_str = raw_env
+            logging.warning(f"Could not load vault file {vault_file}: {e}")
 
     # --- Strip Comments Safely ---
     # Strip block comments /* ... */ at the start of the string or preceded by whitespace
@@ -716,35 +645,20 @@ def load_config(is_reload=False):
                 l["tls_cert_file"] = l.get("tls_cert_file", new_state.smtp.get("tls_cert_file"))
                 l["tls_key_file"] = l.get("tls_key_file", new_state.smtp.get("tls_key_file"))
 
-        # Layer OS Environment Variables on top (these take strict precedence)
-        if "QUEUE_DIR" in os.environ: new_state.smtp["queue_dir"] = os.environ["QUEUE_DIR"]
-        if "HOSTNAME" in os.environ: new_state.smtp["hostname"] = os.environ["HOSTNAME"]
-        if "TLS_CERT_FILE" in os.environ: new_state.smtp["tls_cert_file"] = os.environ["TLS_CERT_FILE"]
-        if "TLS_KEY_FILE" in os.environ: new_state.smtp["tls_key_file"] = os.environ["TLS_KEY_FILE"]
-        if "MAX_RETRY_BACKOFF" in os.environ: new_state.smtp["max_retry_backoff"] = int(os.environ["MAX_RETRY_BACKOFF"])
-        if "LOGLEVEL" in os.environ: new_state.smtp["loglevel"] = os.environ["LOGLEVEL"].upper()
-
-        env_bind = os.environ.get("LISTEN")
-        env_tls = os.environ.get("STARTTLS")
-
-        # Override to single listener only if explicitly declared via Listener environment variables
-        if env_bind or env_tls:
-            new_state.smtp["listeners"] = [{
-                "bind": env_bind if env_bind else "0.0.0.0:25",
-                "starttls": get_bool(env_tls),
-                "tls_cert_file": new_state.smtp.get("tls_cert_file"),
-                "tls_key_file": new_state.smtp.get("tls_key_file")
-            }]
-        else:
-            new_state.smtp["listeners"] = listeners
-
-        # Clean absolute/relative paths for the active queue directory
+        new_state.smtp["listeners"] = listeners
         new_state.smtp["queue_dir"] = os.path.normpath(os.path.join(SCRIPT_DIR, new_state.smtp["queue_dir"]))
+
+        # Check for global aliases and perform dynamic Vault substitution mapped across both legacy flat and explicit structures
+        global_user = pushover_json.get("user")
+        if global_user: global_user = vault_data["user"].get(global_user, vault_data["app"].get(global_user, global_user))
+
+        global_token = pushover_json.get("token")
+        if global_token: global_token = vault_data["app"].get(global_token, global_token)
 
         # 2. Parse and Merge Global Pushover Settings
         new_state.pushover = {
-            "user": pushover_json.get("user"),
-            "token": pushover_json.get("token"),
+            "user": global_user,
+            "token": global_token,
             "device": pushover_json.get("device"),
             "sound": pushover_json.get("sound"),
             "url": pushover_json.get("url"),
@@ -777,14 +691,6 @@ def load_config(is_reload=False):
                 if not is_reload: exit(1)
                 return None
 
-        # Again, env vars take precedence for global flags
-        if "FORCE_PLAINTEXT" in os.environ:
-            new_state.pushover["force_plaintext"] = get_bool(os.environ["FORCE_PLAINTEXT"])
-        if "DISABLE_PERSISTENCE" in os.environ:
-            new_state.pushover["disable_persistence"] = get_bool(os.environ["DISABLE_PERSISTENCE"])
-        if "ATTACHMENTS" in os.environ:
-            new_state.pushover["attachments"] = get_bool(os.environ["ATTACHMENTS"])
-
         # Validate Global String Constraints
         if new_state.pushover.get("url") and len(new_state.pushover["url"]) > MAX_URL_CHARS:
             logging.warning(f"Validation Warning: Global 'url' exceeds {MAX_URL_CHARS} characters. It will be truncated when sending.")
@@ -804,8 +710,16 @@ def load_config(is_reload=False):
                 logging.error(f"Validation Failed: Configuration entry '{key}' has invalid match rule '{match_type}'. Ignored.")
                 continue
 
-            user_key = config.get("user", new_state.pushover.get("user"))
+            # Route-level Alias Vault translation dynamically catching legacy and nested scopes
+            user_key = config.get("user")
+            if user_key:
+                user_key = vault_data["user"].get(user_key, vault_data["app"].get(user_key, user_key))
+            else:
+                user_key = new_state.pushover.get("user")
+
             app_token = config.get("token")
+            if app_token:
+                app_token = vault_data["app"].get(app_token, app_token)
 
             if not user_key or not app_token:
                 logging.error(f"Missing required 'user' or 'token' definitions for address: {key}. Ignored.")
@@ -899,7 +813,6 @@ def load_config(is_reload=False):
         if not is_reload: exit(1)
         return None
 
-
 def file_contains_private_key(filepath):
     """Checks if a file contains standard PEM private key boundaries."""
     try:
@@ -908,7 +821,6 @@ def file_contains_private_key(filepath):
             return "PRIVATE KEY-----" in content
     except Exception:
         return False
-
 
 def get_tls_context(listener_conf, fallback_hostname):
     """Sets up the SSL context based on config vars, handles overloads, or generates fallback certs."""
@@ -942,7 +854,6 @@ def get_tls_context(listener_conf, fallback_hostname):
     tls_context.load_cert_chain(certfile=cert_file, keyfile=key_file)
     return tls_context
 
-
 def generate_secp384r1_cert(hostname, bind_address):
     """Generates a self-signed secp384r1 TLS certificate and writes it to temporary files."""
     safe_bind = bind_address.replace(":", "_")
@@ -960,7 +871,7 @@ def generate_secp384r1_cert(hostname, bind_address):
         except Exception as e:
             logging.debug(f"Failed to parse existing fallback cert for {bind_address}: {e}")
 
-    logging.warning(f"TLS files missing, unreadable, or hostname changed. Generating self-signed secp384r1 fallback cert for {hostname} on {bind_address}...")
+    logging.warning(f"Generating self-signed secp384r1 fallback cert for {hostname} on {bind_address}...")
     private_key = ec.generate_private_key(ec.SECP384R1())
     subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, hostname)])
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -975,7 +886,6 @@ def generate_secp384r1_cert(hostname, bind_address):
     with open(cert_path, "wb") as f:
         f.write(cert.public_bytes(serialization.Encoding.PEM))
     return cert_path, key_path
-
 
 def apply_logging_level(loglevel_str):
     """Applies the configured log level to the main script and dynamically throttles aiosmtpd chatter."""
@@ -994,7 +904,6 @@ def apply_logging_level(loglevel_str):
     else:
         aiosmtpd_logger.setLevel(logging.DEBUG)
 
-
 def get_listen_params(listen_str):
     """Extracts the IP address and port from the 'listen' config string."""
     if ":" in listen_str:
@@ -1002,7 +911,6 @@ def get_listen_params(listen_str):
         return address, int(port)
     # Fallback to port 25 if the user only specified an IP
     return listen_str, 25
-
 
 def get_file_hash(filepath):
     """Safely computes the SHA256 hash of a file for exact modification detection."""
@@ -1013,7 +921,6 @@ def get_file_hash(filepath):
             return hashlib.sha256(f.read()).hexdigest()
     except Exception:
         return ""
-
 
 def sig_handler(signum, frame):
     """Handles OS signals by setting thread-safe events to be caught in the main execution loop."""
@@ -1027,13 +934,16 @@ def sig_handler(signum, frame):
         logging.info("Received SIGUSR2. Scheduling full configuration reload...")
         mappings_reload_event.set()
 
-
 if __name__ == "__main__":
     # Register OS Signal Handlers
     signal.signal(signal.SIGINT, sig_handler)
     signal.signal(signal.SIGTERM, sig_handler)
     if hasattr(signal, 'SIGUSR1'): signal.signal(signal.SIGUSR1, sig_handler)
     if hasattr(signal, 'SIGUSR2'): signal.signal(signal.SIGUSR2, sig_handler)
+
+    # Write PID for UI sidecar to hook into
+    with open(PID_FILE, 'w') as f:
+        f.write(str(os.getpid()))
 
     # 1. Parse unified state configuration and apply side-effects
     app_state = load_config(is_reload=False)
@@ -1044,8 +954,7 @@ if __name__ == "__main__":
     catch_all_status = bool(app_state.pushover.get("user") and app_state.pushover.get("token"))
     total_mapped = len(app_state.mappings["to"]) + len(app_state.mappings["from"]) + len(app_state.regex_mappings["to"]) + len(app_state.regex_mappings["from"])
 
-    src = f"file '{app_state.config_file}'" if app_state.config_file else "environment context"
-    logging.info(f"Loaded config from {src}. Explicit rules: {total_mapped}. Catch-all: {catch_all_status}. SMTP Auth: {auth_status}")
+    logging.info(f"Loaded config from file '{app_state.config_file}'. Explicit rules: {total_mapped}. Catch-all: {catch_all_status}. SMTP Auth: {auth_status}")
 
     # 2. Setup thread-safe queue and retrieve un-sent disk persistence items
     msg_queue = queue.Queue()
@@ -1172,8 +1081,6 @@ if __name__ == "__main__":
                         logging.info("Note: Changes to listener endpoints or TLS settings require a SIGUSR1 to take effect.")
                     else:
                         logging.warning("Config reload failed. Retaining active rules matrix.")
-                else:
-                    logging.info("GATEWAY_CONFIG is defined as an inline JSON string environment variable. Ignoring SIGUSR2.")
 
             # Pause briefly to prevent the while loop from maxing out the CPU
             shutdown_event.wait(1.0)
@@ -1189,5 +1096,8 @@ if __name__ == "__main__":
         # Inject the None payload to signal the worker thread to break its loop
         msg_queue.put(None)
         worker_thread.join()
+
+        if os.path.exists(PID_FILE):
+            os.remove(PID_FILE)
 
         logging.info("Shutdown complete.")
