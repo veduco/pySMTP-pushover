@@ -1,14 +1,20 @@
 [Unit]
-Description=SMTP to Pushover FASH Control Panel
-After=smtp-gateway.service
+Description=SMTP to Pushover Control Panel
+After=network.target smtp-gateway.service
+Wants=smtp-gateway.service
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=/opt/smtp-pushover
-Environment="GATEWAY_CONFIG=/opt/smtp-pushover/config.json"
-Environment="UI_CONFIG=/opt/smtp-pushover/ui_config.json"
-Environment="PYTHONDONTWRITEBYTECODE=1"
+
+# Environment variable declarations for runtime configuration path scopes
+Environment=GATEWAY_CONFIG=/opt/smtp-pushover/config.json
+Environment=UI_CONFIG=/opt/smtp-pushover/ui_config.json
+Environment=VAULT_FILE=/opt/smtp-pushover/vault.json
+Environment=VAULT_META_FILE=/opt/smtp-pushover/vault_meta.json
+Environment=PYTHONDONTWRITEBYTECODE=1
+
 ExecStart=/usr/bin/python3 /opt/smtp-pushover/ui_server.py
 
 # Reliability and Shutdown
@@ -16,6 +22,9 @@ Restart=always
 RestartSec=5
 KillSignal=SIGTERM
 TimeoutStopSec=30
+
+# Graceful hot reloads
+ExecReload=/bin/kill -s SIGUSR2 $MAINPID
 
 # Security Hardening
 ProtectSystem=full
