@@ -470,14 +470,30 @@ class PushoverSMTPHandler:
             for route in unique_routes:
                 method = route.get("method", "pushover")
 
-                # Determine Format Overrides based on method
+                # Determine Format Overrides based on method layered cascade
                 if method == "pushover":
                     force_pt = route.get("force_plaintext", self.state.pushover.get("force_plaintext", False))
                     attachments_enabled = route.get("attachments", self.state.pushover.get("attachments", True))
                 else:
                     g_smarthost = self.state.smarthost.get("globals", {})
-                    force_pt = route.get("force_plaintext", g_smarthost.get("force_plaintext", False))
-                    attachments_enabled = not route.get("disable_attachments", g_smarthost.get("disable_attachments", False))
+                    sh_alias = route.get("smarthost_alias")
+                    sh_conf = self.state.smarthost.get("aliases", {}).get(sh_alias, {})
+
+                    force_pt = route.get("force_plaintext")
+                    if force_pt is None:
+                        force_pt = sh_conf.get("force_plaintext")
+                        if force_pt is None:
+                            force_pt = g_smarthost.get("force_plaintext", False)
+
+                    route_disable_att = route.get("disable_attachments")
+                    if route_disable_att is not None:
+                        attachments_enabled = not route_disable_att
+                    else:
+                        sh_disable_att = sh_conf.get("disable_attachments")
+                        if sh_disable_att is not None:
+                            attachments_enabled = not sh_disable_att
+                        else:
+                            attachments_enabled = not g_smarthost.get("disable_attachments", False)
 
                 disable_persist = self.state.smtp.get("disable_persistence", False)
 
@@ -646,7 +662,10 @@ def delivery_worker(msg_queue, state):
                     with smtplib.SMTP(host, port, timeout=15) as server:
                         server.ehlo(local_ehlo)
                         if sh_conf.get("starttls"):
-                            server.starttls()
+                            if sh_conf.get("disable_tls_validation"):
+                                server.starttls(context=ssl._create_unverified_context())
+                            else:
+                                server.starttls()
                             server.ehlo(local_ehlo)
                         if sh_conf.get("auth"):
                             # Securely access the relay password directly from the unencrypted vault memory context
@@ -821,13 +840,25 @@ def load_config(is_reload=False):
 
         # 2. Parse Smarthost Configurations
         new_state.smarthost = {
-            "aliases": smarthost_json.get("aliases", {}),
+            "aliases": {},
             "globals": {
                 "alias": smarthost_json.get("globals", {}).get("alias"),
                 "force_plaintext": get_bool(smarthost_json.get("globals", {}).get("force_plaintext", False)),
                 "disable_attachments": get_bool(smarthost_json.get("globals", {}).get("disable_attachments", False))
             }
         }
+
+        for alias, sh in smarthost_json.get("aliases", {}).items():
+            new_state.smarthost["aliases"][alias] = {
+                "hostname": sh.get("hostname", ""),
+                "port": int(sh.get("port", 25)),
+                "starttls": get_bool(sh.get("starttls")),
+                "disable_tls_validation": get_bool(sh.get("disable_tls_validation")),
+                "auth": get_bool(sh.get("auth")),
+                "username": sh.get("username", ""),
+                "disable_attachments": get_bool(sh.get("disable_attachments")),
+                "force_plaintext": get_bool(sh.get("force_plaintext")),
+            }
 
         # Check for global aliases and perform dynamic Vault substitution mapped across both legacy flat and explicit structures
         global_user = pushover_json.get("user")
