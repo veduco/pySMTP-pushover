@@ -560,6 +560,14 @@ HTML_TEMPLATE = """
     </div>
 
     <script>
+    let statusTimer;
+    document.addEventListener('htmx:afterSwap', (e) => {
+        if(e.detail.target.id === 'status' && e.detail.target.innerHTML) {
+            clearTimeout(statusTimer);
+            statusTimer = setTimeout(() => { e.detail.target.innerHTML = ''; }, 5000);
+        }
+    });
+
     document.addEventListener('alpine:init', () => {
         Alpine.data('gatewaySettings', () => ({
             theme: localStorage.getItem('theme') || 'dark',
