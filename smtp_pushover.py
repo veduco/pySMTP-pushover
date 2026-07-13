@@ -440,9 +440,9 @@ class PushoverSMTPHandler:
                         payload[param] = route[param]
 
                 # Ensure dynamic API length limits are applied contextually before queuing
-                if "url" in route:
+                if "url" in route and route["url"]:
                     payload["url"] = route["url"][:MAX_URL_CHARS]
-                if "url_title" in route:
+                if "url_title" in route and route["url_title"]:
                     payload["url_title"] = route["url_title"][:MAX_URL_TITLE_CHARS]
 
                 # Base64 encode the resolved image attachment for safe persistence queuing
