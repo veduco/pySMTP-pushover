@@ -37,6 +37,9 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import serialization
 
+# Define global logging before Uvicorn starts to prevent systemd from swallowing INFO blocks
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 # Dynamic Configuration Paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.environ.get("GATEWAY_CONFIG", os.path.join(SCRIPT_DIR, "config.json"))
@@ -74,12 +77,12 @@ def save_json(filepath, data):
 def load_vault_safe(filepath):
     v = load_clean_json(filepath)
     if "app" not in v and "user" not in v:
-        return {"app": v, "user": {}}
-    return {"app": v.get("app", {}), "user": v.get("user", {})}
+        return {"app": v, "user": {}, "smarthost": {}}
+    return {"app": v.get("app", {}), "user": v.get("user", {}), "smarthost": v.get("smarthost", {})}
 
 def init_vault():
-    if not os.path.exists(VAULT_FILE): save_json(VAULT_FILE, {"app": {}, "user": {}})
-    if not os.path.exists(VAULT_META_FILE): save_json(VAULT_META_FILE, {"app": {}, "user": {}})
+    if not os.path.exists(VAULT_FILE): save_json(VAULT_FILE, {"app": {}, "user": {}, "smarthost": {}})
+    if not os.path.exists(VAULT_META_FILE): save_json(VAULT_META_FILE, {"app": {}, "user": {}, "smarthost": {}})
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -95,7 +98,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pushover Gateway Setup</title>
+    <title>Gateway Setup</title>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <style>
@@ -167,14 +170,111 @@ HTML_TEMPLATE = """
         </div>
 
         <div class="tabs">
-            <div class="tab" :class="{ 'active': tab === 'pushover' }" @click="tab = 'pushover'">Pushover Rules</div>
+            <div class="tab" :class="{ 'active': tab === 'routes' }" @click="tab = 'routes'">Routes</div>
+            <div class="tab" :class="{ 'active': tab === 'pushover' }" @click="tab = 'pushover'">Pushover Settings</div>
+            <div class="tab" :class="{ 'active': tab === 'smarthost' }" @click="tab = 'smarthost'">Smarthost Settings</div>
             <div class="tab" :class="{ 'active': tab === 'server' }" @click="tab = 'server'">SMTP Server</div>
-            <div class="tab" :class="{ 'active': tab === 'vault' }" @click="tab = 'vault'">Token Vault</div>
             <div class="tab" :class="{ 'active': tab === 'ui' }" @click="tab = 'ui'">UI Settings</div>
         </div>
 
         <form hx-post="/save/config" hx-target="#status" @submit="document.getElementById('config_payload').value = preparePayload()">
             <input type="hidden" name="config_json" id="config_payload">
+
+            <div x-show="tab === 'routes'">
+                <div class="card">
+                    <h3>Email Maps & Routes</h3>
+                    <template x-for="(map, idx) in mappings" :key="idx">
+                        <div class="card" style="background: var(--bg-color);">
+                            <div class="flex-row" style="align-items: flex-start;">
+                                <div style="flex: 0 0 auto;"><label>Match Type</label><select class="auto-width" x-model="map.match"><option value="to">To (Recipient)</option><option value="from">From (Sender)</option><option value="both">Both</option></select></div>
+                                <div style="flex: 1; min-width: 200px;">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;"><label style="margin: 0;">Email Address</label><label class="clickable-label"><input type="checkbox" x-model="map._isRegex" style="width: auto; margin: 0;"> (Use Regex)</label></div>
+                                    <input x-model="map._key" placeholder="user@domain.com or ^.*@domain\\.com$" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+                                </div>
+                                <div style="flex: 0 0 auto;"><label style="margin-bottom: 0.25rem;">Routing Method</label><select class="auto-width" x-model="map.method"><option value="pushover">Pushover</option><option value="smarthost">Smarthost</option></select></div>
+
+                                <template x-if="map.method === 'pushover'">
+                                    <div style="flex: 0 0 auto;">
+                                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;"><label style="margin: 0;">App Token</label><label class="clickable-label"><input type="checkbox" :checked="map._isTokenAlias" @change="toggleAlias(map, 'token')" style="width: auto; margin: 0;"> (Use Alias)</label></div>
+                                        <template x-if="!map._isTokenAlias">
+                                            <div class="token-input" style="position: relative; display: inline-block;">
+                                                <input :type="map._showToken ? 'text' : 'password'" x-model="map.token" maxlength="30" placeholder="Required Override" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                                                <div @click="map._showToken = !map._showToken" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
+                                                    <svg x-show="!map._showToken" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                                    <svg x-show="map._showToken" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                                                </div>
+                                            </div>
+                                        </template>
+                                        <template x-if="map._isTokenAlias">
+                                            <select class="auto-width" x-model="map.token">
+                                                <option value="">-- Select App Alias --</option>
+                                                <template x-for="v in sortedVaultApp" :key="v.name"><option :value="v.name" x-text="v.name" :selected="map.token === v.name"></option></template>
+                                            </select>
+                                        </template>
+                                    </div>
+                                </template>
+
+                                <template x-if="map.method === 'smarthost'">
+                                    <div style="flex: 0 0 auto;">
+                                        <label style="margin-bottom: 0.25rem;">Smarthost Alias</label>
+                                        <select class="auto-width token-input" x-model="map.smarthost_alias">
+                                            <option value="">-- Select Smarthost --</option>
+                                            <template x-for="sh in sortedSmarthostKeys" :key="sh"><option :value="sh" x-text="sh" :selected="map.smarthost_alias === sh"></option></template>
+                                        </select>
+                                    </div>
+                                </template>
+                            </div>
+
+                            <button type="button" class="outline" @click="map._showAdv = !map._showAdv" style="margin-bottom: 1rem; font-size: 0.8rem; padding: 0.3rem 0.5rem;"><span x-text="map._showAdv ? 'Hide Route Settings' : 'Show Route Settings'"></span></button>
+
+                            <div x-show="map._showAdv" class="adv-card">
+                                <template x-if="map.method === 'pushover'">
+                                    <div>
+                                        <div class="flex-row" style="margin-bottom: 1.5rem; justify-content: flex-start;">
+                                            <div style="flex: 0 0 auto;">
+                                                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;"><label style="margin: 0;">User Key Override</label><label class="clickable-label"><input type="checkbox" :checked="map._isUserAlias" @change="toggleAlias(map, 'user')" style="width: auto; margin: 0;"> (Use Alias)</label></div>
+                                                <template x-if="!map._isUserAlias">
+                                                    <div class="token-input" style="position: relative; display: inline-block;">
+                                                        <input :type="map._showUser ? 'text' : 'password'" x-model="map.user" maxlength="30" placeholder="Inherit Global" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                                                        <div @click="map._showUser = !map._showUser" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
+                                                            <svg x-show="!map._showUser" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                                            <svg x-show="map._showUser" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                                <template x-if="map._isUserAlias">
+                                                    <select class="auto-width" x-model="map.user">
+                                                        <option value="">-- Inherit Global --</option>
+                                                        <template x-for="v in sortedVaultUser" :key="v.name"><option :value="v.name" x-text="v.name" :selected="map.user === v.name"></option></template>
+                                                    </select>
+                                                </template>
+                                            </div>
+                                            <div style="flex: 0 0 auto;"><label>Priority Override</label><select class="auto-width" x-model="map.priority"><option value="">Inherit Global</option><option value="-2">Lowest (-2)</option><option value="-1">Low (-1)</option><option value="0">Normal (0)</option><option value="1">High (1)</option><option value="2">Emergency (2)</option></select></div>
+                                            <div class="flex-col" style="flex: 1; min-width: 150px;"><label>Target Device</label><input x-model="map.device" placeholder="Inherit Global" style="width: 100%;"></div>
+                                        </div>
+
+                                        <div class="flex-row" x-show="map.priority == 2" style="margin-bottom: 1rem;">
+                                            <div style="flex: 0 0 auto;"><label>Retry (sec)</label><input type="number" x-model.number="map.retry" min="30" style="width: 120px;"></div>
+                                            <div style="flex: 0 0 auto;"><label>Expire (sec)</label><input type="number" x-model.number="map.expire" max="10800" style="width: 120px;"></div>
+                                        </div>
+
+                                        <div class="flex-row" style="margin-bottom: 0.5rem;"><div class="flex-col" style="flex: 1; min-width: 200px;"><label>Supplementary URL</label><input x-model="map.url" placeholder="Inherit Global" maxlength="512" style="width: 100%;"></div></div>
+                                        <div class="flex-row" style="margin-bottom: 1rem;"><div style="flex: 0 0 auto;"><label>URL Title</label><input x-model="map.url_title" placeholder="Inherit Global" maxlength="100" style="width: 100ch; max-width: 100%;"></div></div>
+                                    </div>
+                                </template>
+
+                                <div class="flex-row" style="gap: 1.5rem; margin-top: 1rem;">
+                                    <label class="clickable-label" style="font-weight: normal;"><input type="checkbox" x-model="map.disable_attachments" style="width: auto; margin: 0;"> Disable Attachments</label>
+                                    <label class="clickable-label" style="font-weight: normal;"><input type="checkbox" x-model="map.force_plaintext" style="width: auto; margin: 0;"> Force Plaintext Formatting</label>
+                                </div>
+                            </div>
+
+                            <div style="text-align: right;"><button type="button" class="danger" @click="mappings.splice(idx, 1)" title="Remove Mapping"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></div>
+                        </div>
+                    </template>
+                    <button type="button" @click="addMapping()">+ Add Mapping</button>
+                </div>
+            </div>
 
             <div x-show="tab === 'pushover'">
                 <div class="card">
@@ -251,91 +351,130 @@ HTML_TEMPLATE = """
                     <div class="flex-row" style="gap: 1.5rem; margin-top: 0.5rem;">
                         <label class="clickable-label" style="font-weight: normal;"><input type="checkbox" x-model="pushGlobals.disable_attachments" style="width: auto; margin: 0;"> Disable Image Attachments</label>
                         <label class="clickable-label" style="font-weight: normal;"><input type="checkbox" x-model="pushGlobals.force_plaintext" style="width: auto; margin: 0;"> Force Plaintext Formatting</label>
-                        <label class="clickable-label" style="font-weight: normal;"><input type="checkbox" x-model="pushGlobals.disable_persistence" style="width: auto; margin: 0;"> Disable Disk Persistence</label>
                     </div>
                 </div>
 
                 <div class="card">
-                    <h3>Email Maps & Routes</h3>
-                    <template x-for="(map, idx) in mappings" :key="idx">
-                        <div class="card" style="background: var(--bg-color);">
-                            <div class="flex-row" style="align-items: flex-start;">
-                                <div style="flex: 0 0 auto;"><label>Match Type</label><select class="auto-width" x-model="map.match"><option value="to">To (Recipient)</option><option value="from">From (Sender)</option><option value="both">Both</option></select></div>
-                                <div style="flex: 1; min-width: 200px;">
-                                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;"><label style="margin: 0;">Email Address</label><label class="clickable-label"><input type="checkbox" x-model="map._isRegex" style="width: auto; margin: 0;"> (Use Regex)</label></div>
-                                    <input x-model="map._key" placeholder="user@domain.com or ^.*@domain\\.com$" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
-                                </div>
-                                <div style="flex: 0 0 auto;">
-                                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;"><label style="margin: 0;">App Token</label><label class="clickable-label"><input type="checkbox" :checked="map._isTokenAlias" @change="toggleAlias(map, 'token')" style="width: auto; margin: 0;"> (Use Alias)</label></div>
-                                    <template x-if="!map._isTokenAlias">
-                                        <div class="token-input" style="position: relative; display: inline-block;">
-                                            <input :type="map._showToken ? 'text' : 'password'" x-model="map.token" maxlength="30" placeholder="Required Override" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
-                                            <div @click="map._showToken = !map._showToken" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
-                                                <svg x-show="!map._showToken" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                                                <svg x-show="map._showToken" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
-                                            </div>
-                                        </div>
-                                    </template>
-                                    <template x-if="map._isTokenAlias">
-                                        <select class="auto-width" x-model="map.token">
-                                            <option value="">-- Select App Alias --</option>
-                                            <template x-for="v in sortedVaultApp" :key="v.name"><option :value="v.name" x-text="v.name" :selected="map.token === v.name"></option></template>
-                                        </select>
-                                    </template>
+                    <h3>API Token Vault</h3>
+                    <p>Store your raw Pushover tokens and User Keys here safely to map as Aliases.</p>
+                    <div class="flex-row" style="gap: 1rem; align-items: flex-end; justify-content: flex-start; margin-bottom: 1rem;">
+                        <div style="flex: 0 0 auto;"><label>Token Type</label><select class="auto-width" x-model="newVaultType"><option value="app">App Token</option><option value="user">User Key</option></select></div>
+                        <div style="flex: 1; min-width: 150px;"><label>Alias Name</label><input type="text" x-model="newVaultName" required autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
+                        <div style="flex: 0 0 auto;">
+                            <label>Token Value</label>
+                            <div class="token-input" style="position: relative; display: inline-block;">
+                                <input :type="showNewVaultToken ? 'text' : 'password'" x-model="newVaultToken" maxlength="30" required autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                                <div @click="showNewVaultToken = !showNewVaultToken" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
+                                    <svg x-show="!showNewVaultToken" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                    <svg x-show="showNewVaultToken" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
                                 </div>
                             </div>
-
-                            <button type="button" class="outline" @click="map._showAdv = !map._showAdv" style="margin-bottom: 1rem; font-size: 0.8rem; padding: 0.3rem 0.5rem;"><span x-text="map._showAdv ? 'Hide Route Settings' : 'Show Route Settings'"></span></button>
-
-                            <div x-show="map._showAdv" class="adv-card">
-                                <div class="flex-row" style="margin-bottom: 1.5rem; justify-content: flex-start;">
-                                    <div style="flex: 0 0 auto;">
-                                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;"><label style="margin: 0;">User Key Override</label><label class="clickable-label"><input type="checkbox" :checked="map._isUserAlias" @change="toggleAlias(map, 'user')" style="width: auto; margin: 0;"> (Use Alias)</label></div>
-                                        <template x-if="!map._isUserAlias">
-                                            <div class="token-input" style="position: relative; display: inline-block;">
-                                                <input :type="map._showUser ? 'text' : 'password'" x-model="map.user" maxlength="30" placeholder="Inherit Global" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
-                                                <div @click="map._showUser = !map._showUser" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
-                                                    <svg x-show="!map._showUser" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                                                    <svg x-show="map._showUser" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
-                                                </div>
-                                            </div>
-                                        </template>
-                                        <template x-if="map._isUserAlias">
-                                            <select class="auto-width" x-model="map.user">
-                                                <option value="">-- Inherit Global --</option>
-                                                <template x-for="v in sortedVaultUser" :key="v.name"><option :value="v.name" x-text="v.name" :selected="map.user === v.name"></option></template>
-                                            </select>
-                                        </template>
-                                    </div>
-                                    <div style="flex: 0 0 auto;"><label>Priority Override</label><select class="auto-width" x-model="map.priority"><option value="">Inherit Global</option><option value="-2">Lowest (-2)</option><option value="-1">Low (-1)</option><option value="0">Normal (0)</option><option value="1">High (1)</option><option value="2">Emergency (2)</option></select></div>
-                                    <div class="flex-col" style="flex: 1; min-width: 150px;"><label>Target Device</label><input x-model="map.device" placeholder="Inherit Global" style="width: 100%;"></div>
-                                </div>
-
-                                <div class="flex-row" x-show="map.priority == 2" style="margin-bottom: 1rem;">
-                                    <div style="flex: 0 0 auto;"><label>Retry (sec)</label><input type="number" x-model.number="map.retry" min="30" style="width: 120px;"></div>
-                                    <div style="flex: 0 0 auto;"><label>Expire (sec)</label><input type="number" x-model.number="map.expire" max="10800" style="width: 120px;"></div>
-                                </div>
-
-                                <div class="flex-row" style="margin-bottom: 0.5rem;"><div class="flex-col" style="flex: 1; min-width: 200px;"><label>Supplementary URL</label><input x-model="map.url" placeholder="Inherit Global" maxlength="512" style="width: 100%;"></div></div>
-                                <div class="flex-row" style="margin-bottom: 1rem;"><div style="flex: 0 0 auto;"><label>URL Title</label><input x-model="map.url_title" placeholder="Inherit Global" maxlength="100" style="width: 100ch; max-width: 100%;"></div></div>
-
-                                <div class="flex-row" style="gap: 1.5rem; margin-top: 1rem;">
-                                    <label class="clickable-label" style="font-weight: normal;"><input type="checkbox" x-model="map.disable_attachments" style="width: auto; margin: 0;"> Disable Image Attachments</label>
-                                    <label class="clickable-label" style="font-weight: normal;"><input type="checkbox" x-model="map.force_plaintext" style="width: auto; margin: 0;"> Force Plaintext Formatting</label>
-                                    <label class="clickable-label" style="font-weight: normal;"><input type="checkbox" x-model="map.disable_persistence" style="width: auto; margin: 0;"> Disable Disk Persistence</label>
-                                </div>
-                            </div>
-
-                            <div style="text-align: right;"><button type="button" class="danger" @click="mappings.splice(idx, 1)" title="Remove Mapping"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></div>
                         </div>
-                    </template>
-                    <button type="button" @click="addMapping()">+ Add Mapping</button>
+                        <div style="flex: 0 0 auto; display: flex; gap: 0.5rem;"><button type="button" @click="addVaultToken()">Add Token</button><button type="button" class="outline" @click="newVaultName=''; newVaultToken='';">Clear</button></div>
+                    </div>
+
+                    <hr>
+                    <h4>Current App Token Aliases</h4>
+                    <table style="margin-bottom: 2rem;">
+                        <thead>
+                            <tr>
+                                <th class="table-sort" style="width: auto;" @click="setVaultSort('name')">Alias Name <span style="font-size: 0.8em;" x-show="vaultSortCol==='name'" x-text="vaultSortDir===1 ? '▲' : '▼'"></span></th>
+                                <th class="table-sort table-col-min" @click="setVaultSort('epoch')">Last Modification <span style="font-size: 0.8em;" x-show="vaultSortCol==='epoch'" x-text="vaultSortDir===1 ? '▲' : '▼'"></span></th>
+                                <th class="table-col-min">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="v in sortedVaultApp" :key="v.name">
+                                <tr>
+                                    <td><strong x-text="v.name"></strong></td>
+                                    <td class="table-col-min"><span class="time-display" x-text="formatTime(v.epoch)" :title="getFullTime(v.epoch)"></span></td>
+                                    <td class="table-col-min"><div style="display: flex; gap: 0.5rem;"><button type="button" class="outline" @click="openEditModal('vault', v.name, 'app')">Modify Secret</button><button type="button" class="danger" @click="deleteVaultToken('app', v.name)" title="Delete Alias"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></div></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+
+                    <h4>Current User Token Aliases</h4>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="table-sort" style="width: auto;" @click="setVaultSort('name')">Alias Name <span style="font-size: 0.8em;" x-show="vaultSortCol==='name'" x-text="vaultSortDir===1 ? '▲' : '▼'"></span></th>
+                                <th class="table-sort table-col-min" @click="setVaultSort('epoch')">Last Modification <span style="font-size: 0.8em;" x-show="vaultSortCol==='epoch'" x-text="vaultSortDir===1 ? '▲' : '▼'"></span></th>
+                                <th class="table-col-min">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="v in sortedVaultUser" :key="v.name">
+                                <tr>
+                                    <td><strong x-text="v.name"></strong></td>
+                                    <td class="table-col-min"><span class="time-display" x-text="formatTime(v.epoch)" :title="getFullTime(v.epoch)"></span></td>
+                                    <td class="table-col-min"><div style="display: flex; gap: 0.5rem;"><button type="button" class="outline" @click="openEditModal('vault', v.name, 'user')">Modify Secret</button><button type="button" class="danger" @click="deleteVaultToken('user', v.name)" title="Delete Alias"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></div></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div x-show="tab === 'smarthost'">
+                <div class="card">
+                    <h3>Global Smarthost Fallbacks</h3>
+                    <div class="flex-row" style="margin-bottom: 0.75rem;">
+                        <div style="flex: 0 0 auto;">
+                            <label style="margin-bottom: 0.25rem;">Smarthost Alias</label>
+                            <select class="auto-width token-input" x-model="smartGlobals.alias">
+                                <option value="">-- Select Smarthost --</option>
+                                <template x-for="sh in sortedSmarthostKeys" :key="sh"><option :value="sh" x-text="sh" :selected="smartGlobals.alias === sh"></option></template>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex-row" style="gap: 1.5rem; margin-top: 1rem;">
+                        <label class="clickable-label" style="font-weight: normal;"><input type="checkbox" x-model="smartGlobals.disable_attachments" style="width: auto; margin: 0;"> Disable Attachments</label>
+                        <label class="clickable-label" style="font-weight: normal;"><input type="checkbox" x-model="smartGlobals.force_plaintext" style="width: auto; margin: 0;"> Force Plaintext Formatting</label>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>Smarthost Aliases</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="table-sort" style="width: auto;" @click="setSmarthostSort()">Hostname <span style="font-size: 0.8em;" x-show="true" x-text="smarthostSortDir===1 ? '▲' : '▼'"></span></th>
+                                <th class="table-col-min">STARTTLS</th>
+                                <th class="table-col-min">AUTH</th>
+                                <th class="table-col-min" style="min-width: 150px;">Username</th>
+                                <th class="table-col-min">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="sh in sortedSmarthosts" :key="sh.alias">
+                                <tr>
+                                    <td><strong x-text="sh.alias"></strong><br><span style="font-size: 0.85rem; color: var(--text-color); opacity: 0.8;" x-text="sh.hostname + ':' + sh.port"></span></td>
+                                    <td class="table-col-min" x-text="sh.starttls ? 'Enabled' : 'Disabled'"></td>
+                                    <td class="table-col-min" x-text="sh.auth ? 'Enabled' : 'Disabled'"></td>
+                                    <td class="table-col-min" x-text="sh.username || '-'"></td>
+                                    <td class="table-col-min">
+                                        <div style="display: flex; gap: 0.5rem;">
+                                            <button type="button" class="outline" @click="openSmarthostModal('edit', sh.alias)">Modify Server</button>
+                                            <button type="button" class="danger" @click="deleteSmarthost(sh.alias)" title="Remove Smarthost"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                    <div style="margin-top: 1rem;"><button type="button" @click="openSmarthostModal('add')">+ Add Smarthost</button></div>
                 </div>
             </div>
 
             <div x-show="tab === 'server'">
                 <div class="card">
                     <h3>Global Configuration</h3>
+                    <div class="flex-row" style="margin-bottom: 1rem; align-items: flex-end;">
+                        <div style="flex: 0 0 auto;"><label>Default Catch-All Route</label><select class="auto-width" x-model="smtp.default_route"><option value="pushover">Pushover</option><option value="smarthost">Smarthost</option></select></div>
+                        <div style="flex: 0 0 auto; padding-bottom: 0.5rem;"><label class="clickable-label" style="font-weight: normal; white-space: nowrap;"><input type="checkbox" x-model="smtp.disable_persistence" style="margin: 0;"> Disable Disk Persistence</label></div>
+                    </div>
                     <div class="flex-row" style="margin-bottom: 1rem;"><div style="flex: 0 0 auto;"><label>Log Level</label><select class="auto-width" x-model="smtp.loglevel"><option value="INFO">INFO</option><option value="DEBUG">DEBUG</option><option value="WARNING">WARNING</option><option value="ERROR">ERROR</option></select></div></div>
                     <div class="flex-row" style="margin-bottom: 1rem;"><div class="flex-col" style="flex: 1; min-width: 200px;"><label>Disk Queue Directory</label><input x-model="smtp.queue_dir" placeholder="/tmp/queue" style="width: 100%;"></div></div>
                     <div class="flex-row" style="margin-bottom: 1rem;"><div class="flex-col" style="flex: 1; min-width: 200px;"><label>Global Hostname (Greeting Banner)</label><input x-model="smtp.hostname" placeholder="gateway.local" style="width: 100%;"></div></div>
@@ -383,102 +522,44 @@ HTML_TEMPLATE = """
 
                 <div class="card">
                     <h3>TCP Listeners & Binds</h3>
-                    <template x-for="(l, idx) in smtp.listeners" :key="idx">
-                        <div class="card" style="background: var(--bg-color);">
-                            <div class="flex-row" style="align-items: flex-end; margin-bottom: 1rem;">
-                                <div style="flex: 0 0 auto;"><label>Bind Address</label><input x-model="l.bind" placeholder="0.0.0.0:25" maxlength="52" style="width: 55ch; max-width: 100%;"></div>
-                                <div style="flex: 0 0 auto; padding-bottom: 0.5rem;"><label class="clickable-label" style="font-weight: normal; white-space: nowrap;"><input type="checkbox" x-model="l.starttls" style="margin: 0;"> STARTTLS</label></div>
-                            </div>
-                            <div class="flex-row" style="margin-bottom: 1rem;"><div class="flex-col" style="flex: 1; min-width: 200px;"><label>Hostname Override</label><input x-model="l.hostname" placeholder="Optional" style="width: 100%;"></div></div>
-                            <div class="flex-row" x-show="l.starttls" style="margin-bottom: 1rem;">
-                                <div class="flex-col"><label>Specific TLS Cert File</label><input x-model="l.tls_cert_file" placeholder="Leaves blank to use Global"></div>
-                                <div class="flex-col"><label>Specific TLS Key File</label><input x-model="l.tls_key_file" placeholder="Leaves blank to use Global"></div>
-                            </div>
-                            <div style="text-align: right;"><button type="button" class="danger" @click="smtp.listeners.splice(idx, 1)" title="Remove Listener"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></div>
-                        </div>
-                    </template>
-                    <button type="button" @click="addListener()">+ Add TCP Listener</button>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: auto;">Bind Address</th>
+                                <th>Hostname</th>
+                                <th class="table-col-min">STARTTLS</th>
+                                <th>Dedicated TLS Cert File</th>
+                                <th>Dedicated TLS Key File</th>
+                                <th class="table-col-min">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="(l, idx) in smtp.listeners" :key="idx">
+                                <tr>
+                                    <td><strong x-text="l.bind"></strong></td>
+                                    <td x-text="l.hostname || '-'"></td>
+                                    <td class="table-col-min" x-text="l.starttls ? 'Enabled' : 'Disabled'"></td>
+                                    <td x-text="l.tls_cert_file || '-'"></td>
+                                    <td x-text="l.tls_key_file || '-'"></td>
+                                    <td class="table-col-min">
+                                        <div style="display: flex; gap: 0.5rem;">
+                                            <button type="button" class="outline" @click="openListenerModal('edit', idx)">Modify Listener</button>
+                                            <button type="button" class="danger" @click="smtp.listeners.splice(idx, 1)" title="Remove Listener"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                    <div style="margin-top: 1rem;"><button type="button" @click="openListenerModal('add')">+ Add TCP Listener</button></div>
                 </div>
             </div>
 
-            <div x-show="tab === 'pushover' || tab === 'server'" style="margin-top: 1.5rem; display: flex; gap: 1rem;">
+            <div x-show="['routes', 'pushover', 'smarthost', 'server'].includes(tab)" style="margin-top: 1.5rem; display: flex; gap: 1rem;">
                 <button type="submit" style="font-size: 1.1rem; padding: 1rem;">Save Application Configuration</button>
                 <button type="button" class="warning" @click="window.location.reload()" style="font-size: 1.1rem; padding: 1rem;">Discard Changes & Reload from Disk</button>
             </div>
         </form>
-
-        <div x-show="tab === 'vault'">
-            <div class="card">
-                <h3>API Token Vault</h3>
-                <p>Store your raw Pushover tokens and User Keys here safely to map as Aliases.</p>
-                <form @submit.prevent="addVaultToken()">
-                    <div class="flex-row" style="gap: 1rem; align-items: flex-end; justify-content: flex-start;">
-                        <div style="flex: 0 0 auto;"><label>Token Type</label><select class="auto-width" x-model="newVaultType"><option value="app">App Token</option><option value="user">User Key</option></select></div>
-                        <div style="flex: 1; min-width: 150px;"><label>Alias Name</label><input type="text" x-model="newVaultName" required autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
-                        <div style="flex: 0 0 auto;">
-                            <label>Token Value</label>
-                            <div class="token-input" style="position: relative; display: inline-block;">
-                                <input :type="showNewVaultToken ? 'text' : 'password'" x-model="newVaultToken" maxlength="30" required autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
-                                <div @click="showNewVaultToken = !showNewVaultToken" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
-                                    <svg x-show="!showNewVaultToken" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                                    <svg x-show="showNewVaultToken" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
-                                </div>
-                            </div>
-                        </div>
-                        <div style="flex: 0 0 auto; display: flex; gap: 0.5rem;"><button type="submit">Add Token</button><button type="button" class="outline" @click="newVaultName=''; newVaultToken='';">Clear</button></div>
-                    </div>
-                </form>
-
-                <hr>
-                <h4>Current App Token Aliases</h4>
-                <table style="margin-bottom: 2rem;">
-                    <thead>
-                        <tr>
-                            <th class="table-sort" style="width: auto;" @click="setVaultSort('name')">Alias Name <span style="font-size: 0.8em;" x-show="vaultSortCol==='name'" x-text="vaultSortDir===1 ? '▲' : '▼'"></span></th>
-                            <th class="table-sort table-col-min" @click="setVaultSort('epoch')">Last Modification <span style="font-size: 0.8em;" x-show="vaultSortCol==='epoch'" x-text="vaultSortDir===1 ? '▲' : '▼'"></span></th>
-                            <th class="table-col-min">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <template x-for="v in sortedVaultApp" :key="v.name">
-                            <tr>
-                                <td><strong x-text="v.name"></strong></td>
-                                <td class="table-col-min"><span class="time-display" x-text="formatTime(v.epoch)" :title="getFullTime(v.epoch)"></span></td>
-                                <td class="table-col-min"><div style="display: flex; gap: 0.5rem;"><button type="button" class="outline" @click="openEditModal('vault', v.name, 'app')">Modify Secret</button><button type="button" class="danger" @click="deleteVaultToken('app', v.name)" title="Delete Alias"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></div></td>
-                            </tr>
-                        </template>
-                    </tbody>
-                </table>
-
-                <h4>Current User Token Aliases</h4>
-                <table>
-                    <thead>
-                        <tr>
-                            <th class="table-sort" style="width: auto;" @click="setVaultSort('name')">Alias Name <span style="font-size: 0.8em;" x-show="vaultSortCol==='name'" x-text="vaultSortDir===1 ? '▲' : '▼'"></span></th>
-                            <th class="table-sort table-col-min" @click="setVaultSort('epoch')">Last Modification <span style="font-size: 0.8em;" x-show="vaultSortCol==='epoch'" x-text="vaultSortDir===1 ? '▲' : '▼'"></span></th>
-                            <th class="table-col-min">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <template x-for="v in sortedVaultUser" :key="v.name">
-                            <tr>
-                                <td><strong x-text="v.name"></strong></td>
-                                <td class="table-col-min"><span class="time-display" x-text="formatTime(v.epoch)" :title="getFullTime(v.epoch)"></span></td>
-                                <td class="table-col-min"><div style="display: flex; gap: 0.5rem;"><button type="button" class="outline" @click="openEditModal('vault', v.name, 'user')">Modify Secret</button><button type="button" class="danger" @click="deleteVaultToken('user', v.name)" title="Delete Alias"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2 2v2"></path></svg></button></div></td>
-                            </tr>
-                        </template>
-                    </tbody>
-                </table>
-            </div>
-
-            <form hx-post="/save/vault_state" hx-target="#status" @submit="document.getElementById('vault_payload').value = prepareVaultPayload()">
-                <input type="hidden" name="vault_json" id="vault_payload">
-                <div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
-                    <button type="submit" style="font-size: 1.1rem; padding: 1rem;">Save Token Vault Configuration</button>
-                    <button type="button" class="warning" @click="window.location.reload()" style="font-size: 1.1rem; padding: 1rem;">Discard Changes & Reload from Disk</button>
-                </div>
-            </form>
-        </div>
 
         <div x-show="tab === 'ui'" x-data="{ httpsEnabled: {{ 'true' if ui_https else 'false' }} }">
             <form hx-post="/save/ui" hx-target="#status">
@@ -517,6 +598,13 @@ HTML_TEMPLATE = """
                                 <option value="name_desc">Username (Descending)</option>
                                 <option value="epoch_asc">Last Modification (Ascending)</option>
                                 <option value="epoch_desc">Last Modification (Descending)</option>
+                            </select>
+                        </div>
+                        <div style="flex: 0 0 auto;">
+                            <label>Smarthost Default Sort</label>
+                            <select class="auto-width" name="smarthost_sort" x-model="ui_smarthost_sort">
+                                <option value="name_asc">Hostname (Ascending)</option>
+                                <option value="name_desc">Hostname (Descending)</option>
                             </select>
                         </div>
                     </div>
@@ -558,6 +646,97 @@ HTML_TEMPLATE = """
             </div>
         </div>
 
+        <div x-show="smarthostModal.open" class="modal-overlay" style="display: none;" x-transition>
+            <div class="modal-content" @click.away="smarthostModal.open = false">
+                <h3 style="margin-top: 0;" x-text="smarthostModal.mode === 'add' ? 'Add Smarthost' : 'Modify Server for ' + smarthostModal.oldAlias"></h3>
+
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label>Alias Name</label>
+                    <input type="text" x-model="smarthostModal.alias" placeholder="e.g. gmail_relay" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+                </div>
+                <div class="flex-row" style="margin-bottom: 1rem;">
+                    <div class="flex-col" style="flex: 2;">
+                        <label>Hostname</label>
+                        <input type="text" x-model="smarthostModal.hostname" placeholder="smtp.gmail.com" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+                    </div>
+                    <div class="flex-col" style="flex: 1;">
+                        <label>Port</label>
+                        <input type="number" x-model.number="smarthostModal.port" required style="width: 100px; max-width: 100%;" oninput="if(this.value.length > 5) this.value = this.value.slice(0, 5);" min="1" max="65535">
+                    </div>
+                </div>
+                <div class="flex-row" style="gap: 1.5rem; margin-bottom: 1.5rem;">
+                    <label class="clickable-label" style="font-weight: normal;"><input type="checkbox" x-model="smarthostModal.starttls" style="width: auto; margin: 0;"> Use STARTTLS</label>
+                    <label class="clickable-label" style="font-weight: normal;"><input type="checkbox" x-model="smarthostModal.auth" style="width: auto; margin: 0;"> Use Authentication</label>
+                </div>
+
+                <div x-show="smarthostModal.auth" style="margin-bottom: 1rem;">
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label>Username</label>
+                        <input type="text" x-model="smarthostModal.username" placeholder="foo@gmail.com" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <div class="token-input" style="position: relative; display: block; width: 100%;">
+                            <input :type="smarthostModal.showPass ? 'text' : 'password'" x-model="smarthostModal.password" placeholder="Password or App Password" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                            <div @click="smarthostModal.showPass = !smarthostModal.showPass" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
+                                <svg x-show="!smarthostModal.showPass" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                <svg x-show="smarthostModal.showPass" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div x-show="smarthostModal.error" class="danger" style="color: var(--danger-color); font-weight: bold; margin-top: 1rem; font-size: 0.9rem;" x-text="smarthostModal.error"></div>
+
+                <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
+                    <button type="button" class="outline" @click="smarthostModal.open = false">Cancel</button><button type="button" @click="saveSmarthostModal()">Save Changes</button>
+                </div>
+            </div>
+        </div>
+
+        <div x-show="listenerModal.open" class="modal-overlay" style="display: none;" x-transition>
+            <div class="modal-content" @click.away="listenerModal.open = false">
+                <h3 style="margin-top: 0;" x-text="listenerModal.mode === 'add' ? 'Add TCP Listener' : 'Modify TCP Listener'"></h3>
+
+                <div class="flex-row" style="margin-bottom: 1rem;">
+                    <div class="flex-col" style="flex: 2;">
+                        <label>Listen Address</label>
+                        <input type="text" x-model="listenerModal.ip" placeholder="0.0.0.0" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+                    </div>
+                    <div class="flex-col" style="flex: 1;">
+                        <label>Port</label>
+                        <input type="number" x-model.number="listenerModal.port" required style="width: 100px; max-width: 100%;" oninput="if(this.value.length > 5) this.value = this.value.slice(0, 5);" min="1" max="65535">
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label>Hostname Override</label>
+                    <input type="text" x-model="listenerModal.hostname" placeholder="Optional" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+                </div>
+
+                <div style="margin-bottom: 1rem;">
+                    <label class="clickable-label" style="font-weight: normal;"><input type="checkbox" x-model="listenerModal.starttls" style="width: auto; margin: 0;"> Use STARTTLS</label>
+                </div>
+
+                <div x-show="listenerModal.starttls" style="margin-bottom: 1rem;">
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label>Dedicated TLS Cert File</label>
+                        <input type="text" x-model="listenerModal.tls_cert_file" placeholder="Leaves blank to use Global" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+                    </div>
+                    <div class="form-group">
+                        <label>Dedicated TLS Key File</label>
+                        <input type="text" x-model="listenerModal.tls_key_file" placeholder="Leaves blank to use Global" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+                    </div>
+                </div>
+
+                <div x-show="listenerModal.error" class="danger" style="color: var(--danger-color); font-weight: bold; margin-top: 1rem; font-size: 0.9rem;" x-text="listenerModal.error"></div>
+
+                <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
+                    <button type="button" class="outline" @click="listenerModal.open = false">Cancel</button><button type="button" @click="saveListenerModal()">Save Changes</button>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script>
@@ -572,11 +751,11 @@ HTML_TEMPLATE = """
     document.addEventListener('alpine:init', () => {
         Alpine.data('gatewaySettings', () => ({
             theme: localStorage.getItem('theme') || 'dark',
-            tab: localStorage.getItem('activeTab') || 'pushover',
+            tab: localStorage.getItem('activeTab') || 'routes',
             rawConfig: {{ config_json | safe }},
             smtp_meta: {{ smtp_meta_json | safe }},
             vaultMeta: {{ vault_meta_json | safe }},
-            vaultApp: [], vaultUser: [], vaultAppAliases: [], vaultUserAliases: [],
+            vaultApp: [], vaultUser: [], vaultSmarthost: {}, vaultAppAliases: [], vaultUserAliases: [],
             newVaultType: 'app', newVaultName: '', newVaultToken: '', showNewVaultToken: false,
 
             ui_tz: '{{ ui_tz }}', ui_fmt: '{{ ui_fmt }}',
@@ -584,12 +763,16 @@ HTML_TEMPLATE = """
             ui_expand_adv: {{ 'true' if ui_expand_adv else 'false' }},
             ui_vault_sort: '{{ ui_vault_sort }}',
             ui_smtp_sort: '{{ ui_smtp_sort }}',
+            ui_smarthost_sort: '{{ ui_smarthost_sort }}',
             vaultSortCol: 'name', vaultSortDir: 1,
             smtpSortCol: 'name', smtpSortDir: 1,
+            smarthostSortDir: 1,
 
-            pushGlobals: {}, showGlobalAdv: false, mappings: [], smtp: {},
+            pushGlobals: {}, smartGlobals: {}, showGlobalAdv: false, mappings: [], smtp: {}, smarthosts: {},
             newSmtpUser: '', newSmtpPass: '',
             editModal: { open: false, type: '', subType: '', name: '', value: '', showToken: false },
+            smarthostModal: { open: false, mode: 'add', oldAlias: '', alias: '', hostname: '', port: 25, starttls: false, auth: false, username: '', password: '', showPass: false, error: '' },
+            listenerModal: { open: false, mode: 'add', idx: null, ip: '0.0.0.0', port: 25, hostname: '', starttls: false, tls_cert_file: '', tls_key_file: '', error: '' },
 
             init() {
                 this.$watch('theme', val => { localStorage.setItem('theme', val); document.documentElement.setAttribute('data-theme', val); });
@@ -602,23 +785,38 @@ HTML_TEMPLATE = """
                 const ssParts = this.ui_smtp_sort.split('_');
                 this.smtpSortCol = ssParts[0]; this.smtpSortDir = ssParts[1] === 'desc' ? -1 : 1;
 
+                const shParts = this.ui_smarthost_sort.split('_');
+                this.smarthostSortDir = shParts[1] === 'desc' ? -1 : 1;
+
                 for(const [k, v] of Object.entries(this.vaultMeta.app || {})) { this.vaultApp.push({ name: k, epoch: v, token: '__RETAIN__' }); this.vaultAppAliases.push(k); }
                 for(const [k, v] of Object.entries(this.vaultMeta.user || {})) { this.vaultUser.push({ name: k, epoch: v, token: '__RETAIN__' }); this.vaultUserAliases.push(k); }
+                for(const [k, v] of Object.entries(this.vaultMeta.smarthost || {})) { this.vaultSmarthost[k] = { epoch: v, token: '__RETAIN__' }; }
 
-                const gKeys = ['user','token','device','sound','url','url_title','tags','priority','ttl','retry','expire','attachments','force_plaintext','disable_persistence'];
+                const gKeys = ['user','token','device','sound','url','url_title','tags','priority','ttl','retry','expire','attachments','force_plaintext'];
                 const po = this.rawConfig.pushover || {};
 
                 this.pushGlobals._showToken = false;
                 this.pushGlobals._showUser = false;
 
-                for(const [k, v] of Object.entries(po)) {
-                    if(gKeys.includes(k)) { this.pushGlobals[k] = v; } else {
+                this.smarthosts = this.rawConfig.smarthost?.aliases || {};
+                const sg = this.rawConfig.smarthost?.globals || {};
+                this.smartGlobals = { alias: sg.alias || '', force_plaintext: sg.force_plaintext === true, disable_attachments: sg.disable_attachments === true };
+
+                const routes = this.rawConfig.routes || {};
+
+                for(const [k, v] of Object.entries(routes)) {
+                    let isRegex = false; let displayKey = k;
+                    if (k.toLowerCase().startsWith('regex:')) { isRegex = true; displayKey = k.substring(6); }
+
+                    const method = v.method || 'pushover';
+
+                    if (method === 'pushover') {
                         const isTokenAlias = this.vaultAppAliases.includes(v.token);
                         const isUserAlias = this.vaultUserAliases.includes(v.user);
-                        let isRegex = false; let displayKey = k;
-                        if (k.toLowerCase().startsWith('regex:')) { isRegex = true; displayKey = k.substring(6); }
                         this.mappings.push({
                             _key: displayKey,
+                            match: v.match || 'to',
+                            method: method,
                             _isRegex: isRegex,
                             _showAdv: this.ui_expand_adv,
                             _isTokenAlias: isTokenAlias,
@@ -631,8 +829,21 @@ HTML_TEMPLATE = """
                             _showUser: false,
                             disable_attachments: (v.attachments === false),
                             force_plaintext: (v.force_plaintext === true),
-                            disable_persistence: (v.disable_persistence === true),
+                            smarthost_alias: '',
                             ...v
+                        });
+                    } else {
+                        this.mappings.push({
+                            _key: displayKey,
+                            match: v.match || 'to',
+                            method: method,
+                            _isRegex: isRegex,
+                            _showAdv: this.ui_expand_adv,
+                            _isTokenAlias: false, _isUserAlias: false, _tokenAliasVal: '', _tokenRaw: '', _userAliasVal: '', _userRaw: '', _showToken: false, _showUser: false,
+                            token: '', user: '',
+                            smarthost_alias: v.smarthost_alias || '',
+                            disable_attachments: (v.disable_attachments === true),
+                            force_plaintext: (v.force_plaintext === true)
                         });
                     }
                 }
@@ -645,12 +856,18 @@ HTML_TEMPLATE = """
                 this.pushGlobals._userAliasVal = this.pushGlobals._isUserAlias ? po.user : '';
                 this.pushGlobals._userRaw = !this.pushGlobals._isUserAlias ? po.user : '';
 
+                for(const k of gKeys) {
+                    if(k !== 'attachments' && k !== 'force_plaintext') this.pushGlobals[k] = po[k];
+                }
+
                 this.pushGlobals.disable_attachments = (po.attachments === false);
                 this.pushGlobals.force_plaintext = (po.force_plaintext === true);
-                this.pushGlobals.disable_persistence = (po.disable_persistence === true);
+
                 this.smtp = this.rawConfig.smtp || {};
                 if(!this.smtp.listeners) this.smtp.listeners = [];
                 if(!this.smtp.auth) this.smtp.auth = {};
+                if(!this.smtp.default_route) this.smtp.default_route = 'pushover';
+                if(this.smtp.disable_persistence === undefined) this.smtp.disable_persistence = false;
             },
 
             toggleAlias(obj, field) {
@@ -677,6 +894,9 @@ HTML_TEMPLATE = """
                 if(this.smtpSortCol === col) { this.smtpSortDir = this.smtpSortDir === 1 ? -1 : 1; }
                 else { this.smtpSortCol = col; this.smtpSortDir = 1; }
             },
+            setSmarthostSort() {
+                this.smarthostSortDir = this.smarthostSortDir === 1 ? -1 : 1;
+            },
             get sortedVaultApp() {
                 return [...this.vaultApp].sort((a, b) => {
                     if(this.vaultSortCol === 'name') return a.name.localeCompare(b.name) * this.vaultSortDir;
@@ -695,6 +915,13 @@ HTML_TEMPLATE = """
                     if(this.smtpSortCol === 'name') return a.name.localeCompare(b.name) * this.smtpSortDir;
                     else return (a.epoch - b.epoch) * this.smtpSortDir;
                 });
+            },
+            get sortedSmarthosts() {
+                const arr = Object.keys(this.smarthosts).map(k => ({ alias: k, ...this.smarthosts[k] }));
+                return arr.sort((a, b) => a.hostname.localeCompare(b.hostname) * this.smarthostSortDir);
+            },
+            get sortedSmarthostKeys() {
+                return this.sortedSmarthosts.map(s => s.alias);
             },
 
             formatTime(epoch) {
@@ -719,12 +946,109 @@ HTML_TEMPLATE = """
             },
             addMapping() {
                 this.mappings.push({
-                    _key: '', match: 'to', token: '', user: '', _isRegex: false, _isTokenAlias: false, _isUserAlias: false,
-                    _tokenAliasVal: '', _tokenRaw: '', _userAliasVal: '', _userRaw: '',
-                    _showToken: false, _showUser: false, _showAdv: this.ui_expand_adv, disable_attachments: false, force_plaintext: false, disable_persistence: false
+                    _key: '', match: 'to', method: 'pushover', token: '', user: '', _isRegex: false, _isTokenAlias: false, _isUserAlias: false,
+                    _tokenAliasVal: '', _tokenRaw: '', _userAliasVal: '', _userRaw: '', smarthost_alias: '',
+                    _showToken: false, _showUser: false, _showAdv: this.ui_expand_adv, disable_attachments: false, force_plaintext: false
                 });
             },
-            addListener() { this.smtp.listeners.push({ bind: '0.0.0.0:25', starttls: false, tls_cert_file: '', tls_key_file: '' }); },
+
+            // Listener Modal Hooks
+            openListenerModal(mode, idx=null) {
+                this.listenerModal.mode = mode;
+                this.listenerModal.idx = idx;
+                this.listenerModal.error = '';
+                if(mode === 'add') {
+                    this.listenerModal.ip = '0.0.0.0'; this.listenerModal.port = 25; this.listenerModal.hostname = '';
+                    this.listenerModal.starttls = false; this.listenerModal.tls_cert_file = ''; this.listenerModal.tls_key_file = '';
+                } else {
+                    const l = this.smtp.listeners[idx];
+                    let ip = '0.0.0.0'; let port = 25;
+                    if(l.bind && l.bind.includes(':')) {
+                        const parts = l.bind.split(':');
+                        ip = parts[0]; port = parseInt(parts[1]);
+                    }
+                    this.listenerModal.ip = ip; this.listenerModal.port = port; this.listenerModal.hostname = l.hostname || '';
+                    this.listenerModal.starttls = l.starttls === true; this.listenerModal.tls_cert_file = l.tls_cert_file || ''; this.listenerModal.tls_key_file = l.tls_key_file || '';
+                }
+                this.listenerModal.open = true;
+            },
+            saveListenerModal() {
+                const ip = this.listenerModal.ip.trim() || '0.0.0.0';
+                const port = this.listenerModal.port;
+                if(!port || port < 1 || port > 65535) { this.listenerModal.error = 'Port must be between 1 and 65535.'; return; }
+                const bind = ip + ':' + port;
+                const obj = { bind: bind, starttls: this.listenerModal.starttls };
+                if(this.listenerModal.hostname.trim()) obj.hostname = this.listenerModal.hostname.trim();
+                if(this.listenerModal.starttls) {
+                    if(this.listenerModal.tls_cert_file.trim()) obj.tls_cert_file = this.listenerModal.tls_cert_file.trim();
+                    if(this.listenerModal.tls_key_file.trim()) obj.tls_key_file = this.listenerModal.tls_key_file.trim();
+                }
+                if(this.listenerModal.mode === 'add') {
+                    this.smtp.listeners.push(obj);
+                } else {
+                    this.smtp.listeners[this.listenerModal.idx] = obj;
+                }
+                this.listenerModal.open = false;
+            },
+
+            // Smarthost Modal Hooks
+            openSmarthostModal(mode, alias='') {
+                this.smarthostModal.mode = mode;
+                this.smarthostModal.oldAlias = alias;
+                this.smarthostModal.error = '';
+                this.smarthostModal.showPass = false;
+                if(mode === 'add') {
+                    this.smarthostModal.alias = ''; this.smarthostModal.hostname = ''; this.smarthostModal.port = 25;
+                    this.smarthostModal.starttls = false; this.smarthostModal.auth = false; this.smarthostModal.username = ''; this.smarthostModal.password = '';
+                } else {
+                    const sh = this.smarthosts[alias];
+                    this.smarthostModal.alias = alias; this.smarthostModal.hostname = sh.hostname || ''; this.smarthostModal.port = parseInt(sh.port) || 25;
+                    this.smarthostModal.starttls = sh.starttls === true; this.smarthostModal.auth = sh.auth === true; this.smarthostModal.username = sh.username || ''; this.smarthostModal.password = '';
+                }
+                this.smarthostModal.open = true;
+            },
+            saveSmarthostModal() {
+                const alias = this.smarthostModal.alias.trim();
+                if(!alias) { this.smarthostModal.error = 'Alias Name is required.'; return; }
+                if(this.smarthostModal.mode === 'add' && this.smarthosts[alias]) { this.smarthostModal.error = 'Alias Name already exists.'; return; }
+                const host = this.smarthostModal.hostname.trim();
+                if(!host) { this.smarthostModal.error = 'Hostname is required.'; return; }
+                const port = this.smarthostModal.port;
+                if(!port || port < 1 || port > 65535) { this.smarthostModal.error = 'Port must be between 1 and 65535.'; return; }
+
+                const user = this.smarthostModal.username.trim();
+                const pass = this.smarthostModal.password.trim();
+                if(this.smarthostModal.auth) {
+                    if(!user) { this.smarthostModal.error = 'Username is required when Auth is enabled.'; return; }
+                    if(this.smarthostModal.mode === 'add' && !pass) { this.smarthostModal.error = 'Password is required when Auth is enabled.'; return; }
+                }
+
+                if(this.smarthostModal.mode === 'edit' && this.smarthostModal.oldAlias !== alias) {
+                    delete this.smarthosts[this.smarthostModal.oldAlias];
+                    const vToken = this.vaultSmarthost[this.smarthostModal.oldAlias];
+                    if(vToken) { this.vaultSmarthost[alias] = vToken; delete this.vaultSmarthost[this.smarthostModal.oldAlias]; }
+                    if(this.smartGlobals.alias === this.smarthostModal.oldAlias) this.smartGlobals.alias = alias;
+                    this.mappings.forEach(m => { if(m.method === 'smarthost' && m.smarthost_alias === this.smarthostModal.oldAlias) m.smarthost_alias = alias; });
+                }
+
+                this.smarthosts[alias] = { hostname: host, port: port, starttls: this.smarthostModal.starttls, auth: this.smarthostModal.auth };
+                if(this.smarthostModal.auth) {
+                    this.smarthosts[alias].username = user;
+                    if(pass) this.vaultSmarthost[alias] = { token: pass, epoch: Math.floor(Date.now() / 1000) };
+                } else {
+                    if(this.vaultSmarthost[alias]) delete this.vaultSmarthost[alias];
+                }
+                this.smarthostModal.open = false;
+            },
+            deleteSmarthost(alias) {
+                let inUse = false;
+                if(this.smtp.default_route === 'smarthost' && this.smartGlobals.alias === alias) inUse = true;
+                this.mappings.forEach(m => { if(m.method === 'smarthost' && m.smarthost_alias === alias) inUse = true; });
+                if(inUse) { alert(`Error: Alias '${alias}' is actively assigned to an email route. Reconfigure your Routes before deleting.`); return; }
+                delete this.smarthosts[alias];
+                if(this.vaultSmarthost[alias]) delete this.vaultSmarthost[alias];
+            },
+
             addSmtpUser() { if(!this.newSmtpUser || !this.newSmtpPass) return; this.smtp.auth[this.newSmtpUser] = "RAW:" + this.newSmtpPass; this.smtp_meta[this.newSmtpUser] = Math.floor(Date.now() / 1000); this.newSmtpUser = ''; this.newSmtpPass = ''; },
             addVaultToken() {
                 if(!this.newVaultName || !this.newVaultToken) return;
@@ -745,9 +1069,9 @@ HTML_TEMPLATE = """
                 const idx = targetArr.findIndex(x => x.name === aliasName);
                 if(idx === -1) return;
                 let inUse = false;
-                if(type === 'app') { if(this.pushGlobals._isTokenAlias && this.pushGlobals.token === aliasName) inUse = true; this.mappings.forEach(m => { if(m._isTokenAlias && m.token === aliasName) inUse = true; }); }
-                else { if(this.pushGlobals._isUserAlias && this.pushGlobals.user === aliasName) inUse = true; this.mappings.forEach(m => { if(m._isUserAlias && m.user === aliasName) inUse = true; }); }
-                if(inUse) { alert(`Error: Alias '${aliasName}' is actively assigned to an email route. Reconfigure your Pushover Rules before deleting.`); return; }
+                if(type === 'app') { if(this.smtp.default_route === 'pushover' && this.pushGlobals._isTokenAlias && this.pushGlobals.token === aliasName) inUse = true; this.mappings.forEach(m => { if(m.method === 'pushover' && m._isTokenAlias && m.token === aliasName) inUse = true; }); }
+                else { if(this.smtp.default_route === 'pushover' && this.pushGlobals._isUserAlias && this.pushGlobals.user === aliasName) inUse = true; this.mappings.forEach(m => { if(m.method === 'pushover' && m._isUserAlias && m.user === aliasName) inUse = true; }); }
+                if(inUse) { alert(`Error: Alias '${aliasName}' is actively assigned to an email route. Reconfigure your Routes before deleting.`); return; }
                 targetArr.splice(idx, 1);
                 if(type === 'app') this.vaultAppAliases = this.vaultAppAliases.filter(a => a !== aliasName);
                 if(type === 'user') this.vaultUserAliases = this.vaultUserAliases.filter(a => a !== aliasName);
@@ -769,17 +1093,32 @@ HTML_TEMPLATE = """
                 const finalPushover = { ...this.pushGlobals }; finalPushover.attachments = !this.pushGlobals.disable_attachments; delete finalPushover.disable_attachments; delete finalPushover._isTokenAlias; delete finalPushover._isUserAlias; delete finalPushover._showToken; delete finalPushover._showUser; delete finalPushover._tokenRaw; delete finalPushover._tokenAliasVal; delete finalPushover._userRaw; delete finalPushover._userAliasVal;
                 ['priority', 'retry', 'expire', 'ttl'].forEach(p => { if (finalPushover[p] === '' || finalPushover[p] === null || finalPushover[p] === undefined) delete finalPushover[p]; else finalPushover[p] = parseInt(finalPushover[p], 10); });
                 ['device', 'url', 'url_title', 'sound', 'tags', 'user'].forEach(p => { if (finalPushover[p] === '') delete finalPushover[p]; });
+
+                const finalRoutes = {};
                 this.mappings.forEach(m => {
                     if(m._key && m._key.trim() !== '') {
                         let k = m._key.trim(); if (m._isRegex && !k.toLowerCase().startsWith('regex:')) { k = 'regex:' + k; }
-                        const { _key, _showAdv, _isTokenAlias, _isUserAlias, _isRegex, _showToken, _showUser, _tokenRaw, _tokenAliasVal, _userRaw, _userAliasVal, disable_attachments, ...rest } = m; rest.attachments = !disable_attachments;
-                        ['priority', 'retry', 'expire', 'ttl'].forEach(p => { if (rest[p] === '' || rest[p] === null || rest[p] === undefined) delete rest[p]; else rest[p] = parseInt(rest[p], 10); });
-                        ['device', 'url', 'url_title', 'sound', 'tags', 'user'].forEach(p => { if (rest[p] === '') delete rest[p]; }); finalPushover[k] = rest;
+                        if (m.method === 'pushover') {
+                            const { _key, _showAdv, _isTokenAlias, _isUserAlias, _isRegex, _showToken, _showUser, _tokenRaw, _tokenAliasVal, _userRaw, _userAliasVal, smarthost_alias, disable_attachments, ...rest } = m; rest.attachments = !disable_attachments;
+                            ['priority', 'retry', 'expire', 'ttl'].forEach(p => { if (rest[p] === '' || rest[p] === null || rest[p] === undefined) delete rest[p]; else rest[p] = parseInt(rest[p], 10); });
+                            ['device', 'url', 'url_title', 'sound', 'tags', 'user'].forEach(p => { if (rest[p] === '') delete rest[p]; }); finalRoutes[k] = rest;
+                        } else {
+                            finalRoutes[k] = { match: m.match, method: 'smarthost', smarthost_alias: m.smarthost_alias, force_plaintext: m.force_plaintext, disable_attachments: m.disable_attachments };
+                        }
                     }
                 });
-                return JSON.stringify({ pushover: finalPushover, smtp: this.smtp, _smtp_meta: this.smtp_meta });
+
+                const finalSmarthost = { globals: { alias: this.smartGlobals.alias, force_plaintext: this.smartGlobals.force_plaintext, disable_attachments: this.smartGlobals.disable_attachments }, aliases: this.smarthosts };
+
+                return JSON.stringify({ pushover: finalPushover, smtp: this.smtp, routes: finalRoutes, smarthost: finalSmarthost, _smtp_meta: this.smtp_meta });
             },
-            prepareVaultPayload() { return JSON.stringify({ app: this.vaultApp, user: this.vaultUser }); }
+            prepareVaultPayload() {
+                const shVault = {};
+                for(const k of Object.keys(this.vaultSmarthost)) {
+                    shVault[k] = this.vaultSmarthost[k].token;
+                }
+                return JSON.stringify({ app: this.vaultApp, user: this.vaultUser, smarthost: shVault });
+            }
         }));
     });
     </script>
@@ -811,16 +1150,47 @@ async def index():
     ui_config = load_clean_json(UI_CONFIG_FILE)
     vault_entries = load_vault_safe(VAULT_META_FILE)
 
+    changed_config = False
+
+    # 1. Automatic Schema Migrations
+    if "routes" not in config:
+        config["routes"] = {}
+        reserved_keys = ["user", "token", "device", "sound", "url", "url_title", "tags", "priority", "ttl", "retry", "expire", "attachments", "force_plaintext", "disable_persistence"]
+        po = config.get("pushover", {})
+        to_del = []
+        for k, v in po.items():
+            if k not in reserved_keys and isinstance(v, dict):
+                v["method"] = "pushover"
+                config["routes"][k] = v
+                to_del.append(k)
+        for k in to_del: del po[k]
+        changed_config = True
+
+    if "disable_persistence" in config.get("pushover", {}):
+        if "smtp" not in config: config["smtp"] = {}
+        config["smtp"]["disable_persistence"] = config["pushover"]["disable_persistence"]
+        del config["pushover"]["disable_persistence"]
+        changed_config = True
+
+    if "smarthost" not in config:
+        config["smarthost"] = {"aliases": {}, "globals": {}}
+        changed_config = True
+
+    if "smtp" not in config: config["smtp"] = {}
+    if "default_route" not in config["smtp"]:
+        config["smtp"]["default_route"] = "pushover"
+        changed_config = True
+
     auth_block = config.get("smtp", {}).get("auth", {})
     meta_block = config.get("smtp", {}).get("_smtp_meta", {})
-    changed = False
+
     for user, pwd in list(auth_block.items()):
         if not pwd.startswith("$") and not re.match(r'^[a-fA-F0-9]{64}$', pwd):
             auth_block[user] = hashlib.sha256(pwd.encode('utf-8')).hexdigest()
             if user not in meta_block: meta_block[user] = int(time.time())
-            changed = True
-    if changed:
-        if "smtp" not in config: config["smtp"] = {}
+            changed_config = True
+
+    if changed_config:
         config["smtp"]["auth"] = auth_block
         config["smtp"]["_smtp_meta"] = meta_block
         save_json(CONFIG_FILE, config)
@@ -834,13 +1204,12 @@ async def index():
         config_json=json.dumps(config),
         smtp_meta_json=json.dumps(smtp_meta),
         vault_meta_json=json.dumps(vault_entries),
-        vault_app_json=json.dumps(list(vault_entries.get("app", {}).keys())),
-        vault_user_json=json.dumps(list(vault_entries.get("user", {}).keys())),
         ui_port=ui_config.get("port", 8443),
         ui_https=ui_config.get("https", True),
         ui_expand_adv=ui_config.get("expand_adv", False),
         ui_vault_sort=ui_config.get("vault_sort", "name_asc"),
         ui_smtp_sort=ui_config.get("smtp_sort", "name_asc"),
+        ui_smarthost_sort=ui_config.get("smarthost_sort", "name_asc"),
         ui_tz=ui_config.get("timezone", "UTC"),
         ui_fmt=ui_config.get("date_format", "YYYY-MM-DD HH:mm:ss"),
         ui_relative=ui_config.get("relative_time", True),
@@ -877,13 +1246,22 @@ async def save_vault_state(vault_json: str = Form(...)):
     try:
         parsed = json.loads(vault_json)
         vault_data = load_vault_safe(VAULT_FILE)
-        new_data, new_meta = {"app": {}, "user": {}}, {"app": {}, "user": {}}
+        new_data = {"app": {}, "user": {}, "smarthost": {}}
+        new_meta = {"app": {}, "user": {}, "smarthost": {}}
+
         for vtype in ["app", "user"]:
             for item in parsed.get(vtype, []):
                 name = item["name"]; tok = item["token"]; epoch = item["epoch"]
                 if tok == "__RETAIN__": new_data[vtype][name] = vault_data[vtype].get(name, "")
                 else: new_data[vtype][name] = tok
                 new_meta[vtype][name] = epoch
+
+        # Handle the new dictionary-based Smarthost vault structure payload
+        for alias, tok in parsed.get("smarthost", {}).items():
+            if tok == "__RETAIN__": new_data["smarthost"][alias] = vault_data.get("smarthost", {}).get(alias, "")
+            else: new_data["smarthost"][alias] = tok
+            new_meta["smarthost"][alias] = int(time.time()) # Keep timestamp fresh on save
+
         save_json(VAULT_FILE, new_data)
         save_json(VAULT_META_FILE, new_meta)
         signal_smtp_app(restart_listeners=False)
@@ -894,12 +1272,12 @@ async def save_vault_state(vault_json: str = Form(...)):
 async def save_ui(
     port: int = Form(...), timezone: str = Form(...), date_format: str = Form(...),
     relative_time: bool = Form(False), expand_adv: bool = Form(False), https: bool = Form(False), tls_cert: str = Form(""), tls_key: str = Form(""),
-    vault_sort: str = Form("name_asc"), smtp_sort: str = Form("name_asc")
+    vault_sort: str = Form("name_asc"), smtp_sort: str = Form("name_asc"), smarthost_sort: str = Form("name_asc")
 ):
     ui_config = {
         "port": port, "timezone": timezone, "date_format": date_format,
         "relative_time": relative_time, "expand_adv": expand_adv, "https": https, "tls_cert": tls_cert, "tls_key": tls_key,
-        "vault_sort": vault_sort, "smtp_sort": smtp_sort
+        "vault_sort": vault_sort, "smtp_sort": smtp_sort, "smarthost_sort": smarthost_sort
     }
     save_json(UI_CONFIG_FILE, ui_config)
     # Native signal handler notification triggers loop rotation
@@ -940,9 +1318,9 @@ if __name__ == "__main__":
         if use_https:
             cert_file, key_file = ui_config.get("tls_cert"), ui_config.get("tls_key")
             if not cert_file or not os.path.exists(cert_file): cert_file, key_file = generate_ui_cert()
-            server_config = uvicorn.Config("ui_server:app", host="0.0.0.0", port=port, ssl_keyfile=key_file, ssl_certfile=cert_file, log_level="info")
+            server_config = uvicorn.Config(app, host="0.0.0.0", port=port, ssl_keyfile=key_file, ssl_certfile=cert_file, log_level="info")
         else:
-            server_config = uvicorn.Config("ui_server:app", host="0.0.0.0", port=port, log_level="info")
+            server_config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")
 
         server = uvicorn.Server(server_config)
         t = threading.Thread(target=server.run)

@@ -19,68 +19,6 @@ and use it (preferably within a virtual environment):
     $ pip install aiosmtpd requests cryptography passlib
 
 ================================================================================
-ENVIRONMENT VARIABLES & JSON CONFIGURATION
-================================================================================
-
-GATEWAY_CONFIG (Required):
-    Must be set to the file path of your configuration JSON (e.g., /opt/smtp-pushover/config.json).
-    Inline JSON strings and granular OS environment variable overrides have been
-    removed to ensure consistency with the FASH UI control panel.
-
-    *NOTE:* This parser supports inline comments as long as they are at the beginning
-    of a line, or preceded by at least one whitespace character.
-    Supported formats: `// comment`, `# comment`, `/* comment */`.
-
-    This object contains two distinct operational layers:
-
-    1. "pushover" (Required):
-       Coordinates routing logic and Pushover API token sets.
-       - Root-level "user", "token", and optional formatting parameters ("device",
-         "sound", "url", "url_title", "priority", "ttl", "tags", "retry", "expire")
-         establish a global fallback state.
-       - If an email hits an unmapped address, it acts as a Catch-All using these
-         global API keys. If a global "token" is omitted, unmapped addresses are dropped.
-       - Root-level "force_plaintext" (bool) sets a global preference for skipping HTML payloads.
-       - Root-level "disable_persistence" (bool) disables writing payloads to the disk queue.
-       - Root-level "attachments" (bool) allows/disallows forwarding images (default: true).
-       - Email routing objects accept an optional "user" (to target different accounts),
-         a required "token" (to target different Pushover apps), and optional formatting overrides.
-       - Optional formatting keys for Pushover payload:
-           * "device": string (target specific devices)
-           * "sound": string (override default alert sound)
-           * "url": string (supplementary URL to attach)
-           * "url_title": string (title for the supplementary URL)
-           * "tags": string (comma-separated tags for receipt cancellation)
-           * "priority": int (between -2 and 2)
-           * "ttl": int (time to live in seconds)
-           * "retry": int (REQUIRED if priority=2, >= 30 seconds)
-           * "expire": int (REQUIRED if priority=2, <= 10800 seconds)
-       - Email routing objects support a "match" filter key:
-           * "to" (Default): Matches when the key is found in the email recipients.
-           * "from": Matches when the key is the email's envelope sender.
-           * "both": Triggers if the address is present as either the sender or receiver.
-       - Regex Routing: Prefix a routing key with "regex:" to evaluate it as a regular
-         expression instead of an exact string match (e.g., "regex:.*@domain\\.com$").
-
-    2. "smtp" (Optional):
-       Configures the infrastructure, logging, TLS, and client authentication.
-       - "auth": A dictionary mapping SMTP authentication usernames to passwords.
-         Passwords can be raw strings or standard Linux modular crypt hashes ($5$, $6$).
-         If "auth" is omitted or empty, permissive access is granted to all clients.
-       - "listeners": A list of endpoint objects to bind the SMTP server to.
-           * "bind": Address and port (e.g., "0.0.0.0:25")
-           * "hostname": Optional string overriding the global SMTP greeting banner for this specific endpoint.
-           * "starttls": Boolean to enable STARTTLS support on this listener.
-           * "tls_cert_file": Path to PEM certificate (can contain private key).
-           * "tls_key_file": Path to private key file.
-       - "queue_dir": Path to store messages on disk.
-       - "hostname": Common Name (CN) for fallback self-signed TLS certificates and global SMTP greeting.
-       - "tls_cert_file": Global fallback Path to PEM certificate for all listeners.
-       - "tls_key_file": Global fallback Path to private key file for all listeners.
-       - "max_retry_backoff": Max seconds to wait during exponential retries.
-       - "loglevel": Logging verbosity (DEBUG, INFO, WARNING, ERROR).
-
-================================================================================
 SIGNALS
 ================================================================================
 SIGINT / SIGTERM: Gracefully shuts down the SMTP listener and waits for queue to empty.
@@ -103,6 +41,9 @@ import signal
 import string
 import hashlib
 import base64
+import smtplib
+import email.utils
+from email.message import EmailMessage
 
 # External HTTP request handling
 import requests
@@ -184,18 +125,40 @@ class GatewayController(Controller):
     """
     Custom controller to deploy our sanitized SMTP handler transparently.
     """
+    def __init__(self, handler, **kwargs):
+        # Intercept and store kwargs intended for the SMTP class so they aren't lost
+        # by older aiosmtpd Controller initializations
+        self._smtp_kwargs = kwargs.copy()
+        super().__init__(handler, **kwargs)
+
     def factory(self):
-        # Safely extract all parent controller attributes needed to build an SMTP instance
-        kwargs = {}
+        # Reconstruct the SMTP instance using our safely captured kwargs
+        kwargs = self._smtp_kwargs.copy()
+
+        # Remove kwargs strictly intended for the Controller's socket binding
+        # so they don't crash the SMTP protocol's instantiation
+        for k in ['hostname', 'port', 'server_hostname', 'ready_timeout']:
+            kwargs.pop(k, None)
+
+        # Merge any legacy properties aiosmtpd might have attached directly to `self`
         for attr in ['data_size_limit', 'enable_SMTPUTF8', 'ident', 'tls_context',
                      'tls_require_cert', 'authenticator', 'auth_require_tls',
                      'auth_exclude_mechanism', 'auth_callback_exceptions', 'timeout']:
-            if hasattr(self, attr):
+            if hasattr(self, attr) and attr not in kwargs:
                 kwargs[attr] = getattr(self, attr)
 
         # Instantiate our custom class natively to avoid event-loop bindings issues
-        # associated with dynamic __class__ monkey-patching.
-        return GatewaySMTP(self.handler, **kwargs)
+        smtp_instance = GatewaySMTP(self.handler, **kwargs)
+
+        # OVERRIDE: RFC 5321 restricts single email lines to 1000 characters.
+        # Curl streams, concatenated HTML strings, and bad uuencodes frequently violate this.
+        # We artificially inflate this to 10MB to prevent '500 Line too long' rejection errors.
+        if hasattr(smtp_instance, 'command_size_limit'):
+            smtp_instance.command_size_limit = 10485760
+        if hasattr(smtp_instance, 'data_line_length_limit'):
+            smtp_instance.data_line_length_limit = 10485760
+
+        return smtp_instance
 
 
 class GatewayState:
@@ -207,9 +170,11 @@ class GatewayState:
     def __init__(self):
         self.smtp = {}
         self.pushover = {}
+        self.smarthost = {}
         self.mappings = {"to": {}, "from": {}}
         self.regex_mappings = {"to": [], "from": []}
         self.config_file = None
+        self.vault = {}
 
 def get_bool(val, default=False):
     """Safely coerces strings, ints, or booleans from JSON into a Python boolean."""
@@ -298,8 +263,29 @@ class PushoverSMTPHandler:
 
     async def handle_DATA(self, server, session, envelope):
         try:
+            # Solaris/Legacy MTA MIME Pre-Processor Fix:
+            # Hand-rolled script outputs often completely forget the mandatory blank line between
+            # MIME headers and the payload, or break header continuations (like charset) incorrectly.
+            raw_content = envelope.content
+
+            # 1. Correct syntax constraints for un-indented parameter extensions
+            raw_content = re.sub(
+                br'(Content-Type:\s*[^;\r\n]+;\r?\n)(charset=)',
+                br'\1 \2',
+                raw_content,
+                flags=re.IGNORECASE
+            )
+
+            # 2. Inject missing blank line after boundary attributes if text content immediately follows
+            raw_content = re.sub(
+                br'(charset="?[a-zA-Z0-9\-]+"?\r?\n)(?!\r?\n|[ \t]*--)',
+                br'\1\r\n',
+                raw_content,
+                flags=re.IGNORECASE
+            )
+
             # Parse the raw email bytes into a structured Python object
-            msg = message_from_bytes(envelope.content, policy=policy.default)
+            msg = message_from_bytes(raw_content, policy=policy.default)
 
             # Extract and gracefully truncate the title to meet API constraints
             title = msg.get("Subject", "No Subject")
@@ -342,6 +328,18 @@ class PushoverSMTPHandler:
 
                     if content_type == "text/plain":
                         plain_body_raw = part.get_payload(decode=True).decode(part.get_content_charset() or 'utf-8', errors='replace')
+
+                        # Recover any payload lines that were swallowed by the parser as malformed headers
+                        # This happens if a legacy MTA script omits blank lines entirely before formatting dividers (e.g. ====)
+                        if part.defects:
+                            recovered_lines = []
+                            for defect in part.defects:
+                                if hasattr(defect, 'line') and defect.line:
+                                    line_str = defect.line.decode('utf-8', errors='replace').strip() if isinstance(defect.line, bytes) else defect.line.strip()
+                                    recovered_lines.append(line_str)
+                            if recovered_lines:
+                                plain_body_raw = '\n'.join(recovered_lines) + '\n' + plain_body_raw
+
                     elif content_type == "text/html":
                         html_body_raw = part.get_payload(decode=True).decode(part.get_content_charset() or 'utf-8', errors='replace')
             else:
@@ -360,6 +358,15 @@ class PushoverSMTPHandler:
                         html_body_raw = decoded_str
                     else:
                         plain_body_raw = decoded_str
+                        # Single-part recovery catch for malformed legacy headers
+                        if msg.defects:
+                            recovered_lines = []
+                            for defect in msg.defects:
+                                if hasattr(defect, 'line') and defect.line:
+                                    line_str = defect.line.decode('utf-8', errors='replace').strip() if isinstance(defect.line, bytes) else defect.line.strip()
+                                    recovered_lines.append(line_str)
+                            if recovered_lines:
+                                plain_body_raw = '\n'.join(recovered_lines) + '\n' + plain_body_raw
 
             # Sort valid images: descending by size (-x[0]), then ascending lexicographically by name (x[1])
             best_image = None
@@ -383,16 +390,17 @@ class PushoverSMTPHandler:
                         parts[i] = re.sub(r'<br\s*/?>', '\n', parts[i], flags=re.IGNORECASE)
                         parts[i] = re.sub(r'</(p|div|tr|h[1-6]|li|table)>', '\n\n', parts[i], flags=re.IGNORECASE)
                         parts[i] = re.sub(r'<hr[^>]*>', '\n---\n', parts[i], flags=re.IGNORECASE)
+                        # Strip all HTML tags EXCEPT the specific formatting tags Pushover actually supports
+                        parts[i] = re.sub(r'<(?!/?(a|b|i|u|font)\b)[^>]+>', '', parts[i], flags=re.IGNORECASE)
+                        # Clean up excess whitespace and consecutive blank lines left behind by deleted tags
+                        parts[i] = re.sub(r' {2,}', ' ', parts[i])
+                        parts[i] = re.sub(r' ?\n ?', '\n', parts[i])
+                    else:
+                        # For <pre> blocks, just strip the outer <pre> tags themselves and leave the literal text alone!
+                        parts[i] = re.sub(r'(?i)</?pre[^>]*>', '', parts[i])
 
-                processed = ''.join(parts)
-
-                # Strip all HTML tags EXCEPT the specific formatting tags Pushover actually supports
-                processed = re.sub(r'<(?!/?(a|b|i|u|font)\b)[^>]+>', '', processed, flags=re.IGNORECASE)
-
-                # Clean up excess whitespace and consecutive blank lines left behind by deleted tags
-                processed = re.sub(r' {2,}', ' ', processed)
-                processed = re.sub(r' ?\n ?', '\n', processed)
-                body_html_processed = re.sub(r'\n{3,}', '\n\n', processed).strip()
+                body_html_processed = ''.join(parts)
+                body_html_processed = re.sub(r'\n{3,}', '\n\n', body_html_processed).strip()
 
             body_plain_processed = None
             if plain_body_raw:
@@ -426,28 +434,52 @@ class PushoverSMTPHandler:
 
             # If nobody matched, check if the global fallback catch-all is configured
             if not routes_to_trigger:
-                if self.state.pushover.get("user") and self.state.pushover.get("token"):
-                    logging.info("No explicit from/to mappings matched. Falling back to global catch-all.")
-                    routes_to_trigger.append(self.state.pushover)
-                else:
-                    logging.info("No explicit from/to mappings matched and no global catch-all defined. Ignoring message.")
+                def_route = self.state.smtp.get("default_route", "pushover")
+                if def_route == "pushover":
+                    if self.state.pushover.get("user") and self.state.pushover.get("token"):
+                        logging.info("No explicit mappings matched. Falling back to global Pushover catch-all.")
+                        routes_to_trigger.append(self.state.pushover)
+                    else:
+                        logging.info("No explicit mappings matched and no global Pushover catch-all defined. Ignoring message.")
+                elif def_route == "smarthost":
+                    sh_alias = self.state.smarthost.get("globals", {}).get("alias")
+                    if sh_alias and sh_alias in self.state.smarthost.get("aliases", {}):
+                        logging.info("No explicit mappings matched. Falling back to global Smarthost catch-all.")
+                        g = self.state.smarthost.get("globals", {}).copy()
+                        g["method"] = "smarthost"
+                        g["smarthost_alias"] = sh_alias
+                        routes_to_trigger.append(g)
+                    else:
+                        logging.info("No explicit mappings matched and global Smarthost alias is invalid. Ignoring message.")
 
             # Deduplicate Routes
-            # If an email matches both a 'from' and a 'to' mapping pointing to the same token, don't spam the user twice.
             unique_routes = []
             seen_combinations = set()
             for route in routes_to_trigger:
-                combo_hash = f"{route['user']}:{route['token']}"
+                method = route.get("method", "pushover")
+                if method == "pushover":
+                    combo_hash = f"push:{route.get('user')}:{route.get('token')}"
+                else:
+                    combo_hash = f"smart:{route.get('smarthost_alias')}"
+
                 if combo_hash not in seen_combinations:
                     seen_combinations.add(combo_hash)
                     unique_routes.append(route)
 
             # 4. Contextual Formatting & Queuing
             for route in unique_routes:
-                # Prioritize route-specific flags, fallback to the global setting
-                force_pt = route.get("force_plaintext", self.state.pushover.get("force_plaintext", False))
-                disable_persist = route.get("disable_persistence", self.state.pushover.get("disable_persistence", False))
-                attachments_enabled = route.get("attachments", self.state.pushover.get("attachments", True))
+                method = route.get("method", "pushover")
+
+                # Determine Format Overrides based on method
+                if method == "pushover":
+                    force_pt = route.get("force_plaintext", self.state.pushover.get("force_plaintext", False))
+                    attachments_enabled = route.get("attachments", self.state.pushover.get("attachments", True))
+                else:
+                    g_smarthost = self.state.smarthost.get("globals", {})
+                    force_pt = route.get("force_plaintext", g_smarthost.get("force_plaintext", False))
+                    attachments_enabled = not route.get("disable_attachments", g_smarthost.get("disable_attachments", False))
+
+                disable_persist = self.state.smtp.get("disable_persistence", False)
 
                 # Determine which pre-processed body format this specific route should get
                 if not force_pt and body_html_processed is not None:
@@ -457,7 +489,7 @@ class PushoverSMTPHandler:
                     final_body = body_plain_processed
                     is_html = False
                 elif body_html_processed is not None:
-                    logging.warning(f"Route targeting token '{route.get('token')}' forced plaintext, but no text/plain part was found. Falling back to HTML payload.")
+                    logging.warning(f"Route targeting '{method}' forced plaintext, but no text/plain part was found. Falling back to HTML payload.")
                     final_body = body_html_processed
                     is_html = True
                 else:
@@ -467,28 +499,38 @@ class PushoverSMTPHandler:
                 # Build the base payload dictionary
                 payload = {
                     "id": uuid.uuid4().hex,
-                    "user": route["user"],
-                    "token": route["token"],
+                    "method": method,
                     "message": final_body,
                     "title": title,
                     "timestamp": timestamp,
                     "is_html": is_html,
                     "disable_persistence": disable_persist,
-                    "retry_count": 0
+                    "retry_count": 0,
+                    "sender": sender or "gateway@localhost",
+                    "recipients": envelope.rcpt_tos
                 }
 
-                # Pass optional configuration constraints along if they exist for this route
-                for param in ["device", "sound", "url", "url_title", "priority", "ttl", "tags", "retry", "expire"]:
-                    if param in route:
-                        payload[param] = route[param]
+                if method == "pushover":
+                    payload["user"] = route["user"]
+                    payload["token"] = route["token"]
+                    # Pass optional configuration constraints along if they exist for this route
+                    for param in ["device", "sound", "url", "url_title", "priority", "ttl", "tags", "retry", "expire"]:
+                        if param in route:
+                            payload[param] = route[param]
 
-                # Ensure dynamic API length limits are applied contextually before queuing
-                if "url" in route and route["url"]:
-                    payload["url"] = route["url"][:MAX_URL_CHARS]
-                if "url_title" in route and route["url_title"]:
-                    payload["url_title"] = route["url_title"][:MAX_URL_TITLE_CHARS]
+                    # Ensure dynamic API length limits are applied contextually before queuing
+                    if "url" in route and route["url"]:
+                        payload["url"] = route["url"][:MAX_URL_CHARS]
+                    if "url_title" in route and route["url_title"]:
+                        payload["url_title"] = route["url_title"][:MAX_URL_TITLE_CHARS]
+                else:
+                    payload["smarthost_alias"] = route.get("smarthost_alias")
+                    payload["force_plaintext"] = force_pt
+                    payload["disable_attachments"] = not attachments_enabled
+                    # Store the complete raw bytes in case we are forwarding unmodified
+                    payload["raw_eml_base64"] = base64.b64encode(raw_content).decode('ascii')
 
-                # Base64 encode the resolved image attachment for safe persistence queuing
+                # Base64 encode the resolved image attachment for safe persistence queuing (if supported)
                 if attachments_enabled and best_image:
                     payload["attachment_base64"] = base64.b64encode(best_image[3]).decode('ascii')
                     payload["attachment_name"] = best_image[1]
@@ -502,7 +544,7 @@ class PushoverSMTPHandler:
 
                 # Step 2: Queue it into memory for the background worker to pick up
                 self.msg_queue.put(payload)
-                logging.debug(f"Queued notification payload (ID: {payload['id']}, HTML: {is_html}, Persistent: {not disable_persist})")
+                logging.debug(f"Queued notification payload (ID: {payload['id']}, Method: {method}, HTML: {is_html}, Persistent: {not disable_persist})")
 
             # Always return a 250 OK to the SMTP client so it stops trying to send the email
             return '250 Message accepted for delivery'
@@ -510,13 +552,13 @@ class PushoverSMTPHandler:
             logging.error(f"Error processing email: {e}", exc_info=True)
             return '500 Internal Server Error'
 
-def pushover_worker(msg_queue, state):
+def delivery_worker(msg_queue, state):
     """
-    Background worker thread running continuously.
-    Pops messages off the memory queue and sends them to the Pushover API.
-    Handles exponential backoff if the API is down or rate-limited.
+    Unified background worker thread running continuously.
+    Pops messages off the memory queue and multiplexes them to Pushover API or Smarthost relays.
+    Handles exponential backoff if the upstream connections are down or rate-limited.
     """
-    logging.debug("Pushover worker thread started.")
+    logging.debug("Delivery worker thread started.")
     while True:
         # Blocks here until an item is available in the queue
         payload = msg_queue.get()
@@ -526,44 +568,98 @@ def pushover_worker(msg_queue, state):
             msg_queue.task_done()
             break
 
-        api_payload = {
-            "token": payload["token"],
-            "user": payload["user"],
-            "message": payload["message"],
-            "title": payload["title"],
-            "timestamp": payload["timestamp"],
-            "html": 1 if payload.get("is_html") else 0
-        }
-
-        # Extract and apply any optional API parameters mapped to this notification
-        for param in ["device", "sound", "url", "url_title", "priority", "ttl", "tags", "retry", "expire"]:
-            if param in payload:
-                api_payload[param] = payload[param]
-
+        method = payload.get("method", "pushover")
         success = False
-        try:
-            # Handle multipart form uploads if an attachment is configured
-            post_kwargs = {}
-            if payload.get("attachment_base64"):
-                img_bytes = base64.b64decode(payload["attachment_base64"])
-                files = {
-                    "attachment": (payload.get("attachment_name", "image.jpg"), img_bytes, payload.get("attachment_type", "image/jpeg"))
-                }
-                # When utilizing 'files', requests automatically formats 'data' to multipart/form-data
-                post_kwargs = {"data": api_payload, "files": files}
-            else:
-                post_kwargs = {"json": api_payload}
 
-            # 10-second timeout ensures the worker thread doesn't hang indefinitely on a dead network connection
-            response = requests.post(PUSHOVER_API_URL, timeout=10, **post_kwargs)
+        if method == "pushover":
+            api_payload = {
+                "token": payload["token"],
+                "user": payload["user"],
+                "message": payload["message"],
+                "title": payload["title"],
+                "timestamp": payload["timestamp"],
+                "html": 1 if payload.get("is_html") else 0
+            }
 
-            if response.status_code == 200:
-                logging.info(f"Successfully sent notification: '{payload['title']}'")
-                success = True
+            for param in ["device", "sound", "url", "url_title", "priority", "ttl", "tags", "retry", "expire"]:
+                if param in payload:
+                    api_payload[param] = payload[param]
+
+            try:
+                post_kwargs = {}
+                if payload.get("attachment_base64"):
+                    img_bytes = base64.b64decode(payload["attachment_base64"])
+                    files = {
+                        "attachment": (payload.get("attachment_name", "image.jpg"), img_bytes, payload.get("attachment_type", "image/jpeg"))
+                    }
+                    post_kwargs = {"data": api_payload, "files": files}
+                else:
+                    post_kwargs = {"json": api_payload}
+
+                response = requests.post(PUSHOVER_API_URL, timeout=10, **post_kwargs)
+
+                if response.status_code == 200:
+                    logging.info(f"Successfully sent Pushover notification: '{payload['title']}'")
+                    success = True
+                else:
+                    logging.error(f"Pushover API returned {response.status_code}: {response.text}")
+            except Exception as e:
+                logging.error(f"Failed to communicate with Pushover API: {e}")
+
+        elif method == "smarthost":
+            alias = payload.get("smarthost_alias")
+            sh_conf = state.smarthost.get("aliases", {}).get(alias)
+
+            if not sh_conf:
+                logging.error(f"Smarthost relay failed. Alias '{alias}' is not defined in the configuration.")
             else:
-                logging.error(f"Pushover API returned {response.status_code}: {response.text}")
-        except Exception as e:
-            logging.error(f"Failed to communicate with Pushover API: {e}")
+                try:
+                    # Determine if we need to synthesize a new email boundary to satisfy formatting constraints
+                    if payload.get("force_plaintext") or payload.get("disable_attachments"):
+                        msg = EmailMessage()
+                        msg['Subject'] = payload.get("title", "No Subject")
+                        msg['From'] = payload.get("sender", "gateway@localhost")
+                        msg['To'] = ", ".join(payload.get("recipients", []))
+                        msg['Date'] = email.utils.formatdate(localtime=False)
+                        msg['Message-ID'] = email.utils.make_msgid()
+
+                        if payload.get("is_html"):
+                            msg.set_content(payload.get("message", ""), subtype="html", charset="utf-8")
+                        else:
+                            msg.set_content(payload.get("message", ""), charset="utf-8")
+
+                        # If attachments aren't disabled, reattach the parsed image representation
+                        if not payload.get("disable_attachments") and payload.get("attachment_base64"):
+                            img_bytes = base64.b64decode(payload["attachment_base64"])
+                            maintype, subtype = payload["attachment_type"].split('/', 1)
+                            msg.add_attachment(img_bytes, maintype=maintype, subtype=subtype, filename=payload["attachment_name"])
+
+                        raw_bytes = bytes(msg)
+                    else:
+                        # Stream the entirely unmodified raw bytes exactly as they hit the listener
+                        raw_bytes = base64.b64decode(payload["raw_eml_base64"])
+
+                    host = sh_conf.get("hostname")
+                    port = int(sh_conf.get("port", 25))
+                    local_ehlo = state.smtp.get("hostname", "localhost")
+
+                    with smtplib.SMTP(host, port, timeout=15) as server:
+                        server.ehlo(local_ehlo)
+                        if sh_conf.get("starttls"):
+                            server.starttls()
+                            server.ehlo(local_ehlo)
+                        if sh_conf.get("auth"):
+                            # Securely access the relay password directly from the unencrypted vault memory context
+                            sh_pass = state.vault.get("smarthost", {}).get(alias, "")
+                            server.login(sh_conf.get("username", ""), sh_pass)
+
+                        server.sendmail(payload.get("sender"), payload.get("recipients"), raw_bytes)
+
+                    logging.info(f"Successfully relayed email '{payload['title']}' via Smarthost '{alias}'.")
+                    success = True
+                except Exception as e:
+                    logging.error(f"Smarthost relay failed for '{alias}': {e}")
+
 
         if success:
             # Clean up the persistence file on disk now that it's safely delivered
@@ -638,7 +734,7 @@ def load_config(is_reload=False):
 
     # Load the JSON Vault to swap out API token aliases securely
     vault_file = os.environ.get("VAULT_FILE", os.path.join(SCRIPT_DIR, "vault.json"))
-    vault_data = {"app": {}, "user": {}}
+    vault_data = {"app": {}, "user": {}, "smarthost": {}}
     if os.path.exists(vault_file):
         try:
             with open(vault_file, 'r') as f:
@@ -647,7 +743,11 @@ def load_config(is_reload=False):
                 if "app" not in raw_v and "user" not in raw_v:
                     vault_data["app"] = raw_v
                 else:
-                    vault_data = {"app": raw_v.get("app", {}), "user": raw_v.get("user", {})}
+                    vault_data = {
+                        "app": raw_v.get("app", {}),
+                        "user": raw_v.get("user", {}),
+                        "smarthost": raw_v.get("smarthost", {})
+                    }
         except Exception as e:
             logging.warning(f"Could not load vault file {vault_file}: {e}")
 
@@ -659,14 +759,38 @@ def load_config(is_reload=False):
 
     try:
         config_root = json.loads(json_str)
+
+        # Transparent Migration: Dynamically restructure legacy schema elements into the new multi-routing format
+        if "routes" not in config_root:
+            config_root["routes"] = {}
+            reserved_keys = ["user", "token", "device", "sound", "url", "url_title", "tags", "priority", "ttl", "retry", "expire", "attachments", "force_plaintext", "disable_persistence"]
+            po = config_root.get("pushover", {})
+            to_del = []
+            for k, v in po.items():
+                if k not in reserved_keys and isinstance(v, dict):
+                    v["method"] = "pushover"
+                    config_root["routes"][k] = v
+                    to_del.append(k)
+            for k in to_del: del po[k]
+
+        if "disable_persistence" in config_root.get("pushover", {}):
+            if "smtp" not in config_root: config_root["smtp"] = {}
+            config_root["smtp"]["disable_persistence"] = config_root["pushover"]["disable_persistence"]
+            del config_root["pushover"]["disable_persistence"]
+
         smtp_json = config_root.get("smtp", {})
         pushover_json = config_root.get("pushover", {})
+        smarthost_json = config_root.get("smarthost", {"aliases": {}, "globals": {}})
+        routes_json = config_root.get("routes", {})
 
         new_state = GatewayState()
         new_state.config_file = file_path
+        new_state.vault = vault_data
 
         # 1. Parse and Merge SMTP Infrastructure Settings from JSON
         new_state.smtp = {
+            "default_route": smtp_json.get("default_route", "pushover"),
+            "disable_persistence": get_bool(smtp_json.get("disable_persistence", False)),
             "auth": smtp_json.get("auth", {}),
             "queue_dir": smtp_json.get("queue_dir", "queue"),
             "hostname": smtp_json.get("hostname"),
@@ -695,6 +819,16 @@ def load_config(is_reload=False):
         new_state.smtp["listeners"] = listeners
         new_state.smtp["queue_dir"] = os.path.normpath(os.path.join(SCRIPT_DIR, new_state.smtp["queue_dir"]))
 
+        # 2. Parse Smarthost Configurations
+        new_state.smarthost = {
+            "aliases": smarthost_json.get("aliases", {}),
+            "globals": {
+                "alias": smarthost_json.get("globals", {}).get("alias"),
+                "force_plaintext": get_bool(smarthost_json.get("globals", {}).get("force_plaintext", False)),
+                "disable_attachments": get_bool(smarthost_json.get("globals", {}).get("disable_attachments", False))
+            }
+        }
+
         # Check for global aliases and perform dynamic Vault substitution mapped across both legacy flat and explicit structures
         global_user = pushover_json.get("user")
         if global_user: global_user = vault_data["user"].get(global_user, vault_data["app"].get(global_user, global_user))
@@ -702,8 +836,9 @@ def load_config(is_reload=False):
         global_token = pushover_json.get("token")
         if global_token: global_token = vault_data["app"].get(global_token, global_token)
 
-        # 2. Parse and Merge Global Pushover Settings
+        # 3. Parse and Merge Global Pushover Settings
         new_state.pushover = {
+            "method": "pushover",
             "user": global_user,
             "token": global_token,
             "device": pushover_json.get("device"),
@@ -716,8 +851,7 @@ def load_config(is_reload=False):
             "retry": pushover_json.get("retry"),
             "expire": pushover_json.get("expire"),
             "attachments": get_bool(pushover_json.get("attachments", True)),
-            "force_plaintext": get_bool(pushover_json.get("force_plaintext")),
-            "disable_persistence": get_bool(pushover_json.get("disable_persistence"))
+            "force_plaintext": get_bool(pushover_json.get("force_plaintext"))
         }
 
         # Cast and validate global integers securely
@@ -744,83 +878,72 @@ def load_config(is_reload=False):
         if new_state.pushover.get("url_title") and len(new_state.pushover["url_title"]) > MAX_URL_TITLE_CHARS:
             logging.warning(f"Validation Warning: Global 'url_title' exceeds {MAX_URL_TITLE_CHARS} characters. It will be truncated when sending.")
 
-        # 3. Parse Email Address Mappings
-        for key, config in pushover_json.items():
-            # Skip reserved root keys to focus purely on email addresses
-            if key in ("user", "token", "device", "sound", "url", "url_title", "tags", "priority", "ttl", "retry", "expire", "force_plaintext", "disable_persistence", "attachments") or not isinstance(config, dict):
-                continue
+        # 4. Parse Email Address Routing Mappings
+        for key, config in routes_json.items():
+            if not isinstance(config, dict): continue
 
             match_type = config.get("match", "to").lower()
-
-            # Explicit input validation requirement for "match" parameter values
             if match_type not in ("to", "from", "both"):
                 logging.error(f"Validation Failed: Configuration entry '{key}' has invalid match rule '{match_type}'. Ignored.")
                 continue
 
-            # Route-level Alias Vault translation dynamically catching legacy and nested scopes
-            user_key = config.get("user")
-            if user_key:
-                user_key = vault_data["user"].get(user_key, vault_data["app"].get(user_key, user_key))
+            method = config.get("method", "pushover")
+            route_config = {"method": method}
+
+            if method == "smarthost":
+                route_config["smarthost_alias"] = config.get("smarthost_alias")
+                if "force_plaintext" in config:
+                    route_config["force_plaintext"] = get_bool(config["force_plaintext"])
+                if "disable_attachments" in config:
+                    route_config["disable_attachments"] = get_bool(config["disable_attachments"])
             else:
-                user_key = new_state.pushover.get("user")
+                # Route-level Alias Vault translation dynamically catching legacy and nested scopes
+                user_key = config.get("user")
+                if user_key:
+                    user_key = vault_data["user"].get(user_key, vault_data["app"].get(user_key, user_key))
+                else:
+                    user_key = new_state.pushover.get("user")
 
-            app_token = config.get("token")
-            if app_token:
-                app_token = vault_data["app"].get(app_token, app_token)
+                app_token = config.get("token")
+                if app_token:
+                    app_token = vault_data["app"].get(app_token, app_token)
 
-            if not user_key or not app_token:
-                logging.error(f"Missing required 'user' or 'token' definitions for address: {key}. Ignored.")
-                continue
-
-            route_config = {"user": user_key, "token": app_token}
-
-            # Apply route-specific boolean overrides if they exist inside this email block
-            if "force_plaintext" in config:
-                route_config["force_plaintext"] = get_bool(config["force_plaintext"])
-            if "disable_persistence" in config:
-                route_config["disable_persistence"] = get_bool(config["disable_persistence"])
-            if "attachments" in config:
-                route_config["attachments"] = get_bool(config["attachments"])
-
-            # Handle optional Pushover string parameters (device, sound, url, url_title, tags)
-            # If defined locally in this route, it overrides the global setting.
-            for string_param in ["device", "sound", "url", "url_title", "tags"]:
-                val = config.get(string_param, new_state.pushover.get(string_param))
-                if val and str(val).strip():
-                    route_config[string_param] = str(val).strip()
-
-            # Validate Route String Constraints
-            if "url" in route_config and len(route_config["url"]) > MAX_URL_CHARS:
-                logging.warning(f"Validation Warning: Route '{key}' 'url' exceeds {MAX_URL_CHARS} characters. It will be truncated when sending.")
-            if "url_title" in route_config and len(route_config["url_title"]) > MAX_URL_TITLE_CHARS:
-                logging.warning(f"Validation Warning: Route '{key}' 'url_title' exceeds {MAX_URL_TITLE_CHARS} characters. It will be truncated when sending.")
-
-            # Handle optional Pushover integer parameters (priority, ttl, retry, expire)
-            for int_param in ["priority", "ttl", "retry", "expire"]:
-                val = config.get(int_param, new_state.pushover.get(int_param))
-                if val is not None and str(val).strip():
-                    try:
-                        parsed_val = int(val)
-                        # Priority must strictly be between -2 and 2 inclusive
-                        if int_param == "priority" and not (-2 <= parsed_val <= 2):
-                            logging.warning(f"Priority {parsed_val} for {key} is out of bounds (-2 to 2). Ignored.")
-                            continue
-                        if int_param == "retry" and parsed_val < 30:
-                            logging.warning(f"Retry {parsed_val} for {key} is < 30. Ignored.")
-                            continue
-                        if int_param == "expire" and parsed_val > 10800:
-                            logging.warning(f"Expire {parsed_val} for {key} is > 10800. Ignored.")
-                            continue
-                        route_config[int_param] = parsed_val
-                    except ValueError:
-                        logging.warning(f"Invalid integer '{val}' for {int_param} on {key}. Ignored.")
-
-            if route_config.get("priority") == 2:
-                if "retry" not in route_config or "expire" not in route_config:
-                    logging.error(f"Validation Failed: Route '{key}' has priority 2 but is missing valid 'retry' (>=30) or 'expire' (<=10800) parameters. Ignored.")
+                if not user_key or not app_token:
+                    logging.error(f"Missing required 'user' or 'token' definitions for address: {key}. Ignored.")
                     continue
 
-            # Regex vs String detection
+                route_config["user"] = user_key
+                route_config["token"] = app_token
+
+                if "force_plaintext" in config:
+                    route_config["force_plaintext"] = get_bool(config["force_plaintext"])
+                if "attachments" in config:
+                    route_config["attachments"] = get_bool(config["attachments"])
+
+                for string_param in ["device", "sound", "url", "url_title", "tags"]:
+                    val = config.get(string_param, new_state.pushover.get(string_param))
+                    if val and str(val).strip(): route_config[string_param] = str(val).strip()
+
+                if "url" in route_config and len(route_config["url"]) > MAX_URL_CHARS:
+                    logging.warning(f"Validation Warning: Route '{key}' 'url' exceeds {MAX_URL_CHARS} characters. It will be truncated when sending.")
+                if "url_title" in route_config and len(route_config["url_title"]) > MAX_URL_TITLE_CHARS:
+                    logging.warning(f"Validation Warning: Route '{key}' 'url_title' exceeds {MAX_URL_TITLE_CHARS} characters. It will be truncated when sending.")
+
+                for int_param in ["priority", "ttl", "retry", "expire"]:
+                    val = config.get(int_param, new_state.pushover.get(int_param))
+                    if val is not None and str(val).strip():
+                        try:
+                            parsed_val = int(val)
+                            if int_param == "priority" and not (-2 <= parsed_val <= 2): continue
+                            if int_param == "retry" and parsed_val < 30: continue
+                            if int_param == "expire" and parsed_val > 10800: continue
+                            route_config[int_param] = parsed_val
+                        except ValueError: pass
+
+                if route_config.get("priority") == 2 and ("retry" not in route_config or "expire" not in route_config):
+                    logging.error(f"Validation Failed: Route '{key}' has priority 2 but is missing valid 'retry' or 'expire'. Ignored.")
+                    continue
+
             is_regex = False
             email_key = key
 
@@ -836,22 +959,24 @@ def load_config(is_reload=False):
                 email_key = key.lower()
 
             if is_regex:
-                if match_type in ("to", "both"):
-                    new_state.regex_mappings["to"].append((compiled_pattern, route_config))
-                if match_type in ("from", "both"):
-                    new_state.regex_mappings["from"].append((compiled_pattern, route_config))
+                if match_type in ("to", "both"): new_state.regex_mappings["to"].append((compiled_pattern, route_config))
+                if match_type in ("from", "both"): new_state.regex_mappings["from"].append((compiled_pattern, route_config))
             else:
-                if match_type in ("to", "both"):
-                    new_state.mappings["to"][email_key] = route_config
-                if match_type in ("from", "both"):
-                    new_state.mappings["from"][email_key] = route_config
+                if match_type in ("to", "both"): new_state.mappings["to"][email_key] = route_config
+                if match_type in ("from", "both"): new_state.mappings["from"][email_key] = route_config
+
+        has_mappings = bool(new_state.mappings["to"] or new_state.mappings["from"] or new_state.regex_mappings["to"] or new_state.regex_mappings["from"])
 
         # Ensure we have at least *some* viable configuration before returning success
-        has_mappings = bool(new_state.mappings["to"] or new_state.mappings["from"] or new_state.regex_mappings["to"] or new_state.regex_mappings["from"])
-        if not has_mappings and not (new_state.pushover.get("user") and new_state.pushover.get("token")):
-            logging.error("No valid email routing matrices survived validation, and no global catch-all is defined.")
-            if not is_reload: exit(1)
-            return None
+        if not has_mappings:
+            if new_state.smtp["default_route"] == "pushover" and not (new_state.pushover.get("user") and new_state.pushover.get("token")):
+                logging.error("No valid email routing matrices survived validation, and no global Pushover catch-all is defined.")
+                if not is_reload: exit(1)
+                return None
+            elif new_state.smtp["default_route"] == "smarthost" and not new_state.smarthost["globals"].get("alias"):
+                logging.error("No valid email routing matrices survived validation, and no global Smarthost catch-all is defined.")
+                if not is_reload: exit(1)
+                return None
 
         return new_state
 
@@ -998,17 +1123,15 @@ if __name__ == "__main__":
     os.makedirs(app_state.smtp["queue_dir"], exist_ok=True)
 
     auth_status = "Enabled" if app_state.smtp.get("auth") else "Disabled (Permissive)"
-    catch_all_status = bool(app_state.pushover.get("user") and app_state.pushover.get("token"))
     total_mapped = len(app_state.mappings["to"]) + len(app_state.mappings["from"]) + len(app_state.regex_mappings["to"]) + len(app_state.regex_mappings["from"])
-
-    logging.info(f"Loaded config from file '{app_state.config_file}'. Explicit rules: {total_mapped}. Catch-all: {catch_all_status}. SMTP Auth: {auth_status}")
+    logging.info(f"Loaded config from file '{app_state.config_file}'. Explicit rules: {total_mapped}. Routing Method: {app_state.smtp['default_route']}. SMTP Auth: {auth_status}")
 
     # 2. Setup thread-safe queue and retrieve un-sent disk persistence items
     msg_queue = queue.Queue()
     load_queue_from_disk(msg_queue, app_state)
 
-    # 3. Start the background Pushover worker thread
-    worker_thread = threading.Thread(target=pushover_worker, args=(msg_queue, app_state), daemon=True)
+    # 3. Start the background Delivery worker thread
+    worker_thread = threading.Thread(target=delivery_worker, args=(msg_queue, app_state), daemon=True)
     worker_thread.start()
 
     # 4. Configure and spin up the aiosmtpd listener(s)
@@ -1113,18 +1236,19 @@ if __name__ == "__main__":
                         # Atomically mutate the active state container objects so running threads aren't corrupted
                         app_state.smtp.clear(); app_state.smtp.update(new_state.smtp)
                         app_state.pushover.clear(); app_state.pushover.update(new_state.pushover)
+                        app_state.smarthost.clear(); app_state.smarthost.update(new_state.smarthost)
                         app_state.mappings.clear(); app_state.mappings.update(new_state.mappings)
                         app_state.regex_mappings.clear(); app_state.regex_mappings.update(new_state.regex_mappings)
+                        app_state.vault.clear(); app_state.vault.update(new_state.vault)
 
                         # Apply immediate dynamic system effects
                         apply_logging_level(app_state.smtp["loglevel"])
                         os.makedirs(app_state.smtp["queue_dir"], exist_ok=True)
 
                         new_auth_status = "Enabled" if app_state.smtp.get("auth") else "Disabled (Permissive)"
-                        new_catch_all = bool(app_state.pushover.get("user") and app_state.pushover.get("token"))
                         new_total = len(app_state.mappings["to"]) + len(app_state.mappings["from"]) + len(app_state.regex_mappings["to"]) + len(app_state.regex_mappings["from"])
 
-                        logging.info(f"Reload success. Mappings tracked: {new_total}. Catch-all: {new_catch_all}. SMTP Auth: {new_auth_status}")
+                        logging.info(f"Reload success. Mappings tracked: {new_total}. Routing Method: {app_state.smtp['default_route']}. SMTP Auth: {new_auth_status}")
                         logging.info("Note: Changes to listener endpoints or TLS settings require a SIGUSR1 to take effect.")
                     else:
                         logging.warning("Config reload failed. Retaining active rules matrix.")
