@@ -123,7 +123,7 @@ HTML_TEMPLATE = """
         .flex-col { flex: 1; min-width: 200px; }
         label { display: block; font-weight: bold; margin-bottom: 0.25rem; font-size: 0.9rem; }
         input, select, textarea { width: 100%; padding: 0.5rem; box-sizing: border-box; background: var(--input-bg); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 4px; }
-        button { background: var(--primary-color); color: white; padding: 0.5rem 1rem; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button { background: var(--primary-color); color: white; padding: 0.5rem 1rem; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; display: inline-flex; align-items: center; justify-content: center; }
         button:hover { background: var(--primary-hover); }
         button.warning { background: var(--warning-color); }
         button.warning:hover { background: var(--warning-hover); }
@@ -149,6 +149,9 @@ HTML_TEMPLATE = """
         .theme-toggle .toggle-circle { position: absolute; top: 1px; left: 1px; width: 24px; height: 24px; background-color: var(--primary-color); border-radius: 50%; transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1); box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
         [data-theme="dark"] .theme-toggle .toggle-circle { transform: translateX(28px); background-color: var(--primary-color); }
         .theme-toggle svg { stroke: var(--text-color); z-index: 1; pointer-events: none; }
+        [data-theme="dark"] .theme-toggle svg { stroke: var(--text-color); }
+        .table-sort { cursor: pointer; user-select: none; }
+        .table-sort:hover { background-color: var(--border-color); }
     </style>
 </head>
 <body x-data="gatewaySettings()">
@@ -175,37 +178,57 @@ HTML_TEMPLATE = """
             <div x-show="tab === 'pushover'">
                 <div class="card">
                     <h3>Global API Fallbacks</h3>
+
                     <div class="flex-row" style="margin-bottom: 0.75rem;">
                         <div style="flex: 0 0 auto;">
                             <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
                                 <label style="margin: 0;">Default App Token</label>
-                                <label class="clickable-label"><input type="checkbox" x-model="pushGlobals._isTokenAlias" style="width: auto; margin: 0;"> (Use Alias)</label>
+                                <label class="clickable-label"><input type="checkbox" :checked="pushGlobals._isTokenAlias" @change="toggleAlias(pushGlobals, 'token')" style="width: auto; margin: 0;"> (Use Alias)</label>
                             </div>
-                            <template x-if="!pushGlobals._isTokenAlias"><input class="token-input" x-model="pushGlobals.token" maxlength="30" placeholder="Required for Catch-All" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true"></template>
+                            <template x-if="!pushGlobals._isTokenAlias">
+                                <div class="token-input" style="position: relative; display: inline-block;">
+                                    <input :type="pushGlobals._showToken ? 'text' : 'password'" x-model="pushGlobals.token" maxlength="30" placeholder="Required for Catch-All" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                                    <div @click="pushGlobals._showToken = !pushGlobals._showToken" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
+                                        <svg x-show="!pushGlobals._showToken" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                        <svg x-show="pushGlobals._showToken" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                                    </div>
+                                </div>
+                            </template>
                             <template x-if="pushGlobals._isTokenAlias">
                                 <select class="auto-width" x-model="pushGlobals.token">
                                     <option value="">-- Select App Alias --</option>
-                                    <template x-for="alias in vaultAppAliases" :key="alias"><option :value="alias" x-text="alias" :selected="pushGlobals.token === alias"></option></template>
+                                    <template x-for="v in sortedVaultApp" :key="v.name"><option :value="v.name" x-text="v.name" :selected="pushGlobals.token === v.name"></option></template>
                                 </select>
                             </template>
                         </div>
                     </div>
+
                     <div class="flex-row">
                         <div style="flex: 0 0 auto;">
                             <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
                                 <label style="margin: 0;">Default User Key</label>
-                                <label class="clickable-label"><input type="checkbox" x-model="pushGlobals._isUserAlias" style="width: auto; margin: 0;"> (Use Alias)</label>
+                                <label class="clickable-label"><input type="checkbox" :checked="pushGlobals._isUserAlias" @change="toggleAlias(pushGlobals, 'user')" style="width: auto; margin: 0;"> (Use Alias)</label>
                             </div>
-                            <template x-if="!pushGlobals._isUserAlias"><input class="token-input" x-model="pushGlobals.user" maxlength="30" placeholder="Required for Catch-All" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true"></template>
+                            <template x-if="!pushGlobals._isUserAlias">
+                                <div class="token-input" style="position: relative; display: inline-block;">
+                                    <input :type="pushGlobals._showUser ? 'text' : 'password'" x-model="pushGlobals.user" maxlength="30" placeholder="Required for Catch-All" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                                    <div @click="pushGlobals._showUser = !pushGlobals._showUser" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
+                                        <svg x-show="!pushGlobals._showUser" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                        <svg x-show="pushGlobals._showUser" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                                    </div>
+                                </div>
+                            </template>
                             <template x-if="pushGlobals._isUserAlias">
                                 <select class="auto-width" x-model="pushGlobals.user">
                                     <option value="">-- Select User Alias --</option>
-                                    <template x-for="alias in vaultUserAliases" :key="alias"><option :value="alias" x-text="alias" :selected="pushGlobals.user === alias"></option></template>
+                                    <template x-for="v in sortedVaultUser" :key="v.name"><option :value="v.name" x-text="v.name" :selected="pushGlobals.user === v.name"></option></template>
                                 </select>
                             </template>
                         </div>
                     </div>
+
                     <button type="button" class="outline" @click="showGlobalAdv = !showGlobalAdv" style="margin-bottom: 1rem; margin-top: 0.5rem;"><span x-text="showGlobalAdv ? 'Hide Advanced Globals' : 'Show Advanced Globals'"></span></button>
+
                     <div x-show="showGlobalAdv" class="adv-card">
                         <div class="flex-row" style="margin-bottom: 1rem;">
                             <div style="flex: 0 0 auto;">
@@ -223,6 +246,12 @@ HTML_TEMPLATE = """
                         <div class="flex-row" style="margin-bottom: 1rem;"><div class="flex-col" style="flex: 1; min-width: 200px;"><label>Supplementary URL</label><input x-model="pushGlobals.url" placeholder="Optional" maxlength="512" style="width: 100%;"></div></div>
                         <div class="flex-row" style="margin-bottom: 1rem;"><div style="flex: 0 0 auto;"><label>URL Title</label><input x-model="pushGlobals.url_title" placeholder="Optional" maxlength="100" style="width: 100ch; max-width: 100%;"></div></div>
                     </div>
+
+                    <div class="flex-row" style="gap: 1.5rem; margin-top: 0.5rem;">
+                        <label class="clickable-label" style="font-weight: normal;"><input type="checkbox" x-model="pushGlobals.disable_attachments" style="width: auto; margin: 0;"> Disable Image Attachments</label>
+                        <label class="clickable-label" style="font-weight: normal;"><input type="checkbox" x-model="pushGlobals.force_plaintext" style="width: auto; margin: 0;"> Force Plaintext Formatting</label>
+                        <label class="clickable-label" style="font-weight: normal;"><input type="checkbox" x-model="pushGlobals.disable_persistence" style="width: auto; margin: 0;"> Disable Disk Persistence</label>
+                    </div>
                 </div>
 
                 <div class="card">
@@ -236,40 +265,67 @@ HTML_TEMPLATE = """
                                     <input x-model="map._key" placeholder="user@domain.com or ^.*@domain\\.com$" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
                                 </div>
                                 <div style="flex: 0 0 auto;">
-                                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;"><label style="margin: 0;">App Token</label><label class="clickable-label"><input type="checkbox" x-model="map._isTokenAlias" style="width: auto; margin: 0;"> (Use Alias)</label></div>
-                                    <template x-if="!map._isTokenAlias"><input class="token-input" x-model="map.token" maxlength="30" placeholder="Required Override" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true"></template>
+                                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;"><label style="margin: 0;">App Token</label><label class="clickable-label"><input type="checkbox" :checked="map._isTokenAlias" @change="toggleAlias(map, 'token')" style="width: auto; margin: 0;"> (Use Alias)</label></div>
+                                    <template x-if="!map._isTokenAlias">
+                                        <div class="token-input" style="position: relative; display: inline-block;">
+                                            <input :type="map._showToken ? 'text' : 'password'" x-model="map.token" maxlength="30" placeholder="Required Override" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                                            <div @click="map._showToken = !map._showToken" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
+                                                <svg x-show="!map._showToken" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                                <svg x-show="map._showToken" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                                            </div>
+                                        </div>
+                                    </template>
                                     <template x-if="map._isTokenAlias">
                                         <select class="auto-width" x-model="map.token">
                                             <option value="">-- Select App Alias --</option>
-                                            <template x-for="alias in vaultAppAliases" :key="alias"><option :value="alias" x-text="alias" :selected="map.token === alias"></option></template>
+                                            <template x-for="v in sortedVaultApp" :key="v.name"><option :value="v.name" x-text="v.name" :selected="map.token === v.name"></option></template>
                                         </select>
                                     </template>
                                 </div>
                             </div>
+
                             <button type="button" class="outline" @click="map._showAdv = !map._showAdv" style="margin-bottom: 1rem; font-size: 0.8rem; padding: 0.3rem 0.5rem;"><span x-text="map._showAdv ? 'Hide Route Settings' : 'Show Route Settings'"></span></button>
+
                             <div x-show="map._showAdv" class="adv-card">
                                 <div class="flex-row" style="margin-bottom: 1.5rem; justify-content: flex-start;">
                                     <div style="flex: 0 0 auto;">
-                                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;"><label style="margin: 0;">User Key Override</label><label class="clickable-label"><input type="checkbox" x-model="map._isUserAlias" style="width: auto; margin: 0;"> (Use Alias)</label></div>
-                                        <template x-if="!map._isUserAlias"><input class="token-input" x-model="map.user" maxlength="30" placeholder="Inherit Global" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true"></template>
+                                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;"><label style="margin: 0;">User Key Override</label><label class="clickable-label"><input type="checkbox" :checked="map._isUserAlias" @change="toggleAlias(map, 'user')" style="width: auto; margin: 0;"> (Use Alias)</label></div>
+                                        <template x-if="!map._isUserAlias">
+                                            <div class="token-input" style="position: relative; display: inline-block;">
+                                                <input :type="map._showUser ? 'text' : 'password'" x-model="map.user" maxlength="30" placeholder="Inherit Global" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                                                <div @click="map._showUser = !map._showUser" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
+                                                    <svg x-show="!map._showUser" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                                    <svg x-show="map._showUser" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                                                </div>
+                                            </div>
+                                        </template>
                                         <template x-if="map._isUserAlias">
                                             <select class="auto-width" x-model="map.user">
                                                 <option value="">-- Inherit Global --</option>
-                                                <template x-for="alias in vaultUserAliases" :key="alias"><option :value="alias" x-text="alias" :selected="map.user === alias"></option></template>
+                                                <template x-for="v in sortedVaultUser" :key="v.name"><option :value="v.name" x-text="v.name" :selected="map.user === v.name"></option></template>
                                             </select>
                                         </template>
                                     </div>
                                     <div style="flex: 0 0 auto;"><label>Priority Override</label><select class="auto-width" x-model="map.priority"><option value="">Inherit Global</option><option value="-2">Lowest (-2)</option><option value="-1">Low (-1)</option><option value="0">Normal (0)</option><option value="1">High (1)</option><option value="2">Emergency (2)</option></select></div>
                                     <div class="flex-col" style="flex: 1; min-width: 150px;"><label>Target Device</label><input x-model="map.device" placeholder="Inherit Global" style="width: 100%;"></div>
                                 </div>
+
                                 <div class="flex-row" x-show="map.priority == 2" style="margin-bottom: 1rem;">
                                     <div style="flex: 0 0 auto;"><label>Retry (sec)</label><input type="number" x-model.number="map.retry" min="30" style="width: 120px;"></div>
                                     <div style="flex: 0 0 auto;"><label>Expire (sec)</label><input type="number" x-model.number="map.expire" max="10800" style="width: 120px;"></div>
                                 </div>
+
                                 <div class="flex-row" style="margin-bottom: 0.5rem;"><div class="flex-col" style="flex: 1; min-width: 200px;"><label>Supplementary URL</label><input x-model="map.url" placeholder="Inherit Global" maxlength="512" style="width: 100%;"></div></div>
                                 <div class="flex-row" style="margin-bottom: 1rem;"><div style="flex: 0 0 auto;"><label>URL Title</label><input x-model="map.url_title" placeholder="Inherit Global" maxlength="100" style="width: 100ch; max-width: 100%;"></div></div>
+
+                                <div class="flex-row" style="gap: 1.5rem; margin-top: 1rem;">
+                                    <label class="clickable-label" style="font-weight: normal;"><input type="checkbox" x-model="map.disable_attachments" style="width: auto; margin: 0;"> Disable Image Attachments</label>
+                                    <label class="clickable-label" style="font-weight: normal;"><input type="checkbox" x-model="map.force_plaintext" style="width: auto; margin: 0;"> Force Plaintext Formatting</label>
+                                    <label class="clickable-label" style="font-weight: normal;"><input type="checkbox" x-model="map.disable_persistence" style="width: auto; margin: 0;"> Disable Disk Persistence</label>
+                                </div>
                             </div>
-                            <div style="text-align: right;"><button type="button" class="danger" @click="mappings.splice(idx, 1)">Remove Mapping</button></div>
+
+                            <div style="text-align: right;"><button type="button" class="danger" @click="mappings.splice(idx, 1)" title="Remove Mapping"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></div>
                         </div>
                     </template>
                     <button type="button" @click="addMapping()">+ Add Mapping</button>
@@ -290,6 +346,8 @@ HTML_TEMPLATE = """
 
                 <div class="card">
                     <h3>SMTP Client Authentication Store</h3>
+                    <p>Configure local usernames and passwords to restrict gateway access. Plaintext items are securely auto-hashed.</p>
+
                     <div class="adv-card" style="margin-bottom: 1.5rem; border-left-color: var(--primary-color);">
                         <h4>Provision New SMTP User</h4>
                         <div class="flex-row">
@@ -298,15 +356,24 @@ HTML_TEMPLATE = """
                             <div style="flex: 0 0 auto; display: flex; gap: 0.5rem;"><button type="button" @click="addSmtpUser()">Add User</button><button type="button" class="outline" @click="newSmtpUser = ''; newSmtpPass = '';">Clear</button></div>
                         </div>
                     </div>
-                    <hr><h4>Current SMTP Users</h4>
+
+                    <hr>
+                    <h4>Current SMTP Users</h4>
+
                     <table>
-                        <thead><tr><th>Username</th><th class="table-col-min">Last Modification</th><th class="table-col-min">Actions</th></tr></thead>
+                        <thead>
+                            <tr>
+                                <th class="table-sort" style="width: auto;" @click="setSmtpSort('name')">Username <span style="font-size: 0.8em;" x-show="smtpSortCol==='name'" x-text="smtpSortDir===1 ? '▲' : '▼'"></span></th>
+                                <th class="table-sort table-col-min" @click="setSmtpSort('epoch')">Last Modification <span style="font-size: 0.8em;" x-show="smtpSortCol==='epoch'" x-text="smtpSortDir===1 ? '▲' : '▼'"></span></th>
+                                <th class="table-col-min">Actions</th>
+                            </tr>
+                        </thead>
                         <tbody>
-                            <template x-for="(user, name) in smtp.auth" :key="name">
+                            <template x-for="user in sortedSmtpAuth" :key="user.name">
                                 <tr>
-                                    <td x-text="name" style="font-weight: bold;"></td>
-                                    <td class="table-col-min"><span class="time-display" x-text="formatTime(smtp_meta[name])" :title="getFullTime(smtp_meta[name])"></span></td>
-                                    <td class="table-col-min"><button type="button" class="outline" @click="openEditModal('smtp', name)">Change Password</button><button type="button" class="danger" @click="delete smtp.auth[name]; delete smtp_meta[name];">Remove</button></td>
+                                    <td x-text="user.name" style="font-weight: bold;"></td>
+                                    <td class="table-col-min"><span class="time-display" x-text="formatTime(user.epoch)" :title="getFullTime(user.epoch)"></span></td>
+                                    <td class="table-col-min"><div style="display: flex; gap: 0.5rem;"><button type="button" class="outline" @click="openEditModal('smtp', user.name)">Change Password</button><button type="button" class="danger" @click="delete smtp.auth[user.name]; delete smtp_meta[user.name];" title="Remove User"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></div></td>
                                 </tr>
                             </template>
                         </tbody>
@@ -319,14 +386,14 @@ HTML_TEMPLATE = """
                         <div class="card" style="background: var(--bg-color);">
                             <div class="flex-row" style="align-items: flex-end; margin-bottom: 1rem;">
                                 <div style="flex: 0 0 auto;"><label>Bind Address</label><input x-model="l.bind" placeholder="0.0.0.0:25" maxlength="52" style="width: 55ch; max-width: 100%;"></div>
-                                <div style="flex: 0 0 auto; padding-bottom: 0.5rem;"><label class="clickable-label"><input type="checkbox" x-model="l.starttls" style="margin: 0;"> STARTTLS</label></div>
+                                <div style="flex: 0 0 auto; padding-bottom: 0.5rem;"><label class="clickable-label" style="font-weight: normal; white-space: nowrap;"><input type="checkbox" x-model="l.starttls" style="margin: 0;"> STARTTLS</label></div>
                             </div>
                             <div class="flex-row" style="margin-bottom: 1rem;"><div class="flex-col" style="flex: 1; min-width: 200px;"><label>Hostname Override</label><input x-model="l.hostname" placeholder="Optional" style="width: 100%;"></div></div>
                             <div class="flex-row" x-show="l.starttls" style="margin-bottom: 1rem;">
                                 <div class="flex-col"><label>Specific TLS Cert File</label><input x-model="l.tls_cert_file" placeholder="Leaves blank to use Global"></div>
                                 <div class="flex-col"><label>Specific TLS Key File</label><input x-model="l.tls_key_file" placeholder="Leaves blank to use Global"></div>
                             </div>
-                            <div style="text-align: right;"><button type="button" class="danger" @click="smtp.listeners.splice(idx, 1)">Remove Listener</button></div>
+                            <div style="text-align: right;"><button type="button" class="danger" @click="smtp.listeners.splice(idx, 1)" title="Remove Listener"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></div>
                         </div>
                     </template>
                     <button type="button" @click="addListener()">+ Add TCP Listener</button>
@@ -334,8 +401,8 @@ HTML_TEMPLATE = """
             </div>
 
             <div x-show="tab === 'pushover' || tab === 'server'" style="margin-top: 1.5rem; display: flex; gap: 1rem;">
-                <button type="submit">Save Application Configuration</button>
-                <button type="button" class="warning" @click="window.location.reload()">Discard Changes & Reload from Disk</button>
+                <button type="submit" style="font-size: 1.1rem; padding: 1rem;">Save Application Configuration</button>
+                <button type="button" class="warning" @click="window.location.reload()" style="font-size: 1.1rem; padding: 1rem;">Discard Changes & Reload from Disk</button>
             </div>
         </form>
 
@@ -347,42 +414,67 @@ HTML_TEMPLATE = """
                     <div class="flex-row" style="gap: 1rem; align-items: flex-end; justify-content: flex-start;">
                         <div style="flex: 0 0 auto;"><label>Token Type</label><select class="auto-width" x-model="newVaultType"><option value="app">App Token</option><option value="user">User Key</option></select></div>
                         <div style="flex: 1; min-width: 150px;"><label>Alias Name</label><input type="text" x-model="newVaultName" required autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
-                        <div style="flex: 0 0 auto;"><label>Token Value</label><input type="password" class="token-input" x-model="newVaultToken" maxlength="30" required autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true"></div>
+                        <div style="flex: 0 0 auto;">
+                            <label>Token Value</label>
+                            <div class="token-input" style="position: relative; display: inline-block;">
+                                <input :type="showNewVaultToken ? 'text' : 'password'" x-model="newVaultToken" maxlength="30" required autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                                <div @click="showNewVaultToken = !showNewVaultToken" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
+                                    <svg x-show="!showNewVaultToken" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                    <svg x-show="showNewVaultToken" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                                </div>
+                            </div>
+                        </div>
                         <div style="flex: 0 0 auto; display: flex; gap: 0.5rem;"><button type="submit">Add Token</button><button type="button" class="outline" @click="newVaultName=''; newVaultToken='';">Clear</button></div>
                     </div>
                 </form>
-                <hr><h4>Current App Token Aliases</h4>
+
+                <hr>
+                <h4>Current App Token Aliases</h4>
                 <table style="margin-bottom: 2rem;">
-                    <thead><tr><th style="width: auto;">Alias Name</th><th class="table-col-min">Last Modification</th><th class="table-col-min">Actions</th></tr></thead>
+                    <thead>
+                        <tr>
+                            <th class="table-sort" style="width: auto;" @click="setVaultSort('name')">Alias Name <span style="font-size: 0.8em;" x-show="vaultSortCol==='name'" x-text="vaultSortDir===1 ? '▲' : '▼'"></span></th>
+                            <th class="table-sort table-col-min" @click="setVaultSort('epoch')">Last Modification <span style="font-size: 0.8em;" x-show="vaultSortCol==='epoch'" x-text="vaultSortDir===1 ? '▲' : '▼'"></span></th>
+                            <th class="table-col-min">Actions</th>
+                        </tr>
+                    </thead>
                     <tbody>
-                        <template x-for="(v, idx) in vaultApp" :key="v.name">
+                        <template x-for="v in sortedVaultApp" :key="v.name">
                             <tr>
                                 <td><strong x-text="v.name"></strong></td>
                                 <td class="table-col-min"><span class="time-display" x-text="formatTime(v.epoch)" :title="getFullTime(v.epoch)"></span></td>
-                                <td class="table-col-min"><button type="button" class="outline" @click="openEditModal('vault', v.name, 'app', idx)">Modify Secret</button><button type="button" class="danger" @click="deleteVaultToken('app', idx)">Delete</button></td>
+                                <td class="table-col-min"><div style="display: flex; gap: 0.5rem;"><button type="button" class="outline" @click="openEditModal('vault', v.name, 'app')">Modify Secret</button><button type="button" class="danger" @click="deleteVaultToken('app', v.name)" title="Delete Alias"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></div></td>
                             </tr>
                         </template>
                     </tbody>
                 </table>
+
                 <h4>Current User Token Aliases</h4>
                 <table>
-                    <thead><tr><th style="width: auto;">Alias Name</th><th class="table-col-min">Last Modification</th><th class="table-col-min">Actions</th></tr></thead>
+                    <thead>
+                        <tr>
+                            <th class="table-sort" style="width: auto;" @click="setVaultSort('name')">Alias Name <span style="font-size: 0.8em;" x-show="vaultSortCol==='name'" x-text="vaultSortDir===1 ? '▲' : '▼'"></span></th>
+                            <th class="table-sort table-col-min" @click="setVaultSort('epoch')">Last Modification <span style="font-size: 0.8em;" x-show="vaultSortCol==='epoch'" x-text="vaultSortDir===1 ? '▲' : '▼'"></span></th>
+                            <th class="table-col-min">Actions</th>
+                        </tr>
+                    </thead>
                     <tbody>
-                        <template x-for="(v, idx) in vaultUser" :key="v.name">
+                        <template x-for="v in sortedVaultUser" :key="v.name">
                             <tr>
                                 <td><strong x-text="v.name"></strong></td>
                                 <td class="table-col-min"><span class="time-display" x-text="formatTime(v.epoch)" :title="getFullTime(v.epoch)"></span></td>
-                                <td class="table-col-min"><button type="button" class="outline" @click="openEditModal('vault', v.name, 'user', idx)">Modify Secret</button><button type="button" class="danger" @click="deleteVaultToken('user', idx)">Delete</button></td>
+                                <td class="table-col-min"><div style="display: flex; gap: 0.5rem;"><button type="button" class="outline" @click="openEditModal('vault', v.name, 'user')">Modify Secret</button><button type="button" class="danger" @click="deleteVaultToken('user', v.name)" title="Delete Alias"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></div></td>
                             </tr>
                         </template>
                     </tbody>
                 </table>
             </div>
+
             <form hx-post="/save/vault_state" hx-target="#status" @submit="document.getElementById('vault_payload').value = prepareVaultPayload()">
                 <input type="hidden" name="vault_json" id="vault_payload">
                 <div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
-                    <button type="submit">Save Token Vault Configuration</button>
-                    <button type="button" class="warning" @click="window.location.reload()">Discard Changes & Reload from Disk</button>
+                    <button type="submit" style="font-size: 1.1rem; padding: 1rem;">Save Token Vault Configuration</button>
+                    <button type="button" class="warning" @click="window.location.reload()" style="font-size: 1.1rem; padding: 1rem;">Discard Changes & Reload from Disk</button>
                 </div>
             </form>
         </div>
@@ -406,34 +498,65 @@ HTML_TEMPLATE = """
                             </select>
                         </div>
                     </div>
-                    <div style="margin-bottom: 0.5rem; margin-top: 1rem;"><label class="clickable-label"><input type="checkbox" name="relative_time" x-model="ui_relative" style="width: auto; margin: 0;"> Render Coerced Relative Human Times (e.g. '3 days ago')</label></div>
-                    <div style="margin-bottom: 1.5rem;"><label class="clickable-label"><input type="checkbox" name="expand_adv" x-model="ui_expand_adv" style="width: auto; margin: 0;"> Always Expand Route Settings by Default</label></div>
-                    <hr><div style="margin-bottom: 1rem;"><label class="clickable-label"><input type="checkbox" name="https" x-model="httpsEnabled" style="width: auto; margin: 0;"> Enable HTTPS Bindings</label></div>
+
+                    <div class="flex-row" style="margin-top: 1rem;">
+                        <div style="flex: 0 0 auto;">
+                            <label>Token Default Sort</label>
+                            <select class="auto-width" name="vault_sort" x-model="ui_vault_sort">
+                                <option value="name_asc">Alias Name (Ascending)</option>
+                                <option value="name_desc">Alias Name (Descending)</option>
+                                <option value="epoch_asc">Last Modification (Ascending)</option>
+                                <option value="epoch_desc">Last Modification (Descending)</option>
+                            </select>
+                        </div>
+                        <div style="flex: 0 0 auto;">
+                            <label>SMTP Users Default Sort</label>
+                            <select class="auto-width" name="smtp_sort" x-model="ui_smtp_sort">
+                                <option value="name_asc">Username (Ascending)</option>
+                                <option value="name_desc">Username (Descending)</option>
+                                <option value="epoch_asc">Last Modification (Ascending)</option>
+                                <option value="epoch_desc">Last Modification (Descending)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 0.5rem; margin-top: 1rem;"><label class="clickable-label" style="font-weight: normal;"><input type="checkbox" name="relative_time" x-model="ui_relative" style="width: auto; margin: 0;"> Render Coerced Relative Human Times (e.g. '3 days ago')</label></div>
+                    <div style="margin-bottom: 1.5rem;"><label class="clickable-label" style="font-weight: normal;"><input type="checkbox" name="expand_adv" x-model="ui_expand_adv" style="width: auto; margin: 0;"> Always Expand Route Settings by Default</label></div>
+                    <hr><div style="margin-bottom: 1rem;"><label class="clickable-label" style="font-weight: normal;"><input type="checkbox" name="https" x-model="httpsEnabled" style="width: auto; margin: 0;"> Enable HTTPS Bindings</label></div>
+
                     <div class="flex-row" x-show="httpsEnabled">
                         <div class="flex-col"><label>UI Specific TLS Cert File</label><input type="text" name="tls_cert" value="{{ ui_cert }}" placeholder="Leave blank for auto-generated UUID cert"></div>
                         <div class="flex-col"><label>UI Specific TLS Key File</label><input type="text" name="tls_key" value="{{ ui_key }}"></div>
                     </div>
                 </div>
                 <div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
-                    <button type="submit">Save UI Transformations</button>
-                    <button type="button" class="warning" @click="window.location.reload()">Discard Changes & Reload from Disk</button>
+                    <button type="submit" style="font-size: 1.1rem; padding: 1rem;">Save UI Transformations</button>
+                    <button type="button" class="warning" @click="window.location.reload()" style="font-size: 1.1rem; padding: 1rem;">Discard Changes & Reload from Disk</button>
                 </div>
             </form>
         </div>
 
         <div id="status" class="success"></div>
+
         <div x-show="editModal.open" class="modal-overlay" style="display: none;" x-transition>
             <div class="modal-content" @click.away="editModal.open = false">
                 <h3 style="margin-top: 0;" x-text="editModal.type === 'smtp' ? 'Change Password for ' + editModal.name : 'Modify Secret for ' + editModal.name"></h3>
                 <div class="form-group">
                     <label x-text="editModal.type === 'smtp' ? 'New Password' : 'New Token Value'"></label>
-                    <input type="password" class="token-input" x-model="editModal.value" @keyup.enter="saveEditModal()" placeholder="Enter new hidden value..." autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" :maxlength="editModal.type === 'vault' ? 30 : 256">
+                    <div class="token-input" style="position: relative; display: inline-block;">
+                        <input :type="editModal.showToken ? 'text' : 'password'" x-model="editModal.value" @keyup.enter="saveEditModal()" placeholder="Enter new hidden value..." autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" :maxlength="editModal.type === 'vault' ? 30 : 256" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                        <div @click="editModal.showToken = !editModal.showToken" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
+                            <svg x-show="!editModal.showToken" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                            <svg x-show="editModal.showToken" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                        </div>
+                    </div>
                 </div>
                 <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
                     <button type="button" class="outline" @click="editModal.open = false">Cancel</button><button type="button" @click="saveEditModal()">Save Changes</button>
                 </div>
             </div>
         </div>
+
     </div>
 
     <script>
@@ -445,35 +568,74 @@ HTML_TEMPLATE = """
             smtp_meta: {{ smtp_meta_json | safe }},
             vaultMeta: {{ vault_meta_json | safe }},
             vaultApp: [], vaultUser: [], vaultAppAliases: [], vaultUserAliases: [],
-            newVaultType: 'app', newVaultName: '', newVaultToken: '',
+            newVaultType: 'app', newVaultName: '', newVaultToken: '', showNewVaultToken: false,
+
             ui_tz: '{{ ui_tz }}', ui_fmt: '{{ ui_fmt }}',
             ui_relative: {{ 'true' if ui_relative else 'false' }},
             ui_expand_adv: {{ 'true' if ui_expand_adv else 'false' }},
+            ui_vault_sort: '{{ ui_vault_sort }}',
+            ui_smtp_sort: '{{ ui_smtp_sort }}',
+            vaultSortCol: 'name', vaultSortDir: 1,
+            smtpSortCol: 'name', smtpSortDir: 1,
+
             pushGlobals: {}, showGlobalAdv: false, mappings: [], smtp: {},
             newSmtpUser: '', newSmtpPass: '',
-            editModal: { open: false, type: '', subType: '', name: '', idx: null, value: '' },
+            editModal: { open: false, type: '', subType: '', name: '', value: '', showToken: false },
 
             init() {
                 this.$watch('theme', val => { localStorage.setItem('theme', val); document.documentElement.setAttribute('data-theme', val); });
                 this.$watch('tab', val => localStorage.setItem('activeTab', val));
                 document.documentElement.setAttribute('data-theme', this.theme);
 
+                const vsParts = this.ui_vault_sort.split('_');
+                this.vaultSortCol = vsParts[0]; this.vaultSortDir = vsParts[1] === 'desc' ? -1 : 1;
+
+                const ssParts = this.ui_smtp_sort.split('_');
+                this.smtpSortCol = ssParts[0]; this.smtpSortDir = ssParts[1] === 'desc' ? -1 : 1;
+
                 for(const [k, v] of Object.entries(this.vaultMeta.app || {})) { this.vaultApp.push({ name: k, epoch: v, token: '__RETAIN__' }); this.vaultAppAliases.push(k); }
                 for(const [k, v] of Object.entries(this.vaultMeta.user || {})) { this.vaultUser.push({ name: k, epoch: v, token: '__RETAIN__' }); this.vaultUserAliases.push(k); }
 
                 const gKeys = ['user','token','device','sound','url','url_title','tags','priority','ttl','retry','expire','attachments','force_plaintext','disable_persistence'];
                 const po = this.rawConfig.pushover || {};
+
+                this.pushGlobals._showToken = false;
+                this.pushGlobals._showUser = false;
+
                 for(const [k, v] of Object.entries(po)) {
                     if(gKeys.includes(k)) { this.pushGlobals[k] = v; } else {
                         const isTokenAlias = this.vaultAppAliases.includes(v.token);
                         const isUserAlias = this.vaultUserAliases.includes(v.user);
                         let isRegex = false; let displayKey = k;
                         if (k.toLowerCase().startsWith('regex:')) { isRegex = true; displayKey = k.substring(6); }
-                        this.mappings.push({ _key: displayKey, _isRegex: isRegex, _showAdv: this.ui_expand_adv, _isTokenAlias: isTokenAlias, _isUserAlias: isUserAlias, disable_attachments: (v.attachments === false), force_plaintext: (v.force_plaintext === true), disable_persistence: (v.disable_persistence === true), ...v });
+                        this.mappings.push({
+                            _key: displayKey,
+                            _isRegex: isRegex,
+                            _showAdv: this.ui_expand_adv,
+                            _isTokenAlias: isTokenAlias,
+                            _isUserAlias: isUserAlias,
+                            _tokenAliasVal: isTokenAlias ? v.token : '',
+                            _tokenRaw: !isTokenAlias ? v.token : '',
+                            _userAliasVal: isUserAlias ? v.user : '',
+                            _userRaw: !isUserAlias ? v.user : '',
+                            _showToken: false,
+                            _showUser: false,
+                            disable_attachments: (v.attachments === false),
+                            force_plaintext: (v.force_plaintext === true),
+                            disable_persistence: (v.disable_persistence === true),
+                            ...v
+                        });
                     }
                 }
+
                 this.pushGlobals._isTokenAlias = this.vaultAppAliases.includes(po.token);
+                this.pushGlobals._tokenAliasVal = this.pushGlobals._isTokenAlias ? po.token : '';
+                this.pushGlobals._tokenRaw = !this.pushGlobals._isTokenAlias ? po.token : '';
+
                 this.pushGlobals._isUserAlias = this.vaultUserAliases.includes(po.user);
+                this.pushGlobals._userAliasVal = this.pushGlobals._isUserAlias ? po.user : '';
+                this.pushGlobals._userRaw = !this.pushGlobals._isUserAlias ? po.user : '';
+
                 this.pushGlobals.disable_attachments = (po.attachments === false);
                 this.pushGlobals.force_plaintext = (po.force_plaintext === true);
                 this.pushGlobals.disable_persistence = (po.disable_persistence === true);
@@ -481,6 +643,51 @@ HTML_TEMPLATE = """
                 if(!this.smtp.listeners) this.smtp.listeners = [];
                 if(!this.smtp.auth) this.smtp.auth = {};
             },
+
+            toggleAlias(obj, field) {
+                const flag = field === 'token' ? '_isTokenAlias' : '_isUserAlias';
+                const raw = field === 'token' ? '_tokenRaw' : '_userRaw';
+                const alias = field === 'token' ? '_tokenAliasVal' : '_userAliasVal';
+
+                if (obj[flag]) {
+                    obj[alias] = obj[field] || '';
+                    obj[field] = obj[raw] || '';
+                    obj[flag] = false;
+                } else {
+                    obj[raw] = obj[field] || '';
+                    obj[field] = obj[alias] || '';
+                    obj[flag] = true;
+                }
+            },
+
+            setVaultSort(col) {
+                if(this.vaultSortCol === col) { this.vaultSortDir = this.vaultSortDir === 1 ? -1 : 1; }
+                else { this.vaultSortCol = col; this.vaultSortDir = 1; }
+            },
+            setSmtpSort(col) {
+                if(this.smtpSortCol === col) { this.smtpSortDir = this.smtpSortDir === 1 ? -1 : 1; }
+                else { this.smtpSortCol = col; this.smtpSortDir = 1; }
+            },
+            get sortedVaultApp() {
+                return [...this.vaultApp].sort((a, b) => {
+                    if(this.vaultSortCol === 'name') return a.name.localeCompare(b.name) * this.vaultSortDir;
+                    else return (a.epoch - b.epoch) * this.vaultSortDir;
+                });
+            },
+            get sortedVaultUser() {
+                return [...this.vaultUser].sort((a, b) => {
+                    if(this.vaultSortCol === 'name') return a.name.localeCompare(b.name) * this.vaultSortDir;
+                    else return (a.epoch - b.epoch) * this.vaultSortDir;
+                });
+            },
+            get sortedSmtpAuth() {
+                const arr = Object.keys(this.smtp.auth || {}).map(k => ({ name: k, epoch: this.smtp_meta[k] || 0 }));
+                return arr.sort((a, b) => {
+                    if(this.smtpSortCol === 'name') return a.name.localeCompare(b.name) * this.smtpSortDir;
+                    else return (a.epoch - b.epoch) * this.smtpSortDir;
+                });
+            },
+
             formatTime(epoch) {
                 if(!epoch) return "Never"; const d = new Date(epoch * 1000);
                 if(this.ui_relative) {
@@ -501,36 +708,62 @@ HTML_TEMPLATE = """
                 if (this.ui_fmt.startsWith("DD")) { return `${dd}/${mm}/${yyyy} ${pad(hh)}:${min}:${ss}`; }
                 return `${yyyy}-${mm}-${dd} ${pad(hh)}:${min}:${ss}`;
             },
-            addMapping() { this.mappings.push({ _key: '', match: 'to', token: '', _isRegex: false, _isTokenAlias: false, _isUserAlias: false, _showAdv: this.ui_expand_adv, disable_attachments: false, force_plaintext: false, disable_persistence: false }); },
+            addMapping() {
+                this.mappings.push({
+                    _key: '', match: 'to', token: '', user: '', _isRegex: false, _isTokenAlias: false, _isUserAlias: false,
+                    _tokenAliasVal: '', _tokenRaw: '', _userAliasVal: '', _userRaw: '',
+                    _showToken: false, _showUser: false, _showAdv: this.ui_expand_adv, disable_attachments: false, force_plaintext: false, disable_persistence: false
+                });
+            },
             addListener() { this.smtp.listeners.push({ bind: '0.0.0.0:25', starttls: false, tls_cert_file: '', tls_key_file: '' }); },
             addSmtpUser() { if(!this.newSmtpUser || !this.newSmtpPass) return; this.smtp.auth[this.newSmtpUser] = "RAW:" + this.newSmtpPass; this.smtp_meta[this.newSmtpUser] = Math.floor(Date.now() / 1000); this.newSmtpUser = ''; this.newSmtpPass = ''; },
             addVaultToken() {
-                if(!this.newVaultName || !this.newVaultToken) return; const target = this.newVaultType === 'app' ? this.vaultApp : this.vaultUser; const existingIdx = target.findIndex(x => x.name === this.newVaultName);
-                if(existingIdx >= 0) { target[existingIdx].token = this.newVaultToken; target[existingIdx].epoch = Math.floor(Date.now() / 1000); } else { target.push({name: this.newVaultName, token: this.newVaultToken, epoch: Math.floor(Date.now() / 1000)}); }
-                if(this.newVaultType === 'app' && !this.vaultAppAliases.includes(this.newVaultName)) this.vaultAppAliases.push(this.newVaultName);
-                if(this.newVaultType === 'user' && !this.vaultUserAliases.includes(this.newVaultName)) this.vaultUserAliases.push(this.newVaultName);
-                this.newVaultName = ''; this.newVaultToken = '';
+                if(!this.newVaultName || !this.newVaultToken) return;
+                const nName = this.newVaultName.trim(); const nTok = this.newVaultToken.trim();
+                if(!nName || !nTok) return;
+                const target = this.newVaultType === 'app' ? this.vaultApp : this.vaultUser;
+                const existingIdx = target.findIndex(x => x.name === nName);
+
+                if(existingIdx >= 0) { target[existingIdx].token = nTok; target[existingIdx].epoch = Math.floor(Date.now() / 1000); }
+                else { target.push({name: nName, token: nTok, epoch: Math.floor(Date.now() / 1000)}); }
+
+                if(this.newVaultType === 'app' && !this.vaultAppAliases.includes(nName)) this.vaultAppAliases.push(nName);
+                if(this.newVaultType === 'user' && !this.vaultUserAliases.includes(nName)) this.vaultUserAliases.push(nName);
+                this.newVaultName = ''; this.newVaultToken = ''; this.showNewVaultToken = false;
             },
-            deleteVaultToken(type, idx) {
-                const targetArr = type === 'app' ? this.vaultApp : this.vaultUser; const aliasName = targetArr[idx].name; let inUse = false;
-                if(type === 'app') { if(this.pushGlobals._isTokenAlias && this.pushGlobals.token === aliasName) inUse = true; this.mappings.forEach(m => { if(m._isTokenAlias && m.token === aliasName) inUse = true; }); } else { if(this.pushGlobals._isUserAlias && this.pushGlobals.user === aliasName) inUse = true; this.mappings.forEach(m => { if(m._isUserAlias && m.user === aliasName) inUse = true; }); }
+            deleteVaultToken(type, aliasName) {
+                const targetArr = type === 'app' ? this.vaultApp : this.vaultUser;
+                const idx = targetArr.findIndex(x => x.name === aliasName);
+                if(idx === -1) return;
+                let inUse = false;
+                if(type === 'app') { if(this.pushGlobals._isTokenAlias && this.pushGlobals.token === aliasName) inUse = true; this.mappings.forEach(m => { if(m._isTokenAlias && m.token === aliasName) inUse = true; }); }
+                else { if(this.pushGlobals._isUserAlias && this.pushGlobals.user === aliasName) inUse = true; this.mappings.forEach(m => { if(m._isUserAlias && m.user === aliasName) inUse = true; }); }
                 if(inUse) { alert(`Error: Alias '${aliasName}' is actively assigned to an email route. Reconfigure your Pushover Rules before deleting.`); return; }
-                targetArr.splice(idx, 1); if(type === 'app') this.vaultAppAliases = this.vaultAppAliases.filter(a => a !== aliasName); if(type === 'user') this.vaultUserAliases = this.vaultUserAliases.filter(a => a !== aliasName);
+                targetArr.splice(idx, 1);
+                if(type === 'app') this.vaultAppAliases = this.vaultAppAliases.filter(a => a !== aliasName);
+                if(type === 'user') this.vaultUserAliases = this.vaultUserAliases.filter(a => a !== aliasName);
             },
-            openEditModal(type, name, subType='', idx=null) { this.editModal.type = type; this.editModal.subType = subType; this.editModal.name = name; this.editModal.idx = idx; this.editModal.value = ''; this.editModal.open = true; },
+            openEditModal(type, name, subType='') { this.editModal.type = type; this.editModal.subType = subType; this.editModal.name = name; this.editModal.value = ''; this.editModal.showToken = false; this.editModal.open = true; },
             saveEditModal() {
                 if(!this.editModal.value) return;
-                if(this.editModal.type === 'smtp') { this.smtp.auth[this.editModal.name] = "RAW:" + this.editModal.value; this.smtp_meta[this.editModal.name] = Math.floor(Date.now() / 1000); } else if(this.editModal.type === 'vault') { const target = this.editModal.subType === 'app' ? this.vaultApp : this.vaultUser; target[this.editModal.idx].token = this.editModal.value; target[this.editModal.idx].epoch = Math.floor(Date.now() / 1000); }
+                const v = this.editModal.value.trim();
+                if(!v) return;
+                if(this.editModal.type === 'smtp') { this.smtp.auth[this.editModal.name] = "RAW:" + v; this.smtp_meta[this.editModal.name] = Math.floor(Date.now() / 1000); }
+                else if(this.editModal.type === 'vault') {
+                    const target = this.editModal.subType === 'app' ? this.vaultApp : this.vaultUser;
+                    const idx = target.findIndex(x => x.name === this.editModal.name);
+                    if(idx !== -1) { target[idx].token = v; target[idx].epoch = Math.floor(Date.now() / 1000); }
+                }
                 this.editModal.open = false;
             },
             preparePayload() {
-                const finalPushover = { ...this.pushGlobals }; finalPushover.attachments = !this.pushGlobals.disable_attachments; delete finalPushover.disable_attachments; delete finalPushover._isTokenAlias; delete finalPushover._isUserAlias;
+                const finalPushover = { ...this.pushGlobals }; finalPushover.attachments = !this.pushGlobals.disable_attachments; delete finalPushover.disable_attachments; delete finalPushover._isTokenAlias; delete finalPushover._isUserAlias; delete finalPushover._showToken; delete finalPushover._showUser; delete finalPushover._tokenRaw; delete finalPushover._tokenAliasVal; delete finalPushover._userRaw; delete finalPushover._userAliasVal;
                 ['priority', 'retry', 'expire', 'ttl'].forEach(p => { if (finalPushover[p] === '' || finalPushover[p] === null || finalPushover[p] === undefined) delete finalPushover[p]; else finalPushover[p] = parseInt(finalPushover[p], 10); });
                 ['device', 'url', 'url_title', 'sound', 'tags', 'user'].forEach(p => { if (finalPushover[p] === '') delete finalPushover[p]; });
                 this.mappings.forEach(m => {
                     if(m._key && m._key.trim() !== '') {
                         let k = m._key.trim(); if (m._isRegex && !k.toLowerCase().startsWith('regex:')) { k = 'regex:' + k; }
-                        const { _key, _showAdv, _isTokenAlias, _isUserAlias, _isRegex, disable_attachments, ...rest } = m; rest.attachments = !disable_attachments;
+                        const { _key, _showAdv, _isTokenAlias, _isUserAlias, _isRegex, _showToken, _showUser, _tokenRaw, _tokenAliasVal, _userRaw, _userAliasVal, disable_attachments, ...rest } = m; rest.attachments = !disable_attachments;
                         ['priority', 'retry', 'expire', 'ttl'].forEach(p => { if (rest[p] === '' || rest[p] === null || rest[p] === undefined) delete rest[p]; else rest[p] = parseInt(rest[p], 10); });
                         ['device', 'url', 'url_title', 'sound', 'tags', 'user'].forEach(p => { if (rest[p] === '') delete rest[p]; }); finalPushover[k] = rest;
                     }
@@ -597,6 +830,8 @@ async def index():
         ui_port=ui_config.get("port", 8443),
         ui_https=ui_config.get("https", True),
         ui_expand_adv=ui_config.get("expand_adv", False),
+        ui_vault_sort=ui_config.get("vault_sort", "name_asc"),
+        ui_smtp_sort=ui_config.get("smtp_sort", "name_asc"),
         ui_tz=ui_config.get("timezone", "UTC"),
         ui_fmt=ui_config.get("date_format", "YYYY-MM-DD HH:mm:ss"),
         ui_relative=ui_config.get("relative_time", True),
@@ -649,11 +884,13 @@ async def save_vault_state(vault_json: str = Form(...)):
 @app.post("/save/ui")
 async def save_ui(
     port: int = Form(...), timezone: str = Form(...), date_format: str = Form(...),
-    relative_time: bool = Form(False), expand_adv: bool = Form(False), https: bool = Form(False), tls_cert: str = Form(""), tls_key: str = Form("")
+    relative_time: bool = Form(False), expand_adv: bool = Form(False), https: bool = Form(False), tls_cert: str = Form(""), tls_key: str = Form(""),
+    vault_sort: str = Form("name_asc"), smtp_sort: str = Form("name_asc")
 ):
     ui_config = {
         "port": port, "timezone": timezone, "date_format": date_format,
-        "relative_time": relative_time, "expand_adv": expand_adv, "https": https, "tls_cert": tls_cert, "tls_key": tls_key
+        "relative_time": relative_time, "expand_adv": expand_adv, "https": https, "tls_cert": tls_cert, "tls_key": tls_key,
+        "vault_sort": vault_sort, "smtp_sort": smtp_sort
     }
     save_json(UI_CONFIG_FILE, ui_config)
     # Native signal handler notification triggers loop rotation
@@ -676,18 +913,16 @@ def generate_ui_cert():
     return cert_path, key_path
 
 if __name__ == "__main__":
-    # Standardize OS signal parities with the gateway daemon
     signal.signal(signal.SIGINT, lambda s, f: ui_shutdown_event.set())
     signal.signal(signal.SIGTERM, lambda s, f: ui_shutdown_event.set())
     if hasattr(signal, 'SIGUSR1'): signal.signal(signal.SIGUSR1, lambda s, f: ui_reload_listeners_event.set())
     if hasattr(signal, 'SIGUSR2'): signal.signal(signal.SIGUSR2, lambda s, f: ui_reload_configs_event.set())
 
     while not ui_shutdown_event.is_set():
-        # Configuration Hot-Reload Trigger (SIGUSR2 parity mapping)
         if ui_reload_configs_event.is_set():
             ui_reload_configs_event.clear()
-            logging.info("Caught SIGUSR2 inside UI process space. Performing configurations hot-reload...")
             # Re-read configurations seamlessly from disk context. FastAPI intercepts state on pull.
+            logging.info("Caught SIGUSR2 inside UI process space. Configuration cache cleared.")
 
         ui_config = load_clean_json(UI_CONFIG_FILE)
         port = ui_config.get("port", 8443)
@@ -704,11 +939,13 @@ if __name__ == "__main__":
         t = threading.Thread(target=server.run)
         t.start()
 
-        # Monitor state and execution flags continuously
         while t.is_alive():
-            if ui_reload_listeners_event.is_set() or ui_reload_configs_event.is_set() or ui_shutdown_event.is_set():
+            if ui_reload_configs_event.is_set():
+                ui_reload_configs_event.clear()
+                logging.info("Caught SIGUSR2 inside UI process space. Configuration cache cleared.")
+
+            if ui_reload_listeners_event.is_set() or ui_shutdown_event.is_set():
                 server.should_exit = True
-                # Clean loop control flags without dropping active processes
                 if ui_reload_listeners_event.is_set():
                     ui_reload_listeners_event.clear()
                     logging.info("Caught SIGUSR1 inside UI process space. Hot-reloading network port binders...")
