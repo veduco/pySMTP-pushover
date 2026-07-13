@@ -800,9 +800,9 @@ def signal_smtp_app(restart_listeners=False):
         return True
     except ProcessLookupError: return False
 
-@app.get("/healthcheck", response_class=PlainTextResponse)
-async def healthcheck():
-    return "OK"
+@app.api_route("/healthcheck", methods=["GET", "HEAD"])
+async def healthcheck_endpoint(request: Request):
+    return {"status": "healthy"}
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
