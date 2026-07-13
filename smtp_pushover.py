@@ -413,6 +413,10 @@ class PushoverSMTPHandler:
                 elif body_plain_processed is not None:
                     final_body = body_plain_processed
                     is_html = False
+                elif body_html_processed is not None:
+                    logging.warning(f"Route targeting token '{route.get('token')}' forced plaintext, but no text/plain part was found. Falling back to HTML payload.")
+                    final_body = body_html_processed
+                    is_html = True
                 else:
                     final_body = "(No message body)"
                     is_html = False
