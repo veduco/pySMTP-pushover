@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gateway Setup</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #f4f4f9; --surface-color: #ffffff; --text-color: #333333;
+            --border-color: #cccccc; --primary-color: #007bff; --primary-hover: #0056b3;
+            --warning-color: #f59e0b; --warning-hover: #d97706;
+            --danger-color: #dc3545; --danger-hover: #c82333; --input-bg: #ffffff;
+            --secondary-bg: #f8f9fa;
+        }
+        [data-theme="dark"] {
+            --bg-color: #121212; --surface-color: #1e1e1e; --text-color: #e0e0e0;
+            --border-color: #444444; --primary-color: #3b82f6; --primary-hover: #2563eb;
+            --warning-color: #f59e0b; --warning-hover: #d97706;
+            --danger-color: #ef4444; --danger-hover: #dc2626; --input-bg: #2a2a35;
+            --secondary-bg: #18181b;
+        }
+        body { background: var(--bg-color); color: var(--text-color); font-family: system-ui, sans-serif; transition: background 0.3s; margin: 0; padding: 2rem; box-sizing: border-box; }
+        .container { max-width: 100%; box-sizing: border-box; margin: auto; background: var(--surface-color); padding: 2rem; border-radius: 8px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .tabs { display: flex; gap: 1rem; border-bottom: 2px solid var(--border-color); margin-bottom: 1.5rem; padding-bottom: 0.5rem; flex-wrap: wrap; }
+        .tab { padding: 0.5rem 1rem; cursor: pointer; border-radius: 4px; }
+        .tab.active { background: var(--primary-color); color: white; font-weight: bold; }
+        .card { border: 1px solid var(--border-color); padding: 1.5rem; border-radius: 6px; margin-bottom: 1.5rem; background: var(--surface-color); }
+        .adv-card { border-left: 4px solid var(--primary-color); padding: 1rem 1rem 0.5rem 1.5rem; background: var(--secondary-bg); margin-bottom: 1rem; border-radius: 0 4px 4px 0; }
+        .flex-row { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; align-items: flex-end; }
+        .flex-col { flex: 1; min-width: 200px; }
+        label { display: block; font-weight: bold; margin-bottom: 0.25rem; font-size: 0.9rem; }
+        input, select, textarea { width: 100%; padding: 0.5rem; box-sizing: border-box; background: var(--input-bg); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 4px; }
+        button { background: var(--primary-color); color: white; padding: 0.5rem 1rem; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; display: inline-flex; align-items: center; justify-content: center; }
+        button:hover { background: var(--primary-hover); }
+        button.warning { background: var(--warning-color); }
+        button.warning:hover { background: var(--warning-hover); }
+        button.danger { background: var(--danger-color); }
+        button.danger:hover { background: var(--danger-hover); }
+        button.outline { background: transparent; color: var(--primary-color); border: 1px solid var(--primary-color); }
+        button.outline:hover { background: var(--primary-color); color: white; }
+        .header-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem; }
+        .success { color: #10b981; font-weight: bold; margin-top: 1rem; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        th, td { border: 1px solid var(--border-color); padding: 0.75rem; text-align: left; }
+        th { background: var(--secondary-bg); }
+        .table-col-min { width: 1%; white-space: nowrap; }
+        .time-display { cursor: help; border-bottom: 1px dashed var(--text-color); }
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .modal-content { background: var(--surface-color); padding: 2rem; border-radius: 8px; width: 400px; max-width: 90%; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); border: 1px solid var(--border-color); }
+        .token-input { width: 42ch; max-width: 100%; }
+        .auto-width { width: auto; max-width: 100%; }
+
+        .toggle-switch { position: relative; display: inline-block; width: 36px; height: 18px; margin-right: 0.5rem; flex-shrink: 0; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; margin: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--border-color); transition: .3s; border-radius: 18px; }
+        .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 2px; bottom: 2px; background-color: white; transition: .3s; border-radius: 50%; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+        .toggle-switch input:checked + .slider { background-color: var(--primary-color); }
+        .toggle-switch input:checked + .slider:before { transform: translateX(18px); }
+        .toggle-label { display: flex; align-items: center; cursor: pointer; font-weight: normal; font-size: 0.85rem; color: var(--text-color); margin: 0; }
+
+        .segment-track { position: relative; display: inline-flex; background: var(--input-bg); border-radius: 20px; padding: 3px; border: 1px solid var(--border-color); }
+        .segment-thumb { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); background: var(--primary-color); border-radius: 18px; transition: transform 0.25s cubic-bezier(0.4, 0.0, 0.2, 1); box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+        .segment-label { position: relative; z-index: 1; padding: 0.3rem 1rem; margin: 0; cursor: pointer; text-align: center; flex: 1; font-size: 0.85rem; font-weight: bold; transition: color 0.25s, opacity 0.25s; user-select: none; }
+        .segment-track input[type="radio"] { display: none; }
+
+        .theme-toggle { position: relative; display: inline-flex; align-items: center; justify-content: space-between; width: 56px; height: 28px; background-color: var(--input-bg); border-radius: 14px; cursor: pointer; border: 1px solid var(--border-color); box-sizing: border-box; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1); transition: background-color 0.3s; }
+        .theme-toggle .toggle-circle { position: absolute; top: 1px; left: 1px; width: 24px; height: 24px; background-color: var(--primary-color); border-radius: 50%; transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1); box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+        [data-theme="dark"] .theme-toggle .toggle-circle { transform: translateX(28px); background-color: var(--primary-color); }
+        .theme-toggle svg { stroke: var(--text-color); z-index: 1; pointer-events: none; }
+        [data-theme="dark"] .theme-toggle svg { stroke: var(--text-color); }
+        .table-sort { cursor: pointer; user-select: none; }
+        .table-sort:hover { background-color: var(--border-color); }
+    </style>
+</head>
+<body x-data="gatewaySettings()">
+    <div class="container">
+        <div class="header-controls">
+            <h1>Gateway Configuration</h1>
+            <div class="theme-toggle" @click="theme = (theme === 'dark' ? 'light' : 'dark')" title="Toggle Dark Mode">
+                <div class="toggle-circle"></div>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; margin-left: 5px;"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; margin-right: 5px;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <div class="tab" :class="{ 'active': tab === 'routes' }" @click="tab = 'routes'">Routes</div>
+            <div class="tab" :class="{ 'active': tab === 'pushover' }" @click="tab = 'pushover'">Pushover Settings</div>
+            <div class="tab" :class="{ 'active': tab === 'smarthost' }" @click="tab = 'smarthost'">Smarthost Settings</div>
+            <div class="tab" :class="{ 'active': tab === 'server' }" @click="tab = 'server'">SMTP Server</div>
+            <div class="tab" :class="{ 'active': tab === 'ui' }" @click="tab = 'ui'">UI Settings</div>
+        </div>
+
+        <form hx-post="/save/config" hx-target="#status" @submit="document.getElementById('config_payload').value = preparePayload()">
+            <input type="hidden" name="config_json" id="config_payload">
+
+            <div x-show="tab === 'routes'">
+                <div class="card">
+                    <h3>Email Maps & Routes (Drag to Reorder)</h3>
+                    <template x-for="(map, idx) in mappings" :key="map._uid">
+                        <div class="card"
+                             style="background: var(--bg-color); transition: all 0.2s ease; display: flex;"
+                             :style="dragHover === idx ? 'border-color: var(--primary-color); transform: scale(1.01); box-shadow: 0 4px 12px rgba(0,0,0,0.1);' : ''"
+                             draggable="true"
+                             @dragstart="draggedRouteIdx = idx; $event.dataTransfer.effectAllowed = 'move';"
+                             @dragenter.prevent="dragHover = idx"
+                             @dragover.prevent="$event.dataTransfer.dropEffect = 'move'"
+                             @dragleave.prevent="if(dragHover === idx) dragHover = null;"
+                             @drop.prevent="dragHover = null; reorderRoute(draggedRouteIdx, idx)">
+
+                            <div style="cursor: grab; padding: 0.5rem 1rem 0.5rem 0; color: var(--text-color); opacity: 0.4; display: flex; align-items: center;" title="Drag to reorder">
+                                <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                            </div>
+
+                            <div style="flex: 1;">
+                                <div class="flex-row" style="align-items: flex-start;">
+                                    <div style="flex: 0 0 auto;"><label>Match Type</label><select class="auto-width" x-model="map.match"><option value="to">To (Recipient)</option><option value="from">From (Sender)</option><option value="both">Both</option></select></div>
+                                    <div style="flex: 1; min-width: 200px;">
+                                        <div style="display: flex; align-items: center; justify-content: flex-start; gap: 1.5rem; margin-bottom: 0.25rem;">
+                                            <label style="margin: 0;">Email Address</label>
+                                            <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="map._isRegex"><span class="slider"></span></div> Use Regex</label>
+                                        </div>
+                                        <input type="text" x-model="map._key" placeholder="user@domain.com or ^.*@domain\\.com$" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+                                    </div>
+                                    <div style="flex: 0 0 auto;">
+                                        <label style="margin-bottom: 0.25rem;">Routing Method</label>
+                                        <div class="segment-track">
+                                            <div class="segment-thumb" :style="map.method === 'pushover' ? 'transform: translateX(0);' : 'transform: translateX(100%);'"></div>
+                                            <label class="segment-label" :style="map.method === 'pushover' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'">
+                                                <input type="radio" x-model="map.method" value="pushover"> Pushover
+                                            </label>
+                                            <label class="segment-label" :style="map.method === 'smarthost' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'">
+                                                <input type="radio" x-model="map.method" value="smarthost"> Smarthost
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <template x-if="map.method === 'pushover'">
+                                        <div style="flex: 0 0 auto;">
+                                            <div style="display: flex; align-items: center; justify-content: flex-start; gap: 1.5rem; margin-bottom: 0.25rem;">
+                                                <label style="margin: 0;">App Token</label>
+                                                <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" :checked="map._isTokenAlias" @change="toggleAlias(map, 'token')"><span class="slider"></span></div> Use Alias</label>
+                                            </div>
+                                            <template x-if="!map._isTokenAlias">
+                                                <div class="token-input" style="position: relative; display: inline-block;">
+                                                    <input :type="map._showToken ? 'text' : 'password'" x-model="map.token" maxlength="30" placeholder="Required Override" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                                                    <div @click="map._showToken = !map._showToken" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
+                                                        <svg x-show="!map._showToken" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                                        <svg x-show="map._showToken" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                            <template x-if="map._isTokenAlias">
+                                                <select class="auto-width" x-model="map.token">
+                                                    <option value="">-- Select App Alias --</option>
+                                                    <template x-for="v in sortedVaultApp" :key="v.name"><option :value="v.name" x-text="v.name" :selected="map.token === v.name"></option></template>
+                                                </select>
+                                            </template>
+                                        </div>
+                                    </template>
+
+                                    <template x-if="map.method === 'smarthost'">
+                                        <div style="flex: 0 0 auto;">
+                                            <label style="margin-bottom: 0.25rem;">Smarthost Alias</label>
+                                            <select class="auto-width token-input" x-model="map.smarthost_alias">
+                                                <option value="">-- Select Smarthost --</option>
+                                                <template x-for="sh in sortedSmarthostKeys" :key="sh"><option :value="sh" x-text="sh" :selected="map.smarthost_alias === sh"></option></template>
+                                            </select>
+                                        </div>
+                                    </template>
+                                </div>
+
+                                <button type="button" class="outline" @click="map._showAdv = !map._showAdv" style="margin-bottom: 1rem; font-size: 0.8rem; padding: 0.3rem 0.5rem;"><span x-text="map._showAdv ? 'Hide Route Settings' : 'Show Route Settings'"></span></button>
+
+                                <div x-show="map._showAdv" class="adv-card">
+                                    <template x-if="map.method === 'pushover'">
+                                        <div>
+                                            <div class="flex-row" style="margin-bottom: 1.5rem; justify-content: flex-start;">
+                                                <div style="flex: 0 0 auto;">
+                                                    <div style="display: flex; align-items: center; justify-content: flex-start; gap: 1.5rem; margin-bottom: 0.25rem;">
+                                                        <label style="margin: 0;">User Key Override</label>
+                                                        <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" :checked="map._isUserAlias" @change="toggleAlias(map, 'user')"><span class="slider"></span></div> Use Alias</label>
+                                                    </div>
+                                                    <template x-if="!map._isUserAlias">
+                                                        <div class="token-input" style="position: relative; display: inline-block;">
+                                                            <input :type="map._showUser ? 'text' : 'password'" x-model="map.user" maxlength="30" placeholder="Inherit Global" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                                                            <div @click="map._showUser = !map._showUser" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
+                                                                <svg x-show="!map._showUser" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                                                <svg x-show="map._showUser" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                                                            </div>
+                                                        </div>
+                                                    </template>
+                                                    <template x-if="map._isUserAlias">
+                                                        <select class="auto-width" x-model="map.user">
+                                                            <option value="">-- Inherit Global --</option>
+                                                            <template x-for="v in sortedVaultUser" :key="v.name"><option :value="v.name" x-text="v.name" :selected="map.user === v.name"></option></template>
+                                                        </select>
+                                                    </template>
+                                                </div>
+                                                <div style="flex: 0 0 auto;"><label>Priority Override</label><select class="auto-width" x-model="map.priority"><option value="">Inherit Global</option><option value="-2">Lowest (-2)</option><option value="-1">Low (-1)</option><option value="0">Normal (0)</option><option value="1">High (1)</option><option value="2">Emergency (2)</option></select></div>
+                                                <div class="flex-col" style="flex: 1; min-width: 150px;"><label>Target Device</label><input type="text" x-model="map.device" placeholder="Inherit Global" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
+                                            </div>
+
+                                            <div class="flex-row" x-show="map.priority == 2" style="margin-bottom: 1rem;">
+                                                <div style="flex: 0 0 auto;"><label>Retry (sec)</label><input type="number" x-model.number="map.retry" min="30" style="width: 120px;"></div>
+                                                <div style="flex: 0 0 auto;"><label>Expire (sec)</label><input type="number" x-model.number="map.expire" max="10800" style="width: 120px;"></div>
+                                            </div>
+
+                                            <div class="flex-row" style="margin-bottom: 0.5rem;"><div class="flex-col" style="flex: 1; min-width: 200px;"><label>Supplementary URL</label><input type="text" x-model="map.url" placeholder="Inherit Global" maxlength="512" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div></div>
+                                            <div class="flex-row" style="margin-bottom: 1rem;"><div style="flex: 0 0 auto;"><label>URL Title</label><input type="text" x-model="map.url_title" placeholder="Inherit Global" maxlength="100" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100ch; max-width: 100%;"></div></div>
+                                        </div>
+                                    </template>
+
+                                    <div class="flex-row" style="gap: 1.5rem; margin-top: 1rem;">
+                                        <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="map.disable_attachments"><span class="slider"></span></div> Disable Attachments</label>
+                                        <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="map.force_plaintext"><span class="slider"></span></div> Force Plaintext Formatting</label>
+                                    </div>
+                                </div>
+
+                                <div style="text-align: right;"><button type="button" class="danger" @click="mappings.splice(idx, 1)" title="Remove Mapping"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></div>
+                            </div>
+                        </div>
+                    </template>
+                    <button type="button" @click="addMapping()">+ Add Mapping</button>
+                </div>
+            </div>
+
+            <div x-show="tab === 'pushover'">
+                <div class="card">
+                    <h3>Global API Fallbacks</h3>
+
+                    <div class="flex-row" style="margin-bottom: 0.75rem;">
+                        <div style="flex: 0 0 auto;">
+                            <div style="display: flex; align-items: center; justify-content: flex-start; gap: 1.5rem; margin-bottom: 0.25rem;">
+                                <label style="margin: 0;">Default App Token</label>
+                                <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" :checked="pushGlobals._isTokenAlias" @change="toggleAlias(pushGlobals, 'token')"><span class="slider"></span></div> Use Alias</label>
+                            </div>
+                            <template x-if="!pushGlobals._isTokenAlias">
+                                <div class="token-input" style="position: relative; display: inline-block;">
+                                    <input :type="pushGlobals._showToken ? 'text' : 'password'" x-model="pushGlobals.token" maxlength="30" placeholder="Required for Catch-All" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                                    <div @click="pushGlobals._showToken = !pushGlobals._showToken" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
+                                        <svg x-show="!pushGlobals._showToken" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                        <svg x-show="pushGlobals._showToken" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                                    </div>
+                                </div>
+                            </template>
+                            <template x-if="pushGlobals._isTokenAlias">
+                                <select class="auto-width" x-model="pushGlobals.token">
+                                    <option value="">-- Select App Alias --</option>
+                                    <template x-for="v in sortedVaultApp" :key="v.name"><option :value="v.name" x-text="v.name" :selected="pushGlobals.token === v.name"></option></template>
+                                </select>
+                            </template>
+                        </div>
+                    </div>
+
+                    <div class="flex-row">
+                        <div style="flex: 0 0 auto;">
+                            <div style="display: flex; align-items: center; justify-content: flex-start; gap: 1.5rem; margin-bottom: 0.25rem;">
+                                <label style="margin: 0;">Default User Key</label>
+                                <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" :checked="pushGlobals._isUserAlias" @change="toggleAlias(pushGlobals, 'user')"><span class="slider"></span></div> Use Alias</label>
+                            </div>
+                            <template x-if="!pushGlobals._isUserAlias">
+                                <div class="token-input" style="position: relative; display: inline-block;">
+                                    <input :type="pushGlobals._showUser ? 'text' : 'password'" x-model="pushGlobals.user" maxlength="30" placeholder="Required for Catch-All" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                                    <div @click="pushGlobals._showUser = !pushGlobals._showUser" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
+                                        <svg x-show="!pushGlobals._showUser" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                        <svg x-show="pushGlobals._showUser" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                                    </div>
+                                </div>
+                            </template>
+                            <template x-if="pushGlobals._isUserAlias">
+                                <select class="auto-width" x-model="pushGlobals.user">
+                                    <option value="">-- Select User Alias --</option>
+                                    <template x-for="v in sortedVaultUser" :key="v.name"><option :value="v.name" x-text="v.name" :selected="pushGlobals.user === v.name"></option></template>
+                                </select>
+                            </template>
+                        </div>
+                    </div>
+
+                    <button type="button" class="outline" @click="showGlobalAdv = !showGlobalAdv" style="margin-bottom: 1rem; margin-top: 0.5rem;"><span x-text="showGlobalAdv ? 'Hide Advanced Globals' : 'Show Advanced Globals'"></span></button>
+
+                    <div x-show="showGlobalAdv" class="adv-card">
+                        <div class="flex-row" style="margin-bottom: 1rem;">
+                            <div style="flex: 0 0 auto;">
+                                <label>Priority</label>
+                                <select class="auto-width" x-model="pushGlobals.priority">
+                                    <option value="">Default (0)</option><option value="-2">Lowest (-2)</option><option value="-1">Low (-1)</option><option value="0">Normal (0)</option><option value="1">High (1)</option><option value="2">Emergency (2)</option>
+                                </select>
+                            </div>
+                            <div class="flex-col" style="flex: 1; min-width: 200px;"><label>Target Device</label><input type="text" x-model="pushGlobals.device" placeholder="All Devices" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
+                        </div>
+                        <div class="flex-row" x-show="pushGlobals.priority == 2" style="margin-bottom: 1rem;">
+                            <div style="flex: 0 0 auto;"><label>Retry (sec) &gt;= 30</label><input type="number" x-model.number="pushGlobals.retry" min="30" style="width: 120px;"></div>
+                            <div style="flex: 0 0 auto;"><label>Expire (sec) &lt;= 10800</label><input type="number" x-model.number="pushGlobals.expire" max="10800" style="width: 120px;"></div>
+                        </div>
+                        <div class="flex-row" style="margin-bottom: 1rem;"><div class="flex-col" style="flex: 1; min-width: 200px;"><label>Supplementary URL</label><input type="text" x-model="pushGlobals.url" placeholder="Optional" maxlength="512" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div></div>
+                        <div class="flex-row" style="margin-bottom: 1rem;"><div style="flex: 0 0 auto;"><label>URL Title</label><input type="text" x-model="pushGlobals.url_title" placeholder="Optional" maxlength="100" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100ch; max-width: 100%;"></div></div>
+                    </div>
+
+                    <div class="flex-row" style="gap: 1.5rem; margin-top: 0.5rem;">
+                        <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="pushGlobals.disable_attachments"><span class="slider"></span></div> Disable Attachments</label>
+                        <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="pushGlobals.force_plaintext"><span class="slider"></span></div> Force Plaintext Formatting</label>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>API Token Vault</h3>
+                    <p>Store your raw Pushover tokens and User Keys here safely to map as Aliases.</p>
+                    <div class="flex-row" style="gap: 1rem; align-items: flex-end; justify-content: flex-start; margin-bottom: 1rem;">
+                        <div style="flex: 0 0 auto;">
+                            <label style="margin-bottom: 0.25rem;">Token Type</label>
+                            <div class="segment-track">
+                                <div class="segment-thumb" :style="newVaultType === 'app' ? 'transform: translateX(0);' : 'transform: translateX(100%);'"></div>
+                                <label class="segment-label" :style="newVaultType === 'app' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'">
+                                    <input type="radio" x-model="newVaultType" value="app"> App Token
+                                </label>
+                                <label class="segment-label" :style="newVaultType === 'user' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'">
+                                    <input type="radio" x-model="newVaultType" value="user"> User Key
+                                </label>
+                            </div>
+                        </div>
+                        <div style="flex: 1; min-width: 150px;"><label>Alias Name</label><input type="text" x-model="newVaultName" required autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
+                        <div style="flex: 0 0 auto;">
+                            <label>Token Value</label>
+                            <div class="token-input" style="position: relative; display: inline-block;">
+                                <input :type="showNewVaultToken ? 'text' : 'password'" x-model="newVaultToken" maxlength="30" required autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                                <div @click="showNewVaultToken = !showNewVaultToken" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
+                                    <svg x-show="!showNewVaultToken" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                    <svg x-show="showNewVaultToken" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="flex: 0 0 auto; display: flex; gap: 0.5rem;"><button type="button" @click="addVaultToken()">Add Token</button><button type="button" class="outline" @click="newVaultName=''; newVaultToken='';">Clear</button></div>
+                    </div>
+
+                    <hr>
+                    <h4>Current App Token Aliases</h4>
+                    <table style="margin-bottom: 2rem;">
+                        <thead>
+                            <tr>
+                                <th class="table-sort" style="width: auto;" @click="setVaultSort('name')">Alias Name <span style="font-size: 0.8em;" x-show="vaultSortCol==='name'" x-text="vaultSortDir===1 ? '▲' : '▼'"></span></th>
+                                <th class="table-sort table-col-min" @click="setVaultSort('epoch')">Last Modification <span style="font-size: 0.8em;" x-show="vaultSortCol==='epoch'" x-text="vaultSortDir===1 ? '▲' : '▼'"></span></th>
+                                <th class="table-col-min">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="v in sortedVaultApp" :key="v.name">
+                                <tr>
+                                    <td><strong x-text="v.name"></strong></td>
+                                    <td class="table-col-min"><span class="time-display" x-text="formatTime(v.epoch)" :title="getFullTime(v.epoch)"></span></td>
+                                    <td class="table-col-min"><div style="display: flex; gap: 0.5rem;"><button type="button" class="outline" @click="openEditModal('vault', v.name, 'app')">Modify Secret</button><button type="button" class="danger" @click="deleteVaultToken('app', v.name)" title="Delete Alias"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></div></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+
+                    <h4>Current User Token Aliases</h4>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="table-sort" style="width: auto;" @click="setVaultSort('name')">Alias Name <span style="font-size: 0.8em;" x-show="vaultSortCol==='name'" x-text="vaultSortDir===1 ? '▲' : '▼'"></span></th>
+                                <th class="table-sort table-col-min" @click="setVaultSort('epoch')">Last Modification <span style="font-size: 0.8em;" x-show="vaultSortCol==='epoch'" x-text="vaultSortDir===1 ? '▲' : '▼'"></span></th>
+                                <th class="table-col-min">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="v in sortedVaultUser" :key="v.name">
+                                <tr>
+                                    <td><strong x-text="v.name"></strong></td>
+                                    <td class="table-col-min"><span class="time-display" x-text="formatTime(v.epoch)" :title="getFullTime(v.epoch)"></span></td>
+                                    <td class="table-col-min"><div style="display: flex; gap: 0.5rem;"><button type="button" class="outline" @click="openEditModal('vault', v.name, 'user')">Modify Secret</button><button type="button" class="danger" @click="deleteVaultToken('user', v.name)" title="Delete Alias"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></div></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div x-show="tab === 'smarthost'">
+                <div class="card">
+                    <h3>Global Smarthost Fallbacks</h3>
+                    <div class="flex-row" style="margin-bottom: 0.75rem;">
+                        <div style="flex: 0 0 auto;">
+                            <label style="margin-bottom: 0.25rem;">Smarthost Alias</label>
+                            <select class="auto-width token-input" x-model="smartGlobals.alias">
+                                <option value="">-- Select Smarthost --</option>
+                                <template x-for="sh in sortedSmarthostKeys" :key="sh"><option :value="sh" x-text="sh" :selected="smartGlobals.alias === sh"></option></template>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex-row" style="gap: 1.5rem; margin-top: 1rem;">
+                        <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="smartGlobals.disable_attachments"><span class="slider"></span></div> Disable Attachments</label>
+                        <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="smartGlobals.force_plaintext"><span class="slider"></span></div> Force Plaintext Formatting</label>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>Smarthost Aliases</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="table-sort" style="width: auto;" @click="setSmarthostSort('alias')">Alias Name <span style="font-size: 0.8em;" x-show="smarthostSortCol==='alias'" x-text="smarthostSortDir===1 ? '▲' : '▼'"></span></th>
+                                <th class="table-sort" @click="setSmarthostSort('address')">Address <span style="font-size: 0.8em;" x-show="smarthostSortCol==='address'" x-text="smarthostSortDir===1 ? '▲' : '▼'"></span></th>
+                                <th class="table-sort table-col-min" @click="setSmarthostSort('starttls')">STARTTLS <span style="font-size: 0.8em;" x-show="smarthostSortCol==='starttls'" x-text="smarthostSortDir===1 ? '▲' : '▼'"></span></th>
+                                <th class="table-sort table-col-min" @click="setSmarthostSort('auth')">AUTH <span style="font-size: 0.8em;" x-show="smarthostSortCol==='auth'" x-text="smarthostSortDir===1 ? '▲' : '▼'"></span></th>
+                                <th class="table-sort table-col-min" style="min-width: 150px;" @click="setSmarthostSort('username')">Username <span style="font-size: 0.8em;" x-show="smarthostSortCol==='username'" x-text="smarthostSortDir===1 ? '▲' : '▼'"></span></th>
+                                <th class="table-sort table-col-min" @click="setSmarthostSort('disable_attachments')">Strip Attachments <span style="font-size: 0.8em;" x-show="smarthostSortCol==='disable_attachments'" x-text="smarthostSortDir===1 ? '▲' : '▼'"></span></th>
+                                <th class="table-sort table-col-min" @click="setSmarthostSort('force_plaintext')">Force Plaintext <span style="font-size: 0.8em;" x-show="smarthostSortCol==='force_plaintext'" x-text="smarthostSortDir===1 ? '▲' : '▼'"></span></th>
+                                <th class="table-col-min">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="sh in sortedSmarthosts" :key="sh.alias">
+                                <tr>
+                                    <td><strong x-text="sh.alias"></strong></td>
+                                    <td x-text="sh.hostname + ':' + sh.port"></td>
+                                    <td class="table-col-min" style="text-align: center;">
+                                        <svg x-show="sh.starttls" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                        <svg x-show="!sh.starttls" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#ef4444" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                    </td>
+                                    <td class="table-col-min" style="text-align: center;">
+                                        <svg x-show="sh.auth" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                        <svg x-show="!sh.auth" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#ef4444" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                    </td>
+                                    <td class="table-col-min" x-text="sh.username || '-'"></td>
+                                    <td class="table-col-min" style="text-align: center;">
+                                        <svg x-show="sh.disable_attachments" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                        <svg x-show="!sh.disable_attachments" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#ef4444" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                    </td>
+                                    <td class="table-col-min" style="text-align: center;">
+                                        <svg x-show="sh.force_plaintext" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                        <svg x-show="!sh.force_plaintext" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#ef4444" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                    </td>
+                                    <td class="table-col-min">
+                                        <div style="display: flex; gap: 0.5rem;">
+                                            <button type="button" class="outline" @click="openSmarthostModal('edit', sh.alias)">Modify Server</button>
+                                            <button type="button" class="danger" @click="deleteSmarthost(sh.alias)" title="Remove Smarthost"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                    <div style="margin-top: 1rem;"><button type="button" @click="openSmarthostModal('add')">+ Add Smarthost</button></div>
+                </div>
+            </div>
+
+            <div x-show="tab === 'server'">
+                <div class="card">
+                    <h3>Global Configuration</h3>
+                    <div class="flex-row" style="margin-bottom: 1rem; align-items: flex-end;">
+                        <div style="flex: 0 0 auto;">
+                            <label style="margin-bottom: 0.25rem;">Default Catch-All Route</label>
+                            <div class="segment-track">
+                                <div class="segment-thumb" :style="smtp.default_route === 'pushover' ? 'transform: translateX(0);' : 'transform: translateX(100%);'"></div>
+                                <label class="segment-label" :style="smtp.default_route === 'pushover' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'">
+                                    <input type="radio" x-model="smtp.default_route" value="pushover" @change="changeDefaultRoute($event)"> Pushover
+                                </label>
+                                <label class="segment-label" :style="smtp.default_route === 'smarthost' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'">
+                                    <input type="radio" x-model="smtp.default_route" value="smarthost" @change="changeDefaultRoute($event)"> Smarthost
+                                </label>
+                            </div>
+                        </div>
+                        <div style="flex: 0 0 auto; padding-bottom: 0.5rem;"><label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="smtp.disable_persistence"><span class="slider"></span></div> Disable Disk Persistence</label></div>
+                    </div>
+                    <div class="flex-row" style="margin-bottom: 1rem;"><div style="flex: 0 0 auto;"><label>Log Level</label><select class="auto-width" x-model="smtp.loglevel"><option value="INFO">INFO</option><option value="DEBUG">DEBUG</option><option value="WARNING">WARNING</option><option value="ERROR">ERROR</option></select></div></div>
+                    <div class="flex-row" style="margin-bottom: 1rem;"><div class="flex-col" style="flex: 1; min-width: 200px;"><label>Disk Queue Directory</label><input type="text" x-model="smtp.queue_dir" placeholder="/tmp/queue" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div></div>
+                    <div class="flex-row" style="margin-bottom: 1rem;"><div class="flex-col" style="flex: 1; min-width: 200px;"><label>Global Hostname (Greeting Banner)</label><input type="text" x-model="smtp.hostname" placeholder="gateway.local" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div></div>
+                    <div class="flex-row">
+                        <div class="flex-col" style="flex: 1; min-width: 200px;"><label>Global TLS Cert File (Fallback)</label><input type="text" x-model="smtp.tls_cert_file" placeholder="/etc/ssl/certs/global.pem" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
+                        <div class="flex-col" style="flex: 1; min-width: 200px;"><label>Global TLS Key File (Fallback)</label><input type="text" x-model="smtp.tls_key_file" placeholder="/etc/ssl/private/global.key" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>SMTP Client Authentication Store</h3>
+                    <p>Configure local usernames and passwords to restrict gateway access. Plaintext items are securely auto-hashed.</p>
+
+                    <div class="adv-card" style="margin-bottom: 1.5rem; border-left-color: var(--primary-color);">
+                        <h4>Provision New SMTP User</h4>
+                        <div class="flex-row">
+                            <div class="flex-col"><input type="text" x-model="newSmtpUser" placeholder="Username" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true"></div>
+                            <div class="flex-col"><input type="password" x-model="newSmtpPass" placeholder="Password" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true"></div>
+                            <div style="flex: 0 0 auto; display: flex; gap: 0.5rem;"><button type="button" @click="addSmtpUser()">Add User</button><button type="button" class="outline" @click="newSmtpUser = ''; newSmtpPass = '';">Clear</button></div>
+                        </div>
+                    </div>
+
+                    <hr>
+                    <h4>Current SMTP Users</h4>
+
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="table-sort" style="width: auto;" @click="setSmtpSort('name')">Username <span style="font-size: 0.8em;" x-show="smtpSortCol==='name'" x-text="smtpSortDir===1 ? '▲' : '▼'"></span></th>
+                                <th class="table-sort table-col-min" @click="setSmtpSort('epoch')">Last Modification <span style="font-size: 0.8em;" x-show="smtpSortCol==='epoch'" x-text="smtpSortDir===1 ? '▲' : '▼'"></span></th>
+                                <th class="table-col-min">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="user in sortedSmtpAuth" :key="user.name">
+                                <tr>
+                                    <td x-text="user.name" style="font-weight: bold;"></td>
+                                    <td class="table-col-min"><span class="time-display" x-text="formatTime(user.epoch)" :title="getFullTime(user.epoch)"></span></td>
+                                    <td class="table-col-min"><div style="display: flex; gap: 0.5rem;"><button type="button" class="outline" @click="openEditModal('smtp', user.name)">Change Password</button><button type="button" class="danger" @click="delete smtp.auth[user.name]; delete smtp_meta[user.name];" title="Remove User"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></div></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="card">
+                    <h3>TCP Listeners & Binds</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="table-sort" style="width: auto;" @click="setListenerSort('bind')">Bind Address <span style="font-size: 0.8em;" x-show="listenerSortCol==='bind'" x-text="listenerSortDir===1 ? '▲' : '▼'"></span></th>
+                                <th class="table-sort" @click="setListenerSort('hostname')">Hostname <span style="font-size: 0.8em;" x-show="listenerSortCol==='hostname'" x-text="listenerSortDir===1 ? '▲' : '▼'"></span></th>
+                                <th class="table-sort table-col-min" @click="setListenerSort('starttls')">STARTTLS <span style="font-size: 0.8em;" x-show="listenerSortCol==='starttls'" x-text="listenerSortDir===1 ? '▲' : '▼'"></span></th>
+                                <th>Dedicated TLS Cert File</th>
+                                <th>Dedicated TLS Key File</th>
+                                <th class="table-col-min">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="l in sortedListeners" :key="l._idx">
+                                <tr>
+                                    <td><strong x-text="l.bind"></strong></td>
+                                    <td x-text="l.hostname || '-'"></td>
+                                    <td class="table-col-min" style="text-align: center;">
+                                        <svg x-show="l.starttls" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                        <svg x-show="!l.starttls" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#ef4444" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                    </td>
+                                    <td x-text="l.tls_cert_file || '-'"></td>
+                                    <td x-text="l.tls_key_file || '-'"></td>
+                                    <td class="table-col-min">
+                                        <div style="display: flex; gap: 0.5rem;">
+                                            <button type="button" class="outline" @click="openListenerModal('edit', l._idx)">Modify Listener</button>
+                                            <button type="button" class="danger" @click="smtp.listeners.splice(l._idx, 1)" title="Remove Listener"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                    <div style="margin-top: 1rem;"><button type="button" @click="openListenerModal('add')">+ Add TCP Listener</button></div>
+                </div>
+            </div>
+
+            <div x-show="['routes', 'pushover', 'smarthost', 'server'].includes(tab)" style="margin-top: 1.5rem; display: flex; gap: 1rem;">
+                <button type="submit" style="font-size: 1.1rem; padding: 1rem;">Save Application Configuration</button>
+                <button type="button" class="warning" @click="window.location.reload()" style="font-size: 1.1rem; padding: 1rem;">Discard Changes & Reload from Disk</button>
+            </div>
+        </form>
+
+        <div x-show="tab === 'ui'" x-data="{ httpsEnabled: {{ 'true' if ui_https else 'false' }} }">
+            <form hx-post="/save/ui" hx-target="#status">
+                <div class="card">
+                    <h3>Web UI Settings</h3>
+                    <div class="form-group" style="margin-bottom: 1rem;"><label>UI Listen Port</label><input type="number" name="port" value="{{ ui_port }}" required style="width: 120px; max-width: 100%;" oninput="if(this.value.length > 5) this.value = this.value.slice(0, 5);" min="1" max="65535"></div>
+                    <div class="flex-row">
+                        <div style="flex: 0 0 auto;">
+                            <label>Display Timezone Location</label>
+                            <select class="auto-width" name="timezone" x-model="ui_tz">
+                                <option value="UTC">UTC / GMT</option><option value="America/New_York">Eastern Time</option><option value="America/Chicago">Central Time</option><option value="America/Denver">Mountain Time</option><option value="America/Los_Angeles">Pacific Time</option><option value="Europe/London">London (GMT/BST)</option>
+                            </select>
+                        </div>
+                        <div style="flex: 0 0 auto;">
+                            <label>Date Format Syntax</label>
+                            <select class="auto-width" name="date_format" x-model="ui_fmt">
+                                <option value="YYYY-MM-DD HH:mm:ss">ISO (YYYY-MM-DD HH:mm:ss)</option><option value="MM/DD/YYYY hh:mm:ss A">US (MM/DD/YYYY hh:mm:ss A)</option><option value="DD/MM/YYYY HH:mm:ss">UK/EU (DD/MM/YYYY HH:mm:ss)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex-row" style="margin-top: 1rem;">
+                        <div style="flex: 0 0 auto;">
+                            <label>Token Default Sort</label>
+                            <select class="auto-width" name="vault_sort" x-model="ui_vault_sort">
+                                <option value="name_asc">Alias Name (Ascending)</option>
+                                <option value="name_desc">Alias Name (Descending)</option>
+                                <option value="epoch_asc">Last Modification (Ascending)</option>
+                                <option value="epoch_desc">Last Modification (Descending)</option>
+                            </select>
+                        </div>
+                        <div style="flex: 0 0 auto;">
+                            <label>SMTP Users Default Sort</label>
+                            <select class="auto-width" name="smtp_sort" x-model="ui_smtp_sort">
+                                <option value="name_asc">Username (Ascending)</option>
+                                <option value="name_desc">Username (Descending)</option>
+                                <option value="epoch_asc">Last Modification (Ascending)</option>
+                                <option value="epoch_desc">Last Modification (Descending)</option>
+                            </select>
+                        </div>
+                        <div style="flex: 0 0 auto;">
+                            <label>Smarthost Default Sort</label>
+                            <select class="auto-width" name="smarthost_sort" x-model="ui_smarthost_sort">
+                                <option value="alias_asc">Alias Name (Ascending)</option>
+                                <option value="alias_desc">Alias Name (Descending)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 0.5rem; margin-top: 1rem;"><label class="toggle-label"><div class="toggle-switch"><input type="checkbox" name="relative_time" x-model="ui_relative"><span class="slider"></span></div> Render Coerced Relative Human Times (e.g. '3 days ago')</label></div>
+                    <div style="margin-bottom: 1.5rem;"><label class="toggle-label"><div class="toggle-switch"><input type="checkbox" name="expand_adv" x-model="ui_expand_adv"><span class="slider"></span></div> Always Expand Route Settings by Default</label></div>
+                    <hr><div style="margin-bottom: 1rem;"><label class="toggle-label"><div class="toggle-switch"><input type="checkbox" name="https" x-model="httpsEnabled"><span class="slider"></span></div> Enable HTTPS Bindings</label></div>
+
+                    <div class="flex-row" x-show="httpsEnabled">
+                        <div class="flex-col"><label>UI Specific TLS Cert File</label><input type="text" name="tls_cert" value="{{ ui_cert }}" placeholder="Leave blank for auto-generated UUID cert" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true"></div>
+                        <div class="flex-col"><label>UI Specific TLS Key File</label><input type="text" name="tls_key" value="{{ ui_key }}" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true"></div>
+                    </div>
+                </div>
+                <div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
+                    <button type="submit" style="font-size: 1.1rem; padding: 1rem;">Save UI Transformations</button>
+                    <button type="button" class="warning" @click="window.location.reload()" style="font-size: 1.1rem; padding: 1rem;">Discard Changes & Reload from Disk</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="status" class="success"></div>
+
+        <div x-show="editModal.open" class="modal-overlay" style="display: none;" x-transition>
+            <div class="modal-content" @click.away="editModal.open = false">
+                <h3 style="margin-top: 0;" x-text="editModal.type === 'smtp' ? 'Change Password for ' + editModal.name : 'Modify Secret for ' + editModal.name"></h3>
+                <div class="form-group">
+                    <label x-text="editModal.type === 'smtp' ? 'New Password' : 'New Token Value'"></label>
+                    <div class="token-input" style="position: relative; display: inline-block;">
+                        <input :type="editModal.showToken ? 'text' : 'password'" x-model="editModal.value" @keyup.enter="saveEditModal()" placeholder="Enter new hidden value..." autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" :maxlength="editModal.type === 'vault' ? 30 : 256" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                        <div @click="editModal.showToken = !editModal.showToken" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
+                            <svg x-show="!editModal.showToken" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                            <svg x-show="editModal.showToken" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                        </div>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
+                    <button type="button" class="outline" @click="editModal.open = false">Cancel</button><button type="button" @click="saveEditModal()">Save Changes</button>
+                </div>
+            </div>
+        </div>
+
+        <div x-show="smarthostModal.open" class="modal-overlay" style="display: none;" x-transition>
+            <div class="modal-content" @click.away="smarthostModal.open = false">
+                <h3 style="margin-top: 0;" x-text="smarthostModal.mode === 'add' ? 'Add Smarthost' : 'Modify Server for ' + smarthostModal.oldAlias"></h3>
+
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label>Alias Name</label>
+                    <input type="text" x-model="smarthostModal.alias" placeholder="e.g. gmail_relay" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+                </div>
+                <div class="flex-row" style="margin-bottom: 1.5rem;">
+                    <div class="flex-col" style="flex: 2; min-width: 0;">
+                        <label>Hostname</label>
+                        <input type="text" x-model="smarthostModal.hostname" placeholder="smtp.gmail.com" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+                    </div>
+                    <div class="flex-col" style="flex: 1; min-width: 0;">
+                        <label>Port</label>
+                        <input type="number" x-model.number="smarthostModal.port" required style="width: 100px; max-width: 100%;" oninput="if(this.value.length > 5) this.value = this.value.slice(0, 5);" min="1" max="65535">
+                    </div>
+                </div>
+
+                <div class="flex-row" style="gap: 1.5rem; margin-bottom: 1rem;">
+                    <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="smarthostModal.starttls"><span class="slider"></span></div> Use STARTTLS</label>
+                    <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="smarthostModal.auth"><span class="slider"></span></div> Use Authentication</label>
+                </div>
+
+                <div x-show="smarthostModal.starttls" style="margin-bottom: 1.5rem;">
+                    <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="smarthostModal.disable_tls_validation"><span class="slider"></span></div> Disable TLS Verification</label>
+                </div>
+
+                <div class="flex-row" style="gap: 1.5rem; margin-bottom: 1.5rem;">
+                    <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="smarthostModal.disable_attachments"><span class="slider"></span></div> Disable Attachments</label>
+                    <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="smarthostModal.force_plaintext"><span class="slider"></span></div> Force Plaintext Formatting</label>
+                </div>
+
+                <div x-show="smarthostModal.auth" style="margin-bottom: 1rem;">
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label>Username</label>
+                        <input type="text" x-model="smarthostModal.username" placeholder="foo@gmail.com" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <div class="token-input" style="position: relative; display: block; width: 100%;">
+                            <input :type="smarthostModal.showPass ? 'text' : 'password'" x-model="smarthostModal.password" placeholder="Password or App Password" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                            <div @click="smarthostModal.showPass = !smarthostModal.showPass" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
+                                <svg x-show="!smarthostModal.showPass" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                <svg x-show="smarthostModal.showPass" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div x-show="smarthostModal.error" class="danger" style="color: var(--danger-color); font-weight: bold; margin-top: 1rem; font-size: 0.9rem;" x-text="smarthostModal.error"></div>
+
+                <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
+                    <button type="button" class="outline" @click="smarthostModal.open = false">Cancel</button><button type="button" @click="saveSmarthostModal()">Save Changes</button>
+                </div>
+            </div>
+        </div>
+
+        <div x-show="listenerModal.open" class="modal-overlay" style="display: none;" x-transition>
+            <div class="modal-content" @click.away="listenerModal.open = false">
+                <h3 style="margin-top: 0;" x-text="listenerModal.mode === 'add' ? 'Add TCP Listener' : 'Modify TCP Listener'"></h3>
+
+                <div class="flex-row" style="margin-bottom: 1rem;">
+                    <div class="flex-col" style="flex: 2; min-width: 0;">
+                        <label>Listen Address</label>
+                        <input type="text" x-model="listenerModal.ip" placeholder="0.0.0.0" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+                    </div>
+                    <div class="flex-col" style="flex: 1; min-width: 0;">
+                        <label>Port</label>
+                        <input type="number" x-model.number="listenerModal.port" required style="width: 100px; max-width: 100%;" oninput="if(this.value.length > 5) this.value = this.value.slice(0, 5);" min="1" max="65535">
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label>Hostname Override</label>
+                    <input type="text" x-model="listenerModal.hostname" placeholder="Optional" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+                </div>
+
+                <div style="margin-bottom: 1.5rem;">
+                    <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="listenerModal.starttls"><span class="slider"></span></div> Use STARTTLS</label>
+                </div>
+
+                <div x-show="listenerModal.starttls" style="margin-bottom: 1rem;">
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label>Dedicated TLS Cert File</label>
+                        <input type="text" x-model="listenerModal.tls_cert_file" placeholder="Leaves blank to use Global" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+                    </div>
+                    <div class="form-group">
+                        <label>Dedicated TLS Key File</label>
+                        <input type="text" x-model="listenerModal.tls_key_file" placeholder="Leaves blank to use Global" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+                    </div>
+                </div>
+
+                <div x-show="listenerModal.error" class="danger" style="color: var(--danger-color); font-weight: bold; margin-top: 1rem; font-size: 0.9rem;" x-text="listenerModal.error"></div>
+
+                <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
+                    <button type="button" class="outline" @click="listenerModal.open = false">Cancel</button><button type="button" @click="saveListenerModal()">Save Changes</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+    let statusTimer;
+    document.addEventListener('htmx:afterSwap', (e) => {
+        if(e.detail.target.id === 'status' && e.detail.target.innerHTML) {
+            clearTimeout(statusTimer);
+            statusTimer = setTimeout(() => { e.detail.target.innerHTML = ''; }, 5000);
+        }
+    });
+
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('gatewaySettings', () => ({
+            theme: localStorage.getItem('theme') || 'dark',
+            tab: localStorage.getItem('activeTab') || 'routes',
+            rawConfig: {{ config_json | safe }},
+            smtp_meta: {{ smtp_meta_json | safe }},
+            vaultMeta: {{ vault_meta_json | safe }},
+            vaultApp: [], vaultUser: [], vaultSmarthost: {}, vaultAppAliases: [], vaultUserAliases: [],
+            newVaultType: 'app', newVaultName: '', newVaultToken: '', showNewVaultToken: false,
+
+            ui_tz: '{{ ui_tz }}', ui_fmt: '{{ ui_fmt }}',
+            ui_relative: {{ 'true' if ui_relative else 'false' }},
+            ui_expand_adv: {{ 'true' if ui_expand_adv else 'false' }},
+            ui_vault_sort: '{{ ui_vault_sort }}',
+            ui_smtp_sort: '{{ ui_smtp_sort }}',
+            ui_smarthost_sort: '{{ ui_smarthost_sort }}',
+            vaultSortCol: 'name', vaultSortDir: 1,
+            smtpSortCol: 'name', smtpSortDir: 1,
+
+            listenerSortCol: 'bind', listenerSortDir: 1,
+            smarthostSortCol: 'alias', smarthostSortDir: 1,
+
+            pushGlobals: {}, smartGlobals: {}, showGlobalAdv: false, mappings: [], smtp: {}, smarthosts: {},
+            newSmtpUser: '', newSmtpPass: '',
+
+            dragHover: null, draggedRouteIdx: null,
+
+            editModal: { open: false, type: '', subType: '', name: '', value: '', showToken: false },
+            smarthostModal: { open: false, mode: 'add', oldAlias: '', alias: '', hostname: '', port: 25, starttls: false, disable_tls_validation: false, auth: false, username: '', password: '', showPass: false, disable_attachments: false, force_plaintext: false, error: '' },
+            listenerModal: { open: false, mode: 'add', idx: null, ip: '0.0.0.0', port: 25, hostname: '', starttls: false, tls_cert_file: '', tls_key_file: '', error: '' },
+
+            init() {
+                this.$watch('theme', val => { localStorage.setItem('theme', val); document.documentElement.setAttribute('data-theme', val); });
+                this.$watch('tab', val => localStorage.setItem('activeTab', val));
+                document.documentElement.setAttribute('data-theme', this.theme);
+
+                const vsParts = this.ui_vault_sort.split('_');
+                this.vaultSortCol = vsParts[0]; this.vaultSortDir = vsParts[1] === 'desc' ? -1 : 1;
+
+                const ssParts = this.ui_smtp_sort.split('_');
+                this.smtpSortCol = ssParts[0]; this.smtpSortDir = ssParts[1] === 'desc' ? -1 : 1;
+
+                const shParts = this.ui_smarthost_sort.split('_');
+                this.smarthostSortCol = shParts[0]; this.smarthostSortDir = shParts[1] === 'desc' ? -1 : 1;
+
+                for(const [k, v] of Object.entries(this.vaultMeta.app || {})) { this.vaultApp.push({ name: k, epoch: v, token: '__RETAIN__' }); this.vaultAppAliases.push(k); }
+                for(const [k, v] of Object.entries(this.vaultMeta.user || {})) { this.vaultUser.push({ name: k, epoch: v, token: '__RETAIN__' }); this.vaultUserAliases.push(k); }
+                for(const [k, v] of Object.entries(this.vaultMeta.smarthost || {})) { this.vaultSmarthost[k] = { epoch: v, token: '__RETAIN__' }; }
+
+                const gKeys = ['user','token','device','sound','url','url_title','tags','priority','ttl','retry','expire','attachments','force_plaintext'];
+                const po = this.rawConfig.pushover || {};
+
+                this.pushGlobals._showToken = false;
+                this.pushGlobals._showUser = false;
+
+                this.smarthosts = this.rawConfig.smarthost?.aliases || {};
+                const sg = this.rawConfig.smarthost?.globals || {};
+                this.smartGlobals = { alias: sg.alias || '', force_plaintext: sg.force_plaintext === true, disable_attachments: sg.disable_attachments === true };
+
+                const routes = this.rawConfig.routes || {};
+
+                for(const [k, v] of Object.entries(routes)) {
+                    let isRegex = false; let displayKey = k;
+                    if (k.toLowerCase().startsWith('regex:')) { isRegex = true; displayKey = k.substring(6); }
+
+                    const method = v.method || 'pushover';
+
+                    if (method === 'pushover') {
+                        const isTokenAlias = this.vaultAppAliases.includes(v.token);
+                        const isUserAlias = this.vaultUserAliases.includes(v.user);
+                        this.mappings.push({
+                            _uid: Date.now().toString(36) + Math.random().toString(36).substr(2),
+                            _key: displayKey,
+                            match: v.match || 'to',
+                            method: method,
+                            _isRegex: isRegex,
+                            _showAdv: this.ui_expand_adv,
+                            _isTokenAlias: isTokenAlias,
+                            _isUserAlias: isUserAlias,
+                            _tokenAliasVal: isTokenAlias ? v.token : '',
+                            _tokenRaw: !isTokenAlias ? v.token : '',
+                            _userAliasVal: isUserAlias ? v.user : '',
+                            _userRaw: !isUserAlias ? v.user : '',
+                            _showToken: false,
+                            _showUser: false,
+                            disable_attachments: (v.attachments === false),
+                            force_plaintext: (v.force_plaintext === true),
+                            smarthost_alias: '',
+                            ...v
+                        });
+                    } else {
+                        this.mappings.push({
+                            _uid: Date.now().toString(36) + Math.random().toString(36).substr(2),
+                            _key: displayKey,
+                            match: v.match || 'to',
+                            method: method,
+                            _isRegex: isRegex,
+                            _showAdv: this.ui_expand_adv,
+                            _isTokenAlias: false, _isUserAlias: false, _tokenAliasVal: '', _tokenRaw: '', _userAliasVal: '', _userRaw: '', _showToken: false, _showUser: false,
+                            token: '', user: '',
+                            smarthost_alias: v.smarthost_alias || '',
+                            disable_attachments: (v.disable_attachments === true),
+                            force_plaintext: (v.force_plaintext === true)
+                        });
+                    }
+                }
+
+                this.pushGlobals._isTokenAlias = this.vaultAppAliases.includes(po.token);
+                this.pushGlobals._tokenAliasVal = this.pushGlobals._isTokenAlias ? po.token : '';
+                this.pushGlobals._tokenRaw = !this.pushGlobals._isTokenAlias ? po.token : '';
+
+                this.pushGlobals._isUserAlias = this.vaultUserAliases.includes(po.user);
+                this.pushGlobals._userAliasVal = this.pushGlobals._isUserAlias ? po.user : '';
+                this.pushGlobals._userRaw = !this.pushGlobals._isUserAlias ? po.user : '';
+
+                for(const k of gKeys) {
+                    if(k !== 'attachments' && k !== 'force_plaintext') this.pushGlobals[k] = po[k];
+                }
+
+                this.pushGlobals.disable_attachments = (po.attachments === false);
+                this.pushGlobals.force_plaintext = (po.force_plaintext === true);
+
+                this.smtp = this.rawConfig.smtp || {};
+                if(!this.smtp.listeners) this.smtp.listeners = [];
+                if(!this.smtp.auth) this.smtp.auth = {};
+                if(!this.smtp.default_route) this.smtp.default_route = 'pushover';
+                if(this.smtp.disable_persistence === undefined) this.smtp.disable_persistence = false;
+            },
+
+            reorderRoute(oldIdx, newIdx) {
+                if (oldIdx === newIdx || oldIdx === null) return;
+                const item = this.mappings.splice(oldIdx, 1)[0];
+                this.mappings.splice(newIdx, 0, item);
+                this.draggedRouteIdx = null;
+            },
+
+            changeDefaultRoute(e) {
+                const val = e.target.value;
+                if (val === 'smarthost') {
+                    if (!this.smartGlobals.alias) {
+                        alert('You must define a Default Smarthost Alias before switching the global route.');
+                        e.target.value = 'pushover';
+                        this.smtp.default_route = 'pushover';
+                        return;
+                    }
+                } else {
+                    if (!this.pushGlobals.token || !this.pushGlobals.user) {
+                        alert('You must define a Default App Token and Default User Key before switching to Pushover.');
+                        e.target.value = 'smarthost';
+                        this.smtp.default_route = 'smarthost';
+                        return;
+                    }
+                }
+                this.smtp.default_route = val;
+            },
+
+            toggleAlias(obj, field) {
+                const flag = field === 'token' ? '_isTokenAlias' : '_isUserAlias';
+                const raw = field === 'token' ? '_tokenRaw' : '_userRaw';
+                const alias = field === 'token' ? '_tokenAliasVal' : '_userAliasVal';
+
+                if (obj[flag]) {
+                    obj[alias] = obj[field] || '';
+                    obj[field] = obj[raw] || '';
+                    obj[flag] = false;
+                } else {
+                    obj[raw] = obj[field] || '';
+                    obj[field] = obj[alias] || '';
+                    obj[flag] = true;
+                }
+            },
+
+            setVaultSort(col) {
+                if(this.vaultSortCol === col) { this.vaultSortDir = this.vaultSortDir === 1 ? -1 : 1; }
+                else { this.vaultSortCol = col; this.vaultSortDir = 1; }
+            },
+            setSmtpSort(col) {
+                if(this.smtpSortCol === col) { this.smtpSortDir = this.smtpSortDir === 1 ? -1 : 1; }
+                else { this.smtpSortCol = col; this.smtpSortDir = 1; }
+            },
+            setSmarthostSort(col) {
+                if(this.smarthostSortCol === col) { this.smarthostSortDir = this.smarthostSortDir === 1 ? -1 : 1; }
+                else { this.smarthostSortCol = col; this.smarthostSortDir = 1; }
+            },
+            setListenerSort(col) {
+                if(this.listenerSortCol === col) { this.listenerSortDir = this.listenerSortDir === 1 ? -1 : 1; }
+                else { this.listenerSortCol = col; this.listenerSortDir = 1; }
+            },
+
+            get sortedVaultApp() {
+                return [...this.vaultApp].sort((a, b) => {
+                    if(this.vaultSortCol === 'name') return a.name.localeCompare(b.name) * this.vaultSortDir;
+                    else return (a.epoch - b.epoch) * this.vaultSortDir;
+                });
+            },
+            get sortedVaultUser() {
+                return [...this.vaultUser].sort((a, b) => {
+                    if(this.vaultSortCol === 'name') return a.name.localeCompare(b.name) * this.vaultSortDir;
+                    else return (a.epoch - b.epoch) * this.vaultSortDir;
+                });
+            },
+            get sortedSmtpAuth() {
+                const arr = Object.keys(this.smtp.auth || {}).map(k => ({ name: k, epoch: this.smtp_meta[k] || 0 }));
+                return arr.sort((a, b) => {
+                    if(this.smtpSortCol === 'name') return a.name.localeCompare(b.name) * this.smtpSortDir;
+                    else return (a.epoch - b.epoch) * this.smtpSortDir;
+                });
+            },
+            get sortedSmarthosts() {
+                const arr = Object.keys(this.smarthosts).map(k => ({ alias: k, ...this.smarthosts[k] }));
+                return arr.sort((a, b) => {
+                    let res = 0;
+                    if (this.smarthostSortCol === 'alias') res = a.alias.localeCompare(b.alias);
+                    else if (this.smarthostSortCol === 'address') {
+                        const aAddr = (a.hostname || '') + ':' + (a.port || 25);
+                        const bAddr = (b.hostname || '') + ':' + (b.port || 25);
+                        res = aAddr.localeCompare(bAddr);
+                    }
+                    else if (this.smarthostSortCol === 'starttls') res = (a.starttls === b.starttls) ? 0 : a.starttls ? 1 : -1;
+                    else if (this.smarthostSortCol === 'auth') res = (a.auth === b.auth) ? 0 : a.auth ? 1 : -1;
+                    else if (this.smarthostSortCol === 'username') res = (a.username || '').localeCompare(b.username || '');
+                    else if (this.smarthostSortCol === 'disable_attachments') res = (a.disable_attachments === b.disable_attachments) ? 0 : a.disable_attachments ? 1 : -1;
+                    else if (this.smarthostSortCol === 'force_plaintext') res = (a.force_plaintext === b.force_plaintext) ? 0 : a.force_plaintext ? 1 : -1;
+                    return res * this.smarthostSortDir;
+                });
+            },
+            get sortedSmarthostKeys() {
+                return this.sortedSmarthosts.map(s => s.alias);
+            },
+            get sortedListeners() {
+                const mapped = this.smtp.listeners.map((l, i) => ({ ...l, _idx: i }));
+                return mapped.sort((a, b) => {
+                    let res = 0;
+                    if (this.listenerSortCol === 'bind') res = (a.bind || '').localeCompare(b.bind || '');
+                    else if (this.listenerSortCol === 'hostname') res = (a.hostname || '').localeCompare(b.hostname || '');
+                    else if (this.listenerSortCol === 'starttls') res = (a.starttls === b.starttls) ? 0 : a.starttls ? 1 : -1;
+                    return res * this.listenerSortDir;
+                });
+            },
+
+            formatTime(epoch) {
+                if(!epoch) return "Never"; const d = new Date(epoch * 1000);
+                if(this.ui_relative) {
+                    const seconds = Math.floor((new Date() - d) / 1000); let interval = Math.floor(seconds / 31536000);
+                    if (interval >= 1) return interval + " years ago"; interval = Math.floor(seconds / 2592000);
+                    if (interval >= 1) return interval + " months ago"; interval = Math.floor(seconds / 84600);
+                    if (interval >= 1) return interval + " days ago"; interval = Math.floor(seconds / 3600);
+                    if (interval >= 1) return interval + " hours ago"; interval = Math.floor(seconds / 60);
+                    if (interval >= 1) return interval + " minutes ago"; return "Just now";
+                }
+                return this.executeAbsoluteFormat(d);
+            },
+            getFullTime(epoch) { if(!epoch) return ""; return this.executeAbsoluteFormat(new Date(epoch * 1000)); },
+            executeAbsoluteFormat(d) {
+                const pad = num => String(num).padStart(2, '0'); const t_str = d.toLocaleString("en-US", { timeZone: this.ui_tz }); const localD = new Date(t_str);
+                const yyyy = localD.getFullYear(); const mm = pad(localD.getMonth() + 1); const dd = pad(localD.getDate()); let hh = localD.getHours(); const min = pad(localD.getMinutes()); const ss = pad(localD.getSeconds()); const ampm = hh >= 12 ? 'PM' : 'AM';
+                if (this.ui_fmt.includes("hh")) { hh = hh % 12; hh = hh ? hh : 12; hh = pad(hh); return `${mm}/${dd}/${yyyy} ${hh}:${min}:${ss} ${ampm}`; }
+                if (this.ui_fmt.startsWith("DD")) { return `${dd}/${mm}/${yyyy} ${pad(hh)}:${min}:${ss}`; }
+                return `${yyyy}-${mm}-${dd} ${pad(hh)}:${min}:${ss}`;
+            },
+            addMapping() {
+                this.mappings.push({
+                    _uid: Date.now().toString(36) + Math.random().toString(36).substr(2),
+                    _key: '', match: 'to', method: 'pushover', token: '', user: '', _isRegex: false, _isTokenAlias: false, _isUserAlias: false,
+                    _tokenAliasVal: '', _tokenRaw: '', _userAliasVal: '', _userRaw: '', smarthost_alias: '',
+                    _showToken: false, _showUser: false, _showAdv: this.ui_expand_adv, disable_attachments: false, force_plaintext: false
+                });
+            },
+
+            // Listener Modal Hooks
+            openListenerModal(mode, idx=null) {
+                this.listenerModal.mode = mode;
+                this.listenerModal.idx = idx;
+                this.listenerModal.error = '';
+                if(mode === 'add') {
+                    this.listenerModal.ip = '0.0.0.0'; this.listenerModal.port = 25; this.listenerModal.hostname = '';
+                    this.listenerModal.starttls = false; this.listenerModal.tls_cert_file = ''; this.listenerModal.tls_key_file = '';
+                } else {
+                    const l = this.smtp.listeners[idx];
+                    let ip = '0.0.0.0'; let port = 25;
+                    if(l.bind && l.bind.includes(':')) {
+                        const parts = l.bind.split(':');
+                        ip = parts[0]; port = parseInt(parts[1]);
+                    }
+                    this.listenerModal.ip = ip; this.listenerModal.port = port; this.listenerModal.hostname = l.hostname || '';
+                    this.listenerModal.starttls = l.starttls === true; this.listenerModal.tls_cert_file = l.tls_cert_file || ''; this.listenerModal.tls_key_file = l.tls_key_file || '';
+                }
+                this.listenerModal.open = true;
+            },
+            saveListenerModal() {
+                const ip = this.listenerModal.ip.trim() || '0.0.0.0';
+                const port = this.listenerModal.port;
+                if(!port || port < 1 || port > 65535) { this.listenerModal.error = 'Port must be between 1 and 65535.'; return; }
+                const bind = ip + ':' + port;
+                const obj = { bind: bind, starttls: this.listenerModal.starttls };
+                if(this.listenerModal.hostname.trim()) obj.hostname = this.listenerModal.hostname.trim();
+                if(this.listenerModal.starttls) {
+                    if(this.listenerModal.tls_cert_file.trim()) obj.tls_cert_file = this.listenerModal.tls_cert_file.trim();
+                    if(this.listenerModal.tls_key_file.trim()) obj.tls_key_file = this.listenerModal.tls_key_file.trim();
+                }
+                if(this.listenerModal.mode === 'add') {
+                    this.smtp.listeners.push(obj);
+                } else {
+                    this.smtp.listeners[this.listenerModal.idx] = obj;
+                }
+                this.listenerModal.open = false;
+            },
+
+            // Smarthost Modal Hooks
+            openSmarthostModal(mode, alias='') {
+                this.smarthostModal.mode = mode;
+                this.smarthostModal.oldAlias = alias;
+                this.smarthostModal.error = '';
+                this.smarthostModal.showPass = false;
+                if(mode === 'add') {
+                    this.smarthostModal.alias = ''; this.smarthostModal.hostname = ''; this.smarthostModal.port = 25;
+                    this.smarthostModal.starttls = false; this.smarthostModal.disable_tls_validation = false; this.smarthostModal.auth = false;
+                    this.smarthostModal.username = ''; this.smarthostModal.password = ''; this.smarthostModal.disable_attachments = false; this.smarthostModal.force_plaintext = false;
+                } else {
+                    const sh = this.smarthosts[alias];
+                    this.smarthostModal.alias = alias; this.smarthostModal.hostname = sh.hostname || ''; this.smarthostModal.port = parseInt(sh.port) || 25;
+                    this.smarthostModal.starttls = sh.starttls === true; this.smarthostModal.disable_tls_validation = sh.disable_tls_validation === true; this.smarthostModal.auth = sh.auth === true;
+                    this.smarthostModal.username = sh.username || ''; this.smarthostModal.password = '';
+                    this.smarthostModal.disable_attachments = sh.disable_attachments === true; this.smarthostModal.force_plaintext = sh.force_plaintext === true;
+                }
+                this.smarthostModal.open = true;
+            },
+            saveSmarthostModal() {
+                const alias = this.smarthostModal.alias.trim();
+                if(!alias) { this.smarthostModal.error = 'Alias Name is required.'; return; }
+                if(this.smarthostModal.mode === 'add' && this.smarthosts[alias]) { this.smarthostModal.error = 'Alias Name already exists.'; return; }
+                const host = this.smarthostModal.hostname.trim();
+                if(!host) { this.smarthostModal.error = 'Hostname is required.'; return; }
+                const port = this.smarthostModal.port;
+                if(!port || port < 1 || port > 65535) { this.smarthostModal.error = 'Port must be between 1 and 65535.'; return; }
+
+                const user = this.smarthostModal.username.trim();
+                const pass = this.smarthostModal.password.trim();
+                if(this.smarthostModal.auth) {
+                    if(!user) { this.smarthostModal.error = 'Username is required when Auth is enabled.'; return; }
+                    if(this.smarthostModal.mode === 'add' && !pass) { this.smarthostModal.error = 'Password is required when Auth is enabled.'; return; }
+                }
+
+                if(this.smarthostModal.mode === 'edit' && this.smarthostModal.oldAlias !== alias) {
+                    delete this.smarthosts[this.smarthostModal.oldAlias];
+                    const vToken = this.vaultSmarthost[this.smarthostModal.oldAlias];
+                    if(vToken) { this.vaultSmarthost[alias] = vToken; delete this.vaultSmarthost[this.smarthostModal.oldAlias]; }
+                    if(this.smartGlobals.alias === this.smarthostModal.oldAlias) this.smartGlobals.alias = alias;
+                    this.mappings.forEach(m => { if(m.method === 'smarthost' && m.smarthost_alias === this.smarthostModal.oldAlias) m.smarthost_alias = alias; });
+                }
+
+                this.smarthosts[alias] = {
+                    hostname: host,
+                    port: port,
+                    starttls: this.smarthostModal.starttls,
+                    disable_tls_validation: this.smarthostModal.disable_tls_validation,
+                    auth: this.smarthostModal.auth,
+                    disable_attachments: this.smarthostModal.disable_attachments,
+                    force_plaintext: this.smarthostModal.force_plaintext
+                };
+                if(this.smarthostModal.auth) {
+                    this.smarthosts[alias].username = user;
+                    if(pass) this.vaultSmarthost[alias] = { token: pass, epoch: Math.floor(Date.now() / 1000) };
+                } else {
+                    if(this.vaultSmarthost[alias]) delete this.vaultSmarthost[alias];
+                }
+                this.smarthostModal.open = false;
+            },
+            deleteSmarthost(alias) {
+                let inUse = false;
+                if(this.smtp.default_route === 'smarthost' && this.smartGlobals.alias === alias) inUse = true;
+                this.mappings.forEach(m => { if(m.method === 'smarthost' && m.smarthost_alias === alias) inUse = true; });
+                if(inUse) { alert(`Error: Alias '${alias}' is actively assigned to an email route. Reconfigure your Routes before deleting.`); return; }
+                delete this.smarthosts[alias];
+                if(this.vaultSmarthost[alias]) delete this.vaultSmarthost[alias];
+            },
+
+            addSmtpUser() { if(!this.newSmtpUser || !this.newSmtpPass) return; this.smtp.auth[this.newSmtpUser] = "RAW:" + this.newSmtpPass; this.smtp_meta[this.newSmtpUser] = Math.floor(Date.now() / 1000); this.newSmtpUser = ''; this.newSmtpPass = ''; },
+            addVaultToken() {
+                if(!this.newVaultName || !this.newVaultToken) return;
+                const nName = this.newVaultName.trim(); const nTok = this.newVaultToken.trim();
+                if(!nName || !nTok) return;
+                const target = this.newVaultType === 'app' ? this.vaultApp : this.vaultUser;
+                const existingIdx = target.findIndex(x => x.name === nName);
+
+                if(existingIdx >= 0) { target[existingIdx].token = nTok; target[existingIdx].epoch = Math.floor(Date.now() / 1000); }
+                else { target.push({name: nName, token: nTok, epoch: Math.floor(Date.now() / 1000)}); }
+
+                if(this.newVaultType === 'app' && !this.vaultAppAliases.includes(nName)) this.vaultAppAliases.push(nName);
+                if(this.newVaultType === 'user' && !this.vaultUserAliases.includes(nName)) this.vaultUserAliases.push(nName);
+                this.newVaultName = ''; this.newVaultToken = ''; this.showNewVaultToken = false;
+            },
+            deleteVaultToken(type, aliasName) {
+                const targetArr = type === 'app' ? this.vaultApp : this.vaultUser;
+                const idx = targetArr.findIndex(x => x.name === aliasName);
+                if(idx === -1) return;
+                let inUse = false;
+                if(type === 'app') { if(this.smtp.default_route === 'pushover' && this.pushGlobals._isTokenAlias && this.pushGlobals.token === aliasName) inUse = true; this.mappings.forEach(m => { if(m.method === 'pushover' && m._isTokenAlias && m.token === aliasName) inUse = true; }); }
+                else { if(this.smtp.default_route === 'pushover' && this.pushGlobals._isUserAlias && this.pushGlobals.user === aliasName) inUse = true; this.mappings.forEach(m => { if(m.method === 'pushover' && m._isUserAlias && m.user === aliasName) inUse = true; }); }
+                if(inUse) { alert(`Error: Alias '${aliasName}' is actively assigned to an email route. Reconfigure your Routes before deleting.`); return; }
+                targetArr.splice(idx, 1);
+                if(type === 'app') this.vaultAppAliases = this.vaultAppAliases.filter(a => a !== aliasName);
+                if(type === 'user') this.vaultUserAliases = this.vaultUserAliases.filter(a => a !== aliasName);
+            },
+            openEditModal(type, name, subType='') { this.editModal.type = type; this.editModal.subType = subType; this.editModal.name = name; this.editModal.value = ''; this.editModal.showToken = false; this.editModal.open = true; },
+            saveEditModal() {
+                if(!this.editModal.value) return;
+                const v = this.editModal.value.trim();
+                if(!v) return;
+                if(this.editModal.type === 'smtp') { this.smtp.auth[this.editModal.name] = "RAW:" + v; this.smtp_meta[this.editModal.name] = Math.floor(Date.now() / 1000); }
+                else if(this.editModal.type === 'vault') {
+                    const target = this.editModal.subType === 'app' ? this.vaultApp : this.vaultUser;
+                    const idx = target.findIndex(x => x.name === this.editModal.name);
+                    if(idx !== -1) { target[idx].token = v; target[idx].epoch = Math.floor(Date.now() / 1000); }
+                }
+                this.editModal.open = false;
+            },
+            preparePayload() {
+                const finalPushover = { ...this.pushGlobals }; finalPushover.attachments = !this.pushGlobals.disable_attachments; delete finalPushover.disable_attachments; delete finalPushover._isTokenAlias; delete finalPushover._isUserAlias; delete finalPushover._showToken; delete finalPushover._showUser; delete finalPushover._tokenRaw; delete finalPushover._tokenAliasVal; delete finalPushover._userRaw; delete finalPushover._userAliasVal;
+                ['priority', 'retry', 'expire', 'ttl'].forEach(p => { if (finalPushover[p] === '' || finalPushover[p] === null || finalPushover[p] === undefined) delete finalPushover[p]; else finalPushover[p] = parseInt(finalPushover[p], 10); });
+                ['device', 'url', 'url_title', 'sound', 'tags', 'user'].forEach(p => { if (finalPushover[p] === '') delete finalPushover[p]; });
+
+                const finalRoutes = {};
+                this.mappings.forEach(m => {
+                    if(m._key && m._key.trim() !== '') {
+                        let k = m._key.trim(); if (m._isRegex && !k.toLowerCase().startsWith('regex:')) { k = 'regex:' + k; }
+                        if (m.method === 'pushover') {
+                            const { _key, _showAdv, _uid, _isTokenAlias, _isUserAlias, _isRegex, _showToken, _showUser, _tokenRaw, _tokenAliasVal, _userRaw, _userAliasVal, smarthost_alias, disable_attachments, ...rest } = m; rest.attachments = !disable_attachments;
+                            ['priority', 'retry', 'expire', 'ttl'].forEach(p => { if (rest[p] === '' || rest[p] === null || rest[p] === undefined) delete rest[p]; else rest[p] = parseInt(rest[p], 10); });
+                            ['device', 'url', 'url_title', 'sound', 'tags', 'user'].forEach(p => { if (rest[p] === '') delete rest[p]; }); finalRoutes[k] = rest;
+                        } else {
+                            finalRoutes[k] = { match: m.match, method: 'smarthost', smarthost_alias: m.smarthost_alias, force_plaintext: m.force_plaintext, disable_attachments: m.disable_attachments };
+                        }
+                    }
+                });
+
+                const finalSmarthost = { globals: { alias: this.smartGlobals.alias, force_plaintext: this.smartGlobals.force_plaintext, disable_attachments: this.smartGlobals.disable_attachments }, aliases: this.smarthosts };
+
+                return JSON.stringify({ pushover: finalPushover, smtp: this.smtp, routes: finalRoutes, smarthost: finalSmarthost, _smtp_meta: this.smtp_meta });
+            },
+            prepareVaultPayload() {
+                const shVault = {};
+                for(const k of Object.keys(this.vaultSmarthost)) {
+                    shVault[k] = this.vaultSmarthost[k].token;
+                }
+                return JSON.stringify({ app: this.vaultApp, user: this.vaultUser, smarthost: shVault });
+            }
+        }));
+    });
+    </script>
+</body>
+</html>
