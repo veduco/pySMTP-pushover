@@ -370,19 +370,21 @@ class PushoverSMTPHandler:
             # 2. Pre-process formats for fast contextual assignment later
             body_html_processed = None
             if html_body_raw:
-                # Pushover translates ALL newlines into <br> tags. To prevent massive gaps,
-                # we must behave like a web browser: strip literal whitespace and rely on structural HTML tags.
-
-                # Strip all literal source-code newlines and tabs
-                processed = re.sub(r'[\r\n\t]+', ' ', html_body_raw)
-
                 # Erase entire blocks (and their contents) that contain metadata/CSS/scripts so they don't render as text
-                processed = re.sub(r'<(style|script|head|title)[^>]*>.*?</\1>', '', processed, flags=re.IGNORECASE)
+                processed = re.sub(r'<(style|script|head|title)[^>]*>.*?</\1>', '', html_body_raw, flags=re.IGNORECASE | re.DOTALL)
 
-                # Translate structural HTML layout tags into literal newlines for Pushover to understand
-                processed = re.sub(r'<br\s*/?>', '\n', processed, flags=re.IGNORECASE)
-                processed = re.sub(r'</(p|div|tr|h[1-6]|li|table)>', '\n\n', processed, flags=re.IGNORECASE)
-                processed = re.sub(r'<hr[^>]*>', '\n---\n', processed, flags=re.IGNORECASE)
+                # Protect <pre> blocks from whitespace destruction to preserve layout logic
+                parts = re.split(r'(?i)(<pre[^>]*>.*?</pre>)', processed, flags=re.DOTALL)
+                for i in range(len(parts)):
+                    if not parts[i].lower().startswith('<pre'):
+                        # Strip all literal source-code newlines and tabs from normal HTML
+                        parts[i] = re.sub(r'[\r\n\t]+', ' ', parts[i])
+                        # Translate structural HTML layout tags into literal newlines for Pushover
+                        parts[i] = re.sub(r'<br\s*/?>', '\n', parts[i], flags=re.IGNORECASE)
+                        parts[i] = re.sub(r'</(p|div|tr|h[1-6]|li|table)>', '\n\n', parts[i], flags=re.IGNORECASE)
+                        parts[i] = re.sub(r'<hr[^>]*>', '\n---\n', parts[i], flags=re.IGNORECASE)
+
+                processed = ''.join(parts)
 
                 # Strip all HTML tags EXCEPT the specific formatting tags Pushover actually supports
                 processed = re.sub(r'<(?!/?(a|b|i|u|font)\b)[^>]+>', '', processed, flags=re.IGNORECASE)
