@@ -111,6 +111,7 @@ import requests
 from email import message_from_bytes, policy
 from email.utils import parsedate_to_datetime
 from aiosmtpd.controller import Controller
+from aiosmtpd.smtp import SMTP
 
 # Cryptography imports for generating our fallback self-signed certificates on the fly
 from cryptography import x509
@@ -156,6 +157,46 @@ PID_FILE = "/tmp/smtp_pushover.pid"
 shutdown_event = threading.Event()
 reload_event = threading.Event()
 mappings_reload_event = threading.Event()
+
+
+class GatewaySMTP(SMTP):
+    """
+    Custom SMTP handler to intercept and sanitize complex ESMTP parameters.
+    Strict enterprise MTAs (like Solaris/Sendmail) often attach AUTH=<>, RET=HDRS, etc.
+    The default aiosmtpd parser abruptly rejects unrecognized parameters with a 555 error.
+    """
+    async def smtp_MAIL(self, arg):
+        if arg:
+            # Safely excise unsupported ESMTP parameters appended to MAIL FROM
+            arg = re.sub(r'(?i)\s+AUTH=[^\s]*', '', arg)
+            arg = re.sub(r'(?i)\s+RET=[^\s]*', '', arg)
+            arg = re.sub(r'(?i)\s+ENVID=[^\s]*', '', arg)
+        return await super().smtp_MAIL(arg)
+
+    async def smtp_RCPT(self, arg):
+        if arg:
+            # Safely excise unsupported ESMTP parameters appended to RCPT TO
+            arg = re.sub(r'(?i)\s+ORCPT=[^\s]*', '', arg)
+            arg = re.sub(r'(?i)\s+NOTIFY=[^\s]*', '', arg)
+        return await super().smtp_RCPT(arg)
+
+class GatewayController(Controller):
+    """
+    Custom controller to deploy our sanitized SMTP handler transparently.
+    """
+    def factory(self):
+        # Safely extract all parent controller attributes needed to build an SMTP instance
+        kwargs = {}
+        for attr in ['data_size_limit', 'enable_SMTPUTF8', 'ident', 'tls_context',
+                     'tls_require_cert', 'authenticator', 'auth_require_tls',
+                     'auth_exclude_mechanism', 'auth_callback_exceptions', 'timeout']:
+            if hasattr(self, attr):
+                kwargs[attr] = getattr(self, attr)
+
+        # Instantiate our custom class natively to avoid event-loop bindings issues
+        # associated with dynamic __class__ monkey-patching.
+        return GatewaySMTP(self.handler, **kwargs)
+
 
 class GatewayState:
     """
@@ -982,7 +1023,7 @@ if __name__ == "__main__":
 
         tls_context = get_tls_context(l_conf, eff_hostname)
         # Passing authenticator handles built-in ESMTP auth advertisement automatically
-        ctrl = Controller(
+        ctrl = GatewayController(
             handler, hostname=listen_address, port=listen_port, server_hostname=eff_hostname,
             tls_context=tls_context, authenticator=authenticator, auth_require_tls=False
         )
@@ -1050,7 +1091,7 @@ if __name__ == "__main__":
                         listen_address, listen_port = get_listen_params(bind)
                         tls_context = get_tls_context(l_conf, eff_hostname)
 
-                        ctrl = Controller(
+                        ctrl = GatewayController(
                             handler, hostname=listen_address, port=listen_port, server_hostname=eff_hostname,
                             tls_context=tls_context, authenticator=authenticator, auth_require_tls=False
                         )
