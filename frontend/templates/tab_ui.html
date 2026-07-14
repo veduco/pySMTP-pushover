@@ -1,23 +1,33 @@
+<style>
+    .segment-label.compact {
+        padding: 0.3rem 0;
+        font-size: 0.75rem;
+        letter-spacing: -0.2px;
+    }
+</style>
+
 <form hx-post="/save/ui" hx-target="#status" @htmx:config-request.camel="$event.detail.parameters['ui_listeners_json'] = JSON.stringify(uiListeners);">
     <div class="card">
         <h3>Web UI Display Settings</h3>
-        <div class="flex-row" style="margin-bottom: 1rem;">
-            <div class="flex-col" style="flex: 1; min-width: 200px;">
-                <label>UI Log Level</label>
-                <select style="width: 100%;" name="ui_loglevel" x-model="ui_loglevel">
-                    <option value="INFO">INFO</option>
-                    <option value="DEBUG">DEBUG</option>
-                    <option value="WARNING">WARNING</option>
-                    <option value="ERROR">ERROR</option>
-                </select>
+        <div class="flex-row" style="margin-bottom: 1rem; align-items: flex-end;">
+            <div class="flex-col" style="flex: 1; min-width: 250px; max-width: 100%;">
+                <label style="margin-bottom: 0.25rem;">UI Log Level Severity</label>
+                <div class="segment-track" style="width: 100%; display: flex;">
+                    <div class="segment-thumb" :style="'width: calc(20% - 1.2px); background-color: ' + getLogLevelColor(ui_loglevel) + '; transform: translateX(' + (Math.max(0, ['DEBUG','INFO','WARNING','ERROR','CRITICAL'].indexOf(ui_loglevel)) * 100) + '%);'"></div>
+                    <label class="segment-label compact" :style="ui_loglevel === 'DEBUG' ? 'color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.4);' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="ui_loglevel" value="DEBUG"> DEBUG</label>
+                    <label class="segment-label compact" :style="ui_loglevel === 'INFO' ? 'color: #121212;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="ui_loglevel" value="INFO"> INFO</label>
+                    <label class="segment-label compact" :style="ui_loglevel === 'WARNING' ? 'color: #121212;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="ui_loglevel" value="WARNING"> WARN</label>
+                    <label class="segment-label compact" :style="ui_loglevel === 'ERROR' ? 'color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.4);' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="ui_loglevel" value="ERROR"> ERROR</label>
+                    <label class="segment-label compact" :style="ui_loglevel === 'CRITICAL' ? 'color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.4);' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="ui_loglevel" value="CRITICAL"> CRIT</label>
+                </div>
             </div>
-            <div class="flex-col" style="flex: 1; min-width: 200px;">
+            <div class="flex-col" style="flex: 1; min-width: 200px; padding-bottom: 2px;">
                 <label>Display Timezone Location</label>
                 <select style="width: 100%;" name="timezone" x-model="ui_tz">
                     <option value="UTC">UTC / GMT</option><option value="America/New_York">Eastern Time</option><option value="America/Chicago">Central Time</option><option value="America/Denver">Mountain Time</option><option value="America/Los_Angeles">Pacific Time</option><option value="Europe/London">London (GMT/BST)</option>
                 </select>
             </div>
-            <div class="flex-col" style="flex: 1; min-width: 200px;">
+            <div class="flex-col" style="flex: 1; min-width: 200px; padding-bottom: 2px;">
                 <label>Date Format Syntax</label>
                 <select style="width: 100%;" name="date_format" x-model="ui_fmt">
                     <option value="YYYY-MM-DD HH:mm:ss">ISO (YYYY-MM-DD HH:mm:ss)</option><option value="MM/DD/YYYY hh:mm:ss A">US (MM/DD/YYYY hh:mm:ss A)</option><option value="DD/MM/YYYY HH:mm:ss">UK/EU (DD/MM/YYYY HH:mm:ss)</option>

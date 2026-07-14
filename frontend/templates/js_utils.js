@@ -1,12 +1,17 @@
+getLogLevelColor(level) {
+    switch(level) {
+        case 'DEBUG': return '#c678dd';
+        case 'INFO': return '#98c379';
+        case 'WARNING': return '#e5c07b';
+        case 'ERROR': return '#e06c75';
+        case 'CRITICAL': return '#be5046';
+        default: return 'var(--primary-color)';
+    }
+},
 isValidIP(ip) {
     if (ip === 'localhost') return true;
-
-    // Strict IPv4 bounds (0-255)
     const ipv4 = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-
-    // Standard IPv6 bounds (Allows compression '::')
     const ipv6 = /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:))$/;
-
     return ipv4.test(ip) || ipv6.test(ip);
 },
 reorderRoute(oldIdx, newIdx) {
