@@ -1,12 +1,16 @@
 {
-  "port": 8443,
+  "listeners": [
+    {
+      "bind": "0.0.0.0:8443",
+      "https": true,
+      "tls_cert": "",
+      "tls_key": ""
+    }
+  ],
   "timezone": "UTC",
   "date_format": "YYYY-MM-DD HH:mm:ss",
   "relative_time": true,
   "expand_adv": false,
-  "https": true,
-  "tls_cert": "",
-  "tls_key": "",
   "vault_sort": "name_asc",
   "smtp_sort": "name_asc",
   "smarthost_sort": "alias_asc",
