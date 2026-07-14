@@ -34,7 +34,6 @@
         .flex-col { flex: 1; min-width: 0; }
         label { display: block; font-weight: 600; margin-bottom: 0.35rem; font-size: 0.85rem; color: var(--text-color); opacity: 0.9; }
 
-        /* Modernized Inputs & Form Elements */
         input[type="text"], input[type="password"], input[type="number"], textarea {
             width: 100%; padding: 0.6rem 0.75rem; box-sizing: border-box; background: var(--input-bg);
             color: var(--text-color); border: 1px solid var(--border-color); border-radius: 6px;
@@ -45,7 +44,6 @@
             box-shadow: 0 0 0 3px var(--input-focus-glow);
         }
 
-        /* Modern Select Architecture with Custom Chevron */
         select {
             width: 100%; padding: 0.6rem 2.2rem 0.6rem 0.75rem; box-sizing: border-box; background: var(--input-bg);
             color: var(--text-color); border: 1px solid var(--border-color); border-radius: 6px;
@@ -80,8 +78,10 @@
         tbody tr:hover { background-color: var(--row-hover); }
         .table-col-min { width: 1%; white-space: nowrap; }
         .time-display { cursor: help; border-bottom: 1px dashed var(--text-color); }
-        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-        .modal-content { background: var(--surface-color); padding: 2rem; border-radius: 8px; width: 440px; max-width: 95%; box-shadow: 0 10px 25px -3px rgba(0,0,0,0.2); border: 1px solid var(--border-color); }
+
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; box-sizing: border-box; }
+        .modal-content { background: var(--surface-color); padding: 2rem; border-radius: 8px; width: 440px; max-width: 100%; box-shadow: 0 10px 25px -3px rgba(0,0,0,0.2); border: 1px solid var(--border-color); box-sizing: border-box; overflow-y: auto; max-height: 100vh; }
+
         .token-input { width: 42ch; max-width: 100%; }
         .auto-width { width: auto; max-width: 100%; }
 
@@ -105,5 +105,26 @@
         [data-theme="dark"] .theme-toggle svg { stroke: var(--text-color); }
         .table-sort { cursor: pointer; user-select: none; }
         .table-sort:hover { background-color: var(--row-hover); }
+
+        /* Mobile Responsive Adjustments */
+        @media (max-width: 768px) {
+            body { padding: 0.5rem; }
+            .container { padding: 1rem; border-radius: 0; border: none; box-shadow: none; }
+            .card { padding: 1rem; }
+            .flex-row { gap: 0.5rem; }
+
+            /* The Table Blowout Fix */
+            table {
+                display: block;
+                width: 100%;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                border: none;
+            }
+            th, td { white-space: nowrap; }
+
+            /* Segment Label Mobile Fix */
+            .segment-label { padding: 0.3rem 0.5rem; font-size: 0.75rem; }
+        }
     </style>
 </head>
