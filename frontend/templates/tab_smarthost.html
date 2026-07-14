@@ -23,6 +23,7 @@
             <tr>
                 <th class="table-sort" style="width: auto;" @click="setSmarthostSort('alias')">Alias Name <span style="font-size: 0.8em;" x-show="smarthostSortCol==='alias'" x-text="smarthostSortDir===1 ? '▲' : '▼'"></span></th>
                 <th class="table-sort" @click="setSmarthostSort('address')">Address <span style="font-size: 0.8em;" x-show="smarthostSortCol==='address'" x-text="smarthostSortDir===1 ? '▲' : '▼'"></span></th>
+                <th class="table-sort table-col-min" @click="setSmarthostSort('ehlo')">EHLO <span style="font-size: 0.8em;" x-show="smarthostSortCol==='ehlo'" x-text="smarthostSortDir===1 ? '▲' : '▼'"></span></th>
                 <th class="table-sort table-col-min" @click="setSmarthostSort('starttls')">STARTTLS <span style="font-size: 0.8em;" x-show="smarthostSortCol==='starttls'" x-text="smarthostSortDir===1 ? '▲' : '▼'"></span></th>
                 <th class="table-sort table-col-min" @click="setSmarthostSort('auth')">AUTH <span style="font-size: 0.8em;" x-show="smarthostSortCol==='auth'" x-text="smarthostSortDir===1 ? '▲' : '▼'"></span></th>
                 <th class="table-sort table-col-min" style="min-width: 150px;" @click="setSmarthostSort('username')">Username <span style="font-size: 0.8em;" x-show="smarthostSortCol==='username'" x-text="smarthostSortDir===1 ? '▲' : '▼'"></span></th>
@@ -36,6 +37,7 @@
                 <tr>
                     <td><strong x-text="sh.alias"></strong></td>
                     <td x-text="sh.hostname + ':' + sh.port"></td>
+                    <td class="table-col-min" x-text="sh.advertised_hostname || '-'"></td>
                     <td class="table-col-min" style="text-align: center;">
                         <svg x-show="sh.starttls" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                         <svg x-show="!sh.starttls" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#ef4444" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
