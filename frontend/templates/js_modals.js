@@ -135,3 +135,37 @@ saveEditModal() {
     }
     this.editModal.open = false;
 },
+openUiListenerModal(mode, idx=null) {
+    this.uiListenerModal.mode = mode;
+    this.uiListenerModal.idx = idx;
+    this.uiListenerModal.error = '';
+    if(mode === 'add') {
+        this.uiListenerModal.ip = '0.0.0.0'; this.uiListenerModal.port = 8443;
+        this.uiListenerModal.https = true; this.uiListenerModal.tls_cert = ''; this.uiListenerModal.tls_key = '';
+    } else {
+        const l = this.uiListeners[idx];
+        let ip = '0.0.0.0'; let port = 8443;
+        if(l.bind && l.bind.includes(':')) {
+            const parts = l.bind.split(':');
+            ip = parts[0]; port = parseInt(parts[1]);
+        }
+        this.uiListenerModal.ip = ip; this.uiListenerModal.port = port;
+        this.uiListenerModal.https = l.https === true;
+        this.uiListenerModal.tls_cert = l.tls_cert || ''; this.uiListenerModal.tls_key = l.tls_key || '';
+    }
+    this.uiListenerModal.open = true;
+},
+saveUiListenerModal() {
+    const ip = this.uiListenerModal.ip.trim() || '0.0.0.0';
+    const port = this.uiListenerModal.port;
+    if(!port || port < 1 || port > 65535) { this.uiListenerModal.error = 'Port must be between 1 and 65535.'; return; }
+    const bind = ip + ':' + port;
+    const obj = { bind: bind, https: this.uiListenerModal.https };
+    if(this.uiListenerModal.https) {
+        if(this.uiListenerModal.tls_cert.trim()) obj.tls_cert = this.uiListenerModal.tls_cert.trim();
+        if(this.uiListenerModal.tls_key.trim()) obj.tls_key = this.uiListenerModal.tls_key.trim();
+    }
+    if(this.uiListenerModal.mode === 'add') { this.uiListeners.push(obj); }
+    else { this.uiListeners[this.uiListenerModal.idx] = obj; }
+    this.uiListenerModal.open = false;
+},

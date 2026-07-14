@@ -115,7 +115,6 @@ async def index(request: Request):
     v_path = resolve_vault_path(config)
     vault_data = load_vault_safe(v_path)
 
-    # CRITICAL SECURITY BOUNDARY: Strip plaintext secrets before rendering HTML!
     safe_vault_meta = {"app": {}, "user": {}, "smarthost": {}}
     for vtype in ["app", "user", "smarthost"]:
         for alias, obj in vault_data.get(vtype, {}).items():
@@ -158,12 +157,11 @@ async def index(request: Request):
 
     return templates.TemplateResponse("index.html", {
         "request": request, "config_json": json.dumps(config), "smtp_meta_json": json.dumps(config.get("smtp", {}).get("_smtp_meta", {})),
-        "vault_meta_json": json.dumps(safe_vault_meta), "ui_port": ui_config.get("port", 8443), "ui_https": ui_config.get("https", True),
+        "vault_meta_json": json.dumps(safe_vault_meta), "ui_config_json": json.dumps(ui_config),
         "ui_expand_adv": ui_config.get("expand_adv", False), "ui_vault_sort": ui_config.get("vault_sort", "name_asc"),
         "ui_smtp_sort": ui_config.get("smtp_sort", "name_asc"), "ui_smarthost_sort": ui_config.get("smarthost_sort", "alias_asc"),
         "ui_tz": ui_config.get("timezone", "UTC"), "ui_fmt": ui_config.get("date_format", "YYYY-MM-DD HH:mm:ss"),
-        "ui_relative": ui_config.get("relative_time", True), "ui_loglevel": ui_config.get("ui_loglevel", "INFO"),
-        "ui_cert": ui_config.get("tls_cert", ""), "ui_key": ui_config.get("tls_key", "")
+        "ui_relative": ui_config.get("relative_time", True), "ui_loglevel": ui_config.get("ui_loglevel", "INFO")
     })
 
 @app.post("/save/config")
@@ -230,13 +228,18 @@ async def save_vault_state(vault_json: str = Form(...)):
 
 @app.post("/save/ui")
 async def save_ui(
-    port: int = Form(...), timezone: str = Form(...), date_format: str = Form(...),
-    relative_time: bool = Form(False), expand_adv: bool = Form(False), https: bool = Form(False), tls_cert: str = Form(""), tls_key: str = Form(""),
-    vault_sort: str = Form("name_asc"), smtp_sort: str = Form("name_asc"), smarthost_sort: str = Form("alias_asc"), ui_loglevel: str = Form("INFO")
+    timezone: str = Form(...), date_format: str = Form(...),
+    relative_time: bool = Form(False), expand_adv: bool = Form(False),
+    vault_sort: str = Form("name_asc"), smtp_sort: str = Form("name_asc"), smarthost_sort: str = Form("alias_asc"),
+    ui_loglevel: str = Form("INFO"), ui_listeners_json: str = Form("[]")
 ):
+    try: listeners = json.loads(ui_listeners_json)
+    except Exception: listeners = [{"bind": "0.0.0.0:8443", "https": True}]
+
     save_json(UI_CONFIG_FILE, {
-        "port": port, "timezone": timezone, "date_format": date_format, "relative_time": relative_time, "expand_adv": expand_adv, "https": https,
-        "tls_cert": tls_cert, "tls_key": tls_key, "vault_sort": vault_sort, "smtp_sort": smtp_sort, "smarthost_sort": smarthost_sort, "ui_loglevel": ui_loglevel
+        "listeners": listeners, "timezone": timezone, "date_format": date_format,
+        "relative_time": relative_time, "expand_adv": expand_adv,
+        "vault_sort": vault_sort, "smtp_sort": smtp_sort, "smarthost_sort": smarthost_sort, "ui_loglevel": ui_loglevel
     })
     os.kill(os.getpid(), signal.SIGUSR1)
     return HTMLResponse("UI engine configuration altered successfully.")

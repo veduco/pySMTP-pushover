@@ -65,3 +65,16 @@ get sortedListeners() {
         return res * this.listenerSortDir;
     });
 },
+setUiListenerSort(col) {
+    if(this.uiListenerSortCol === col) { this.uiListenerSortDir = this.uiListenerSortDir === 1 ? -1 : 1; }
+    else { this.uiListenerSortCol = col; this.uiListenerSortDir = 1; }
+},
+get sortedUiListeners() {
+    const mapped = this.uiListeners.map((l, i) => ({ ...l, _idx: i }));
+    return mapped.sort((a, b) => {
+        let res = 0;
+        if (this.uiListenerSortCol === 'bind') res = (a.bind || '').localeCompare(b.bind || '');
+        else if (this.uiListenerSortCol === 'https') res = (a.https === b.https) ? 0 : a.https ? 1 : -1;
+        return res * this.uiListenerSortDir;
+    });
+},

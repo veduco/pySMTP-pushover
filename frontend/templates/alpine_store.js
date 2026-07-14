@@ -27,6 +27,18 @@ document.addEventListener('alpine:init', () => {
                 }
             });
 
+            // UI Legacy Migration
+            let ul = this.rawUiConfig.listeners;
+            if(!ul || !Array.isArray(ul) || ul.length === 0) {
+                ul = [{
+                    bind: '0.0.0.0:' + (this.rawUiConfig.port || 8443),
+                    https: this.rawUiConfig.https !== false,
+                    tls_cert: this.rawUiConfig.tls_cert || '',
+                    tls_key: this.rawUiConfig.tls_key || ''
+                }];
+            }
+            this.uiListeners = ul;
+
             document.documentElement.setAttribute('data-theme', this.theme);
 
             if (this.tab === 'queue') {
