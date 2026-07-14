@@ -16,7 +16,7 @@ from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
-from core.config import SCRIPT_DIR, CONFIG_FILE, UI_CONFIG_FILE, VAULT_FILE, VAULT_META_FILE, SMTP_PID_FILE, load_clean_json, save_json, load_vault_safe, init_vault
+from core.config import SCRIPT_DIR, CONFIG_FILE, UI_CONFIG_FILE, SMTP_PID_FILE, load_clean_json, save_json, load_vault_safe
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "templates")
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
@@ -43,9 +43,20 @@ def generate_ui_cert():
     with open(cert_path, "wb") as f: f.write(cert.public_bytes(serialization.Encoding.PEM))
     return cert_path, key_path
 
+def resolve_vault_path(config_data=None):
+    if config_data is None:
+        config_data = load_clean_json(CONFIG_FILE)
+
+    conf_dir = os.path.dirname(CONFIG_FILE) or "."
+    v_path = config_data.get("smtp", {}).get("vault_file")
+
+    if not v_path: return os.path.join(conf_dir, "vault.json")
+    return os.path.normpath(os.path.join(conf_dir, v_path))
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_vault()
+    v_path = resolve_vault_path()
+    if not os.path.exists(v_path): save_json(v_path, {"app": {}, "user": {}, "smarthost": {}})
     yield
 
 app = FastAPI(lifespan=lifespan)
@@ -100,7 +111,15 @@ async def delete_queue_item(item_id: str):
 async def index(request: Request):
     config = load_clean_json(CONFIG_FILE)
     ui_config = load_clean_json(UI_CONFIG_FILE)
-    vault_entries = load_vault_safe(VAULT_META_FILE)
+
+    v_path = resolve_vault_path(config)
+    vault_data = load_vault_safe(v_path)
+
+    # CRITICAL SECURITY BOUNDARY: Strip plaintext secrets before rendering HTML!
+    safe_vault_meta = {"app": {}, "user": {}, "smarthost": {}}
+    for vtype in ["app", "user", "smarthost"]:
+        for alias, obj in vault_data.get(vtype, {}).items():
+            safe_vault_meta[vtype][alias] = obj.get("epoch", 0)
 
     changed_config = False
     if "routes" not in config:
@@ -139,7 +158,7 @@ async def index(request: Request):
 
     return templates.TemplateResponse("index.html", {
         "request": request, "config_json": json.dumps(config), "smtp_meta_json": json.dumps(config.get("smtp", {}).get("_smtp_meta", {})),
-        "vault_meta_json": json.dumps(vault_entries), "ui_port": ui_config.get("port", 8443), "ui_https": ui_config.get("https", True),
+        "vault_meta_json": json.dumps(safe_vault_meta), "ui_port": ui_config.get("port", 8443), "ui_https": ui_config.get("https", True),
         "ui_expand_adv": ui_config.get("expand_adv", False), "ui_vault_sort": ui_config.get("vault_sort", "name_asc"),
         "ui_smtp_sort": ui_config.get("smtp_sort", "name_asc"), "ui_smarthost_sort": ui_config.get("smarthost_sort", "alias_asc"),
         "ui_tz": ui_config.get("timezone", "UTC"), "ui_fmt": ui_config.get("date_format", "YYYY-MM-DD HH:mm:ss"),
@@ -152,6 +171,9 @@ async def save_config(config_json: str = Form(...), vault_json: str = Form(None)
     try:
         parsed = json.loads(config_json)
         old_config = load_clean_json(CONFIG_FILE)
+
+        v_path = resolve_vault_path(parsed)
+
         auth_block = parsed.get("smtp", {}).get("auth", {})
         meta_block = parsed.get("_smtp_meta", {})
         for user, pwd in list(auth_block.items()):
@@ -164,20 +186,17 @@ async def save_config(config_json: str = Form(...), vault_json: str = Form(None)
 
         if vault_json:
             vault_parsed = json.loads(vault_json)
-            vault_data = load_vault_safe(VAULT_FILE)
-            new_data = {"app": {}, "user": {}, "smarthost": {}}
-            new_meta = {"app": {}, "user": {}, "smarthost": {}}
+            vault_data = load_vault_safe(v_path)
+            new_vault = {"app": {}, "user": {}, "smarthost": {}}
             for vtype in ["app", "user"]:
                 for item in vault_parsed.get(vtype, []):
                     name = item["name"]; tok = item["token"]; epoch = item["epoch"]
-                    if tok == "__RETAIN__": new_data[vtype][name] = vault_data[vtype].get(name, "")
-                    else: new_data[vtype][name] = tok
-                    new_meta[vtype][name] = epoch
+                    if tok == "__RETAIN__": tok = vault_data[vtype].get(name, {}).get("token", "")
+                    new_vault[vtype][name] = {"token": tok, "epoch": epoch}
             for alias, tok in vault_parsed.get("smarthost", {}).items():
-                if tok == "__RETAIN__": new_data["smarthost"][alias] = vault_data.get("smarthost", {}).get(alias, "")
-                else: new_data["smarthost"][alias] = tok
-                new_meta["smarthost"][alias] = int(time.time())
-            save_json(VAULT_FILE, new_data); save_json(VAULT_META_FILE, new_meta)
+                if tok == "__RETAIN__": tok = vault_data.get("smarthost", {}).get(alias, {}).get("token", "")
+                new_vault["smarthost"][alias] = {"token": tok, "epoch": int(time.time())}
+            save_json(v_path, new_vault)
 
         old_smtp = old_config.get("smtp", {})
         new_smtp = parsed.get("smtp", {})
@@ -191,20 +210,20 @@ async def save_config(config_json: str = Form(...), vault_json: str = Form(None)
 async def save_vault_state(vault_json: str = Form(...)):
     try:
         parsed = json.loads(vault_json)
-        vault_data = load_vault_safe(VAULT_FILE)
-        new_data = {"app": {}, "user": {}, "smarthost": {}}
-        new_meta = {"app": {}, "user": {}, "smarthost": {}}
+        v_path = resolve_vault_path()
+        vault_data = load_vault_safe(v_path)
+
+        new_vault = {"app": {}, "user": {}, "smarthost": {}}
         for vtype in ["app", "user"]:
             for item in parsed.get(vtype, []):
                 name = item["name"]; tok = item["token"]; epoch = item["epoch"]
-                if tok == "__RETAIN__": new_data[vtype][name] = vault_data[vtype].get(name, "")
-                else: new_data[vtype][name] = tok
-                new_meta[vtype][name] = epoch
-        for alias, tok in parsed.get("smarthost", {}).items():
-            if tok == "__RETAIN__": new_data["smarthost"][alias] = vault_data.get("smarthost", {}).get(alias, "")
-            else: new_data["smarthost"][alias] = tok
-            new_meta["smarthost"][alias] = int(time.time())
-        save_json(VAULT_FILE, new_data); save_json(VAULT_META_FILE, new_meta)
+                if tok == "__RETAIN__": tok = vault_data[vtype].get(name, {}).get("token", "")
+                new_vault[vtype][name] = {"token": tok, "epoch": epoch}
+            for alias, tok in parsed.get("smarthost", {}).items():
+                if tok == "__RETAIN__": tok = vault_data.get("smarthost", {}).get(alias, {}).get("token", "")
+                new_vault["smarthost"][alias] = {"token": tok, "epoch": int(time.time())}
+
+        save_json(v_path, new_vault)
         signal_smtp_app(restart_listeners=False)
         return HTMLResponse("Token Vault safely synchronized with the gateway daemon.")
     except Exception as e: return HTMLResponse(f"Error parsing Vault Array: {e}")

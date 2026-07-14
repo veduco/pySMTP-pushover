@@ -16,9 +16,7 @@ COPY backend/ ./backend/
 
 RUN chmod +x run_backend.py
 
-ENV GATEWAY_CONFIG="/data/config.json" \
-    VAULT_FILE="/data/vault.json" \
-    VAULT_META_FILE="/data/vault_meta.json"
+ENV GATEWAY_CONFIG="/data/config.json"
 
 EXPOSE 25
 

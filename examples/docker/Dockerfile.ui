@@ -18,9 +18,7 @@ COPY frontend/ ./frontend/
 RUN chmod +x run_frontend.py
 
 ENV GATEWAY_CONFIG="/data/config.json" \
-    UI_CONFIG="/data/ui_config.json" \
-    VAULT_FILE="/data/vault.json" \
-    VAULT_META_FILE="/data/vault_meta.json"
+    UI_CONFIG="/data/ui_config.json"
 
 EXPOSE 8443
 
