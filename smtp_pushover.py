@@ -276,9 +276,10 @@ class PushoverSMTPHandler:
                 flags=re.IGNORECASE
             )
 
-            # 2. Inject missing blank line after boundary attributes if text content immediately follows
+            # 2. Inject missing blank line after boundary attributes if text content immediately follows.
+            # We use a negative lookahead to explicitly skip valid header continuations, boundaries, and newlines.
             raw_content = re.sub(
-                br'(charset="?[a-zA-Z0-9\-]+"?\r?\n)(?!\r?\n|[ \t]*--)',
+                br'(charset="?[a-zA-Z0-9\-]+"?\r?\n)(?!\r?\n|[ \t]*--|[A-Za-z0-9\-]+:|[ \t]+[A-Za-z0-9\-]+=)',
                 br'\1\r\n',
                 raw_content,
                 flags=re.IGNORECASE
@@ -543,7 +544,7 @@ class PushoverSMTPHandler:
                     payload["smarthost_alias"] = route.get("smarthost_alias")
                     payload["force_plaintext"] = force_pt
                     payload["disable_attachments"] = not attachments_enabled
-                    # Store the complete raw bytes in case we are forwarding unmodified
+                    # Store the complete raw bytes safely to avoid mutating the original payload
                     payload["raw_eml_base64"] = base64.b64encode(raw_content).decode('ascii')
 
                 # Base64 encode the resolved image attachment for safe persistence queuing (if supported)
@@ -673,17 +674,42 @@ def delivery_worker(msg_queue, state):
                 try:
                     # Determine if we need to synthesize a new email boundary to satisfy formatting constraints
                     if payload.get("force_plaintext") or payload.get("disable_attachments"):
-                        msg = EmailMessage()
-                        msg['Subject'] = payload.get("title", "No Subject")
-                        msg['From'] = payload.get("sender", "gateway@localhost")
-                        msg['To'] = ", ".join(payload.get("recipients", []))
-                        msg['Date'] = email.utils.formatdate(localtime=False)
-                        msg['Message-ID'] = email.utils.make_msgid()
+                        raw_bytes = base64.b64decode(payload["raw_eml_base64"])
+                        original_msg = message_from_bytes(raw_bytes, policy=policy.default)
 
-                        if payload.get("is_html"):
-                            msg.set_content(payload.get("message", ""), subtype="html", charset="utf-8")
+                        raw_plain = ""
+                        raw_html = ""
+
+                        # Dynamically unpack pristine layers from original payload stream
+                        for part in original_msg.walk():
+                            if part.get_content_maintype() == 'multipart': continue
+                            if "attachment" in str(part.get("Content-Disposition", "")): continue
+                            ctype = part.get_content_type()
+                            if ctype == "text/plain":
+                                raw_plain = part.get_payload(decode=True).decode(part.get_content_charset() or 'utf-8', errors='replace')
+                            elif ctype == "text/html":
+                                raw_html = part.get_payload(decode=True).decode(part.get_content_charset() or 'utf-8', errors='replace')
+
+                        msg = EmailMessage()
+                        # Native Header replication to ensure formatting parity
+                        for key, val in original_msg.items():
+                            if key.lower() not in ['content-type', 'mime-version', 'content-transfer-encoding', 'content-disposition']:
+                                msg[key] = val
+                        if 'MIME-Version' not in msg: msg['MIME-Version'] = '1.0'
+
+                        # Apply fallback overrides
+                        if not msg.get('Subject'): msg['Subject'] = payload.get("title", "No Subject")
+                        if not msg.get('From'): msg['From'] = payload.get("sender", "gateway@localhost")
+                        if not msg.get('To'): msg['To'] = ", ".join(payload.get("recipients", []))
+                        if not msg.get('Date'): msg['Date'] = email.utils.formatdate(localtime=False)
+                        if not msg.get('Message-ID'): msg['Message-ID'] = email.utils.make_msgid()
+
+                        if payload.get("force_plaintext"):
+                            msg.set_content(raw_plain or payload.get("message", ""), charset="utf-8")
                         else:
-                            msg.set_content(payload.get("message", ""), charset="utf-8")
+                            msg.set_content(raw_plain or payload.get("message", ""), charset="utf-8")
+                            if raw_html:
+                                msg.add_alternative(raw_html, subtype="html", charset="utf-8")
 
                         # If attachments aren't disabled, reattach the parsed image representation
                         if not payload.get("disable_attachments") and payload.get("attachment_base64"):
@@ -691,10 +717,10 @@ def delivery_worker(msg_queue, state):
                             maintype, subtype = payload["attachment_type"].split('/', 1)
                             msg.add_attachment(img_bytes, maintype=maintype, subtype=subtype, filename=payload["attachment_name"])
 
-                        raw_bytes = bytes(msg)
+                        final_send_bytes = bytes(msg)
                     else:
                         # Stream the entirely unmodified raw bytes exactly as they hit the listener
-                        raw_bytes = base64.b64decode(payload["raw_eml_base64"])
+                        final_send_bytes = base64.b64decode(payload["raw_eml_base64"])
 
                     host = sh_conf.get("hostname")
                     port = int(sh_conf.get("port", 25))
@@ -717,7 +743,7 @@ def delivery_worker(msg_queue, state):
                             sh_pass = state.vault.get("smarthost", {}).get(alias, "")
                             server.login(sh_conf.get("username", ""), sh_pass)
 
-                        server.sendmail(payload.get("sender"), payload.get("recipients"), raw_bytes)
+                        server.sendmail(payload.get("sender"), payload.get("recipients"), final_send_bytes)
 
                     logging.info(f"Successfully relayed email '{payload['title']}' via Smarthost '{alias}'.")
                     success = True
