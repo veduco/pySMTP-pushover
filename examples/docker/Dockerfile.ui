@@ -11,8 +11,11 @@ RUN apk update && \
 
 WORKDIR /app
 
-COPY ui_server.py .
-RUN chmod +x ui_server.py
+COPY run_frontend.py .
+COPY core/ ./core/
+COPY frontend/ ./frontend/
+
+RUN chmod +x run_frontend.py
 
 ENV GATEWAY_CONFIG="/data/config.json" \
     UI_CONFIG="/data/ui_config.json" \
@@ -21,4 +24,4 @@ ENV GATEWAY_CONFIG="/data/config.json" \
 
 EXPOSE 8443
 
-CMD ["python3", "ui_server.py"]
+CMD ["python3", "run_frontend.py"]

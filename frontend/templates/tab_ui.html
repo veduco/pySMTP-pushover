@@ -1,0 +1,75 @@
+<form hx-post="/save/ui" hx-target="#status">
+    <div class="card">
+        <h3>Web UI Settings</h3>
+        <div class="flex-row" style="margin-bottom: 1rem;">
+            <div style="flex: 0 0 auto;">
+                <label>UI Listen Port</label>
+                <input type="number" name="port" value="{{ ui_port }}" style="width: 120px;" min="1" max="65535">
+            </div>
+            <div style="flex: 0 0 auto;">
+                <label>UI Log Level</label>
+                <select class="auto-width" name="ui_loglevel" x-model="ui_loglevel">
+                    <option value="INFO">INFO</option>
+                    <option value="DEBUG">DEBUG</option>
+                    <option value="WARNING">WARNING</option>
+                    <option value="ERROR">ERROR</option>
+                </select>
+            </div>
+        </div>
+        <div class="flex-row">
+            <div style="flex: 0 0 auto;">
+                <label>Display Timezone Location</label>
+                <select class="auto-width" name="timezone" x-model="ui_tz">
+                    <option value="UTC">UTC / GMT</option><option value="America/New_York">Eastern Time</option><option value="America/Chicago">Central Time</option><option value="America/Denver">Mountain Time</option><option value="America/Los_Angeles">Pacific Time</option><option value="Europe/London">London (GMT/BST)</option>
+                </select>
+            </div>
+            <div style="flex: 0 0 auto;">
+                <label>Date Format Syntax</label>
+                <select class="auto-width" name="date_format" x-model="ui_fmt">
+                    <option value="YYYY-MM-DD HH:mm:ss">ISO (YYYY-MM-DD HH:mm:ss)</option><option value="MM/DD/YYYY hh:mm:ss A">US (MM/DD/YYYY hh:mm:ss A)</option><option value="DD/MM/YYYY HH:mm:ss">UK/EU (DD/MM/YYYY HH:mm:ss)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="flex-row" style="margin-top: 1rem;">
+            <div style="flex: 0 0 auto;">
+                <label>Token Default Sort</label>
+                <select class="auto-width" name="vault_sort" x-model="ui_vault_sort">
+                    <option value="name_asc">Alias Name (Ascending)</option>
+                    <option value="name_desc">Alias Name (Descending)</option>
+                    <option value="epoch_asc">Last Modification (Ascending)</option>
+                    <option value="epoch_desc">Last Modification (Descending)</option>
+                </select>
+            </div>
+            <div style="flex: 0 0 auto;">
+                <label>SMTP Users Default Sort</label>
+                <select class="auto-width" name="smtp_sort" x-model="ui_smtp_sort">
+                    <option value="name_asc">Username (Ascending)</option>
+                    <option value="name_desc">Username (Descending)</option>
+                    <option value="epoch_asc">Last Modification (Ascending)</option>
+                    <option value="epoch_desc">Last Modification (Descending)</option>
+                </select>
+            </div>
+            <div style="flex: 0 0 auto;">
+                <label>Smarthost Default Sort</label>
+                <select class="auto-width" name="smarthost_sort" x-model="ui_smarthost_sort">
+                    <option value="alias_asc">Alias Name (Ascending)</option>
+                    <option value="alias_desc">Alias Name (Descending)</option>
+                </select>
+            </div>
+        </div>
+
+        <div style="margin-bottom: 0.5rem; margin-top: 1rem;"><label class="toggle-label"><div class="toggle-switch"><input type="checkbox" name="relative_time" x-model="ui_relative"><span class="slider"></span></div> Render Coerced Relative Human Times (e.g. '3 days ago')</label></div>
+        <div style="margin-bottom: 1.5rem;"><label class="toggle-label"><div class="toggle-switch"><input type="checkbox" name="expand_adv" x-model="ui_expand_adv"><span class="slider"></span></div> Always Expand Route Settings by Default</label></div>
+        <hr><div style="margin-bottom: 1rem;"><label class="toggle-label"><div class="toggle-switch"><input type="checkbox" name="https" x-model="httpsEnabled"><span class="slider"></span></div> Enable HTTPS Bindings</label></div>
+
+        <div class="flex-row" x-show="httpsEnabled">
+            <div class="flex-col"><label>UI Specific TLS Cert File</label><input type="text" name="tls_cert" value="{{ ui_cert }}" placeholder="Leave blank for auto-generated UUID cert" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true"></div>
+            <div class="flex-col"><label>UI Specific TLS Key File</label><input type="text" name="tls_key" value="{{ ui_key }}" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true"></div>
+        </div>
+    </div>
+    <div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
+        <button type="submit" style="font-size: 1.1rem; padding: 1rem;">Save UI Transformations</button>
+        <button type="button" class="warning" @click="window.location.reload()" style="font-size: 1.1rem; padding: 1rem;">Discard Changes & Reload from Disk</button>
+    </div>
+</form>

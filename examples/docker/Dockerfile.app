@@ -10,8 +10,11 @@ RUN apk update && \
 
 WORKDIR /app
 
-COPY smtp_pushover.py .
-RUN chmod +x smtp_pushover.py
+COPY run_backend.py .
+COPY core/ ./core/
+COPY backend/ ./backend/
+
+RUN chmod +x run_backend.py
 
 ENV GATEWAY_CONFIG="/data/config.json" \
     VAULT_FILE="/data/vault.json" \
@@ -19,4 +22,4 @@ ENV GATEWAY_CONFIG="/data/config.json" \
 
 EXPOSE 25
 
-CMD ["python3", "smtp_pushover.py"]
+CMD ["python3", "run_backend.py"]

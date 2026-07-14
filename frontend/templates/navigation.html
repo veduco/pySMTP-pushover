@@ -1,0 +1,8 @@
+<div class="tabs">
+    <div class="tab" :class="{ 'active': tab === 'routes' }" @click="tab = 'routes'">Routes</div>
+    <div class="tab" :class="{ 'active': tab === 'queue' }" @click="tab = 'queue'">Queue Manager</div>
+    <div class="tab" :class="{ 'active': tab === 'pushover' }" @click="tab = 'pushover'">Pushover Settings</div>
+    <div class="tab" :class="{ 'active': tab === 'smarthost' }" @click="tab = 'smarthost'">Smarthost Settings</div>
+    <div class="tab" :class="{ 'active': tab === 'server' }" @click="tab = 'server'">SMTP Server</div>
+    <div class="tab" :class="{ 'active': tab === 'ui' }" @click="tab = 'ui'">UI Settings</div>
+</div>

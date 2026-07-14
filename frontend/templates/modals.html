@@ -1,0 +1,123 @@
+<div x-show="editModal.open" class="modal-overlay" style="display: none;" x-transition>
+    <div class="modal-content" @click.away="editModal.open = false">
+        <h3 style="margin-top: 0;" x-text="editModal.type === 'smtp' ? 'Change Password for ' + editModal.name : 'Modify Secret for ' + editModal.name"></h3>
+        <div class="form-group">
+            <label x-text="editModal.type === 'smtp' ? 'New Password' : 'New Token Value'"></label>
+            <div class="token-input" style="position: relative; display: inline-block;">
+                <input :type="editModal.showToken ? 'text' : 'password'" x-model="editModal.value" @keyup.enter="saveEditModal()" placeholder="Enter new hidden value..." autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" :maxlength="editModal.type === 'vault' ? 30 : 256" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                <div @click="editModal.showToken = !editModal.showToken" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
+                    <svg x-show="!editModal.showToken" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                    <svg x-show="editModal.showToken" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                </div>
+            </div>
+        </div>
+        <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
+            <button type="button" class="outline" @click="editModal.open = false">Cancel</button><button type="button" @click="saveEditModal()">Save Changes</button>
+        </div>
+    </div>
+</div>
+
+<div x-show="smarthostModal.open" class="modal-overlay" style="display: none;" x-transition>
+    <div class="modal-content" @click.away="smarthostModal.open = false">
+        <h3 style="margin-top: 0;" x-text="smarthostModal.mode === 'add' ? 'Add Smarthost' : 'Modify Server for ' + smarthostModal.oldAlias"></h3>
+
+        <div class="form-group" style="margin-bottom: 1rem;">
+            <label>Alias Name</label>
+            <input type="text" x-model="smarthostModal.alias" placeholder="e.g. gmail_relay" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+        </div>
+        <div class="flex-row" style="margin-bottom: 1.5rem;">
+            <div class="flex-col" style="flex: 2; min-width: 0;">
+                <label>Hostname</label>
+                <input type="text" x-model="smarthostModal.hostname" placeholder="smtp.gmail.com" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+            </div>
+            <div class="flex-col" style="flex: 1; min-width: 0;">
+                <label>Port</label>
+                <input type="number" x-model.number="smarthostModal.port" style="width: 100px; max-width: 100%;" oninput="if(this.value.length > 5) this.value = this.value.slice(0, 5);" min="1" max="65535">
+            </div>
+        </div>
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+            <label>Advertised Hostname (EHLO)</label>
+            <input type="text" x-model="smarthostModal.advertised_hostname" placeholder="Optional. Defaults to Global Hostname" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+        </div>
+
+        <div class="flex-row" style="gap: 1.5rem; margin-bottom: 1rem;">
+            <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="smarthostModal.starttls"><span class="slider"></span></div> Use STARTTLS</label>
+            <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="smarthostModal.auth"><span class="slider"></span></div> Use Authentication</label>
+        </div>
+
+        <div x-show="smarthostModal.starttls" style="margin-bottom: 1.5rem;">
+            <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="smarthostModal.disable_tls_validation"><span class="slider"></span></div> Disable TLS Verification</label>
+        </div>
+
+        <div class="flex-row" style="gap: 1.5rem; margin-bottom: 1.5rem;">
+            <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="smarthostModal.disable_attachments"><span class="slider"></span></div> Disable Attachments</label>
+            <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="smarthostModal.force_plaintext"><span class="slider"></span></div> Force Plaintext Formatting</label>
+        </div>
+
+        <div x-show="smarthostModal.auth" style="margin-bottom: 1rem;">
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label>Username</label>
+                <input type="text" x-model="smarthostModal.username" placeholder="foo@gmail.com" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <div class="token-input" style="position: relative; display: block; width: 100%;">
+                    <input :type="smarthostModal.showPass ? 'text' : 'password'" x-model="smarthostModal.password" placeholder="Password or App Password" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                    <div @click="smarthostModal.showPass = !smarthostModal.showPass" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
+                        <svg x-show="!smarthostModal.showPass" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                        <svg x-show="smarthostModal.showPass" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div x-show="smarthostModal.error" class="danger" style="color: var(--danger-color); font-weight: bold; margin-top: 1rem; font-size: 0.9rem;" x-text="smarthostModal.error"></div>
+
+        <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
+            <button type="button" class="outline" @click="smarthostModal.open = false">Cancel</button><button type="button" @click="saveSmarthostModal()">Save Changes</button>
+        </div>
+    </div>
+</div>
+
+<div x-show="listenerModal.open" class="modal-overlay" style="display: none;" x-transition>
+    <div class="modal-content" @click.away="listenerModal.open = false">
+        <h3 style="margin-top: 0;" x-text="listenerModal.mode === 'add' ? 'Add TCP Listener' : 'Modify TCP Listener'"></h3>
+
+        <div class="flex-row" style="margin-bottom: 1rem;">
+            <div class="flex-col" style="flex: 2; min-width: 0;">
+                <label>Listen Address</label>
+                <input type="text" x-model="listenerModal.ip" placeholder="0.0.0.0" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+            </div>
+            <div class="flex-col" style="flex: 1; min-width: 0;">
+                <label>Port</label>
+                <input type="number" x-model.number="listenerModal.port" style="width: 100px; max-width: 100%;" oninput="if(this.value.length > 5) this.value = this.value.slice(0, 5);" min="1" max="65535">
+            </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+            <label>Hostname Override</label>
+            <input type="text" x-model="listenerModal.hostname" placeholder="Optional" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+            <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="listenerModal.starttls"><span class="slider"></span></div> Use STARTTLS</label>
+        </div>
+
+        <div x-show="listenerModal.starttls" style="margin-bottom: 1rem;">
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label>Dedicated TLS Cert File</label>
+                <input type="text" x-model="listenerModal.tls_cert_file" placeholder="Leaves blank to use Global" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+            </div>
+            <div class="form-group">
+                <label>Dedicated TLS Key File</label>
+                <input type="text" x-model="listenerModal.tls_key_file" placeholder="Leaves blank to use Global" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+            </div>
+        </div>
+
+        <div x-show="listenerModal.error" class="danger" style="color: var(--danger-color); font-weight: bold; margin-top: 1rem; font-size: 0.9rem;" x-text="listenerModal.error"></div>
+
+        <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
+            <button type="button" class="outline" @click="listenerModal.open = false">Cancel</button><button type="button" @click="saveListenerModal()">Save Changes</button>
+        </div>
+    </div>
+</div>
