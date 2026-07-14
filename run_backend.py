@@ -11,7 +11,7 @@ SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 
-from core.config import load_config, SMTP_PID_FILE
+from core.config import load_config, SMTP_PID_FILE, CONFIG_FILE
 from core.logger import apply_logging_level
 from backend.smtp_handler import PushoverSMTPHandler, GatewayAuthenticator, GatewayController
 from backend.delivery_worker import delivery_worker, load_queue_from_disk
@@ -41,13 +41,15 @@ if __name__ == "__main__":
     with open(SMTP_PID_FILE, 'w') as f:
         f.write(str(os.getpid()))
 
+    logging.info(f"Loading config from file '{CONFIG_FILE}'.")
     app_state = load_config(is_reload=False)
     apply_logging_level(app_state.smtp["loglevel"])
     os.makedirs(app_state.smtp["queue_dir"], exist_ok=True)
 
     auth_status = "Enabled" if app_state.smtp.get("auth") else "Disabled (Permissive)"
     total_mapped = len(app_state.mappings["to"]) + len(app_state.mappings["from"]) + len(app_state.regex_mappings["to"]) + len(app_state.regex_mappings["from"])
-    logging.info(f"Loaded config from file '{app_state.config_file}'. Explicit rules: {total_mapped}. Global Routing Method: {app_state.smtp['default_route']}. SMTP Auth: {auth_status}")
+    cap_method = app_state.smtp['default_route'].capitalize()
+    logging.info(f"Explicit rules: {total_mapped}. Global Routing Method: {cap_method}. SMTP Auth: {auth_status}")
 
     msg_queue = queue.Queue()
     load_queue_from_disk(msg_queue, app_state)
@@ -83,6 +85,8 @@ if __name__ == "__main__":
         }
         starttls_status = "enabled" if tls_context else "disabled"
         logging.info(f"Starting SMTP server on {listen_address}:{listen_port} (STARTTLS: {starttls_status}, Hostname: {eff_hostname})")
+
+    logging.info("Application startup complete.")
 
     try:
         while not shutdown_event.is_set():
@@ -151,7 +155,8 @@ if __name__ == "__main__":
 
                         new_auth_status = "Enabled" if app_state.smtp.get("auth") else "Disabled (Permissive)"
                         new_total = len(app_state.mappings["to"]) + len(app_state.mappings["from"]) + len(app_state.regex_mappings["to"]) + len(app_state.regex_mappings["from"])
-                        logging.info(f"Reload success. Mappings tracked: {new_total}. Global Routing Method: {app_state.smtp['default_route']}. SMTP Auth: {new_auth_status}")
+                        cap_method = app_state.smtp['default_route'].capitalize()
+                        logging.info(f"Reload success. Mappings tracked: {new_total}. Global Routing Method: {cap_method}. SMTP Auth: {new_auth_status}")
                     else:
                         logging.warning("Config reload failed. Retaining active rules matrix.")
 

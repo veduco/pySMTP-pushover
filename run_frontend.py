@@ -22,7 +22,23 @@ class EndpointFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         return "/healthcheck" not in record.getMessage() and "/api/queue" not in record.getMessage()
 
+class UvicornQuietFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        suppress_list = [
+            "Started server process",
+            "Waiting for application startup",
+            "Application startup complete",
+            "Uvicorn running on",
+            "Shutting down",
+            "Waiting for connections to close",
+            "Finished server process"
+        ]
+        return not any(s in msg for s in suppress_list)
+
 logging.getLogger("uvicorn.access").addFilter(EndpointFilter())
+logging.getLogger("uvicorn.error").addFilter(UvicornQuietFilter())
+logging.getLogger("uvicorn").addFilter(UvicornQuietFilter())
 
 ui_shutdown_event = threading.Event()
 ui_reload_listeners_event = threading.Event()
@@ -49,14 +65,20 @@ if __name__ == "__main__":
         for handler in logging.getLogger().handlers:
             handler.setLevel(log_level)
 
+        logging.info(f"Loading config from file '{UI_CONFIG_FILE}'.")
+        protocol = "https" if use_https else "http"
+        logging.info(f"Control panel running on {protocol}://0.0.0.0:{port} (Press CTRL+C to quit)")
+
         if use_https:
             cert_file, key_file = ui_config.get("tls_cert"), ui_config.get("tls_key")
             if not cert_file or not os.path.exists(cert_file): cert_file, key_file = generate_ui_cert()
-            server_config = uvicorn.Config(app, host="0.0.0.0", port=port, ssl_keyfile=key_file, ssl_certfile=cert_file, log_level=ui_loglevel_str.lower())
+            server_config = uvicorn.Config(app, host="0.0.0.0", port=port, ssl_keyfile=key_file, ssl_certfile=cert_file, log_level=ui_loglevel_str.lower(), log_config=None)
         else:
-            server_config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level=ui_loglevel_str.lower())
+            server_config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level=ui_loglevel_str.lower(), log_config=None)
 
         server = uvicorn.Server(server_config)
+        logging.info("Application startup complete.")
+
         t = threading.Thread(target=server.run)
         t.start()
 
