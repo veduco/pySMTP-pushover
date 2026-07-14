@@ -2,59 +2,61 @@
     <div class="card">
         <h3>Web UI Display Settings</h3>
         <div class="flex-row" style="margin-bottom: 1rem;">
-            <div style="flex: 0 0 auto;">
+            <div class="flex-col" style="flex: 1; min-width: 200px;">
                 <label>UI Log Level</label>
-                <select class="auto-width" name="ui_loglevel" x-model="ui_loglevel">
+                <select style="width: 100%;" name="ui_loglevel" x-model="ui_loglevel">
                     <option value="INFO">INFO</option>
                     <option value="DEBUG">DEBUG</option>
                     <option value="WARNING">WARNING</option>
                     <option value="ERROR">ERROR</option>
                 </select>
             </div>
-            <div style="flex: 0 0 auto;">
+            <div class="flex-col" style="flex: 1; min-width: 200px;">
                 <label>Display Timezone Location</label>
-                <select class="auto-width" name="timezone" x-model="ui_tz">
+                <select style="width: 100%;" name="timezone" x-model="ui_tz">
                     <option value="UTC">UTC / GMT</option><option value="America/New_York">Eastern Time</option><option value="America/Chicago">Central Time</option><option value="America/Denver">Mountain Time</option><option value="America/Los_Angeles">Pacific Time</option><option value="Europe/London">London (GMT/BST)</option>
                 </select>
             </div>
-            <div style="flex: 0 0 auto;">
+            <div class="flex-col" style="flex: 1; min-width: 200px;">
                 <label>Date Format Syntax</label>
-                <select class="auto-width" name="date_format" x-model="ui_fmt">
+                <select style="width: 100%;" name="date_format" x-model="ui_fmt">
                     <option value="YYYY-MM-DD HH:mm:ss">ISO (YYYY-MM-DD HH:mm:ss)</option><option value="MM/DD/YYYY hh:mm:ss A">US (MM/DD/YYYY hh:mm:ss A)</option><option value="DD/MM/YYYY HH:mm:ss">UK/EU (DD/MM/YYYY HH:mm:ss)</option>
                 </select>
             </div>
         </div>
 
-        <div class="flex-row" style="margin-top: 1rem;">
-            <div style="flex: 0 0 auto;">
+        <div class="flex-row" style="margin-bottom: 1.5rem;">
+            <div class="flex-col" style="flex: 1; min-width: 200px;">
                 <label>Token Default Sort</label>
-                <select class="auto-width" name="vault_sort" x-model="ui_vault_sort">
+                <select style="width: 100%;" name="vault_sort" x-model="ui_vault_sort">
                     <option value="name_asc">Alias Name (Ascending)</option>
                     <option value="name_desc">Alias Name (Descending)</option>
                     <option value="epoch_asc">Last Modification (Ascending)</option>
                     <option value="epoch_desc">Last Modification (Descending)</option>
                 </select>
             </div>
-            <div style="flex: 0 0 auto;">
+            <div class="flex-col" style="flex: 1; min-width: 200px;">
                 <label>SMTP Users Default Sort</label>
-                <select class="auto-width" name="smtp_sort" x-model="ui_smtp_sort">
+                <select style="width: 100%;" name="smtp_sort" x-model="ui_smtp_sort">
                     <option value="name_asc">Username (Ascending)</option>
                     <option value="name_desc">Username (Descending)</option>
                     <option value="epoch_asc">Last Modification (Ascending)</option>
                     <option value="epoch_desc">Last Modification (Descending)</option>
                 </select>
             </div>
-            <div style="flex: 0 0 auto;">
+            <div class="flex-col" style="flex: 1; min-width: 200px;">
                 <label>Smarthost Default Sort</label>
-                <select class="auto-width" name="smarthost_sort" x-model="ui_smarthost_sort">
+                <select style="width: 100%;" name="smarthost_sort" x-model="ui_smarthost_sort">
                     <option value="alias_asc">Alias Name (Ascending)</option>
                     <option value="alias_desc">Alias Name (Descending)</option>
                 </select>
             </div>
         </div>
 
-        <div style="margin-bottom: 0.5rem; margin-top: 1rem;"><label class="toggle-label"><div class="toggle-switch"><input type="checkbox" name="relative_time" x-model="ui_relative"><span class="slider"></span></div> Render Coerced Relative Human Times (e.g. '3 days ago')</label></div>
-        <div style="margin-bottom: 0.5rem;"><label class="toggle-label"><div class="toggle-switch"><input type="checkbox" name="expand_adv" x-model="ui_expand_adv"><span class="slider"></span></div> Always Expand Route Settings by Default</label></div>
+        <div class="flex-row" style="gap: 1.5rem; margin-bottom: 0.5rem;">
+            <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" name="relative_time" x-model="ui_relative"><span class="slider"></span></div> Render Coerced Relative Human Times (e.g. '3 days ago')</label>
+            <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" name="expand_adv" x-model="ui_expand_adv"><span class="slider"></span></div> Always Expand Route Settings by Default</label>
+        </div>
     </div>
 
     <div class="card">
