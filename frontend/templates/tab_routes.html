@@ -1,9 +1,24 @@
+<style>
+    .route-card {
+        position: relative;
+        background: var(--bg-color);
+        transition: all 0.2s ease;
+        display: flex;
+        padding: 1.5rem 1rem 1rem 1rem;
+        margin-bottom: 1rem;
+    }
+    .route-card.drag-over {
+        border-color: var(--primary-color);
+        transform: scale(1.01);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+</style>
+
 <div class="card">
     <h3>Email Maps & Routes (Drag to Reorder)</h3>
     <template x-for="(map, idx) in mappings" :key="map._uid">
-        <div class="card"
-             style="background: var(--bg-color); transition: all 0.2s ease; display: flex;"
-             :style="dragHover === idx ? 'border-color: var(--primary-color); transform: scale(1.01); box-shadow: 0 4px 12px rgba(0,0,0,0.1);' : ''"
+        <div class="card route-card"
+             :class="{ 'drag-over': dragHover === idx }"
              draggable="true"
              @dragstart="draggedRouteIdx = idx; $event.dataTransfer.effectAllowed = 'move';"
              @dragenter.prevent="dragHover = idx"
@@ -11,12 +26,12 @@
              @dragleave.prevent="if(dragHover === idx) dragHover = null;"
              @drop.prevent="dragHover = null; reorderRoute(draggedRouteIdx, idx)">
 
-            <div style="cursor: grab; padding: 0.5rem 1rem 0.5rem 0; color: var(--text-color); opacity: 0.4; display: flex; align-items: center;" title="Drag to reorder">
+            <div style="cursor: grab; color: var(--text-color); opacity: 0.4; margin-right: 1rem; margin-top: 1.8rem; flex: 0 0 auto;" title="Drag to reorder">
                 <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
             </div>
 
-            <div style="flex: 1;">
-                <div class="flex-row" style="align-items: flex-start;">
+            <div style="flex: 1; min-width: 0;">
+                <div class="flex-row" style="align-items: flex-end; margin-bottom: 0.5rem;">
                     <div style="flex: 0 0 auto;"><label>Match Type</label><select class="auto-width" x-model="map.match"><option value="to">To (Recipient)</option><option value="from">From (Sender)</option><option value="both">Both</option></select></div>
                     <div style="flex: 1; min-width: 200px;">
                         <div style="display: flex; align-items: center; justify-content: flex-start; gap: 1.5rem; margin-bottom: 0.25rem;">
@@ -29,24 +44,20 @@
                         <label style="margin-bottom: 0.25rem;">Routing Method</label>
                         <div class="segment-track">
                             <div class="segment-thumb" :style="map.method === 'pushover' ? 'transform: translateX(0);' : 'transform: translateX(100%);'"></div>
-                            <label class="segment-label" :style="map.method === 'pushover' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'">
-                                <input type="radio" x-model="map.method" value="pushover"> Pushover
-                            </label>
-                            <label class="segment-label" :style="map.method === 'smarthost' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'">
-                                <input type="radio" x-model="map.method" value="smarthost"> Smarthost
-                            </label>
+                            <label class="segment-label" :style="map.method === 'pushover' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="map.method" value="pushover"> Pushover</label>
+                            <label class="segment-label" :style="map.method === 'smarthost' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="map.method" value="smarthost"> Smarthost</label>
                         </div>
                     </div>
 
                     <template x-if="map.method === 'pushover'">
                         <div style="flex: 0 0 auto;">
-                            <div style="display: flex; align-items: center; justify-content: flex-start; gap: 1.5rem; margin-bottom: 0.25rem;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.25rem; white-space: nowrap;">
                                 <label style="margin: 0;">App Token</label>
                                 <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" :checked="map._isTokenAlias" @change="toggleAlias(map, 'token')"><span class="slider"></span></div> Use Alias</label>
                             </div>
                             <template x-if="!map._isTokenAlias">
                                 <div class="token-input" style="position: relative; display: inline-block;">
-                                    <input :type="map._showToken ? 'text' : 'password'" x-model="map.token" maxlength="30" placeholder="Required Override" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                                    <input :type="map._showToken ? 'text' : 'password'" x-model="map.token" maxlength="30" placeholder="Required Override" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="min-width: 100%; width: max-content; padding-right: 30px; box-sizing: border-box;">
                                     <div @click="map._showToken = !map._showToken" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
                                         <svg x-show="!map._showToken" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                                         <svg x-show="map._showToken" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
@@ -54,7 +65,7 @@
                                 </div>
                             </template>
                             <template x-if="map._isTokenAlias">
-                                <select class="auto-width" x-model="map.token">
+                                <select class="token-input" x-model="map.token" style="min-width: 100%; width: max-content;">
                                     <option value="">-- Select App Alias --</option>
                                     <template x-for="v in sortedVaultApp" :key="v.name"><option :value="v.name" x-text="v.name" :selected="map.token === v.name"></option></template>
                                 </select>
@@ -65,28 +76,36 @@
                     <template x-if="map.method === 'smarthost'">
                         <div style="flex: 0 0 auto;">
                             <label style="margin-bottom: 0.25rem;">Smarthost Alias</label>
-                            <select class="auto-width token-input" x-model="map.smarthost_alias">
+                            <select class="token-input" x-model="map.smarthost_alias" style="min-width: 100%; width: max-content;">
                                 <option value="">-- Select Smarthost --</option>
                                 <template x-for="sh in sortedSmarthostKeys" :key="sh"><option :value="sh" x-text="sh" :selected="map.smarthost_alias === sh"></option></template>
                             </select>
                         </div>
                     </template>
+
+                    <div style="flex: 0 0 auto;">
+                        <button type="button" class="danger" @click="mappings.splice(idx, 1)" title="Remove Mapping" style="padding: 0.5rem; height: 38px; width: 38px; display: flex; align-items: center; justify-content: center;">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        </button>
+                    </div>
                 </div>
 
-                <button type="button" class="outline" @click="map._showAdv = !map._showAdv" style="margin-bottom: 1rem; font-size: 0.8rem; padding: 0.3rem 0.5rem;"><span x-text="map._showAdv ? 'Hide Route Settings' : 'Show Route Settings'"></span></button>
+                <div style="margin-bottom: 0.5rem;">
+                    <button type="button" class="outline" @click="map._showAdv = !map._showAdv" style="font-size: 0.8rem; padding: 0.3rem 0.5rem;"><span x-text="map._showAdv ? 'Hide Route Settings' : 'Show Route Settings'"></span></button>
+                </div>
 
-                <div x-show="map._showAdv" class="adv-card">
+                <div x-show="map._showAdv" class="adv-card" style="margin-bottom: 0;">
                     <template x-if="map.method === 'pushover'">
                         <div>
                             <div class="flex-row" style="margin-bottom: 1.5rem; justify-content: flex-start;">
                                 <div style="flex: 0 0 auto;">
-                                    <div style="display: flex; align-items: center; justify-content: flex-start; gap: 1.5rem; margin-bottom: 0.25rem;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.25rem; white-space: nowrap;">
                                         <label style="margin: 0;">User Key Override</label>
                                         <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" :checked="map._isUserAlias" @change="toggleAlias(map, 'user')"><span class="slider"></span></div> Use Alias</label>
                                     </div>
                                     <template x-if="!map._isUserAlias">
                                         <div class="token-input" style="position: relative; display: inline-block;">
-                                            <input :type="map._showUser ? 'text' : 'password'" x-model="map.user" maxlength="30" placeholder="Inherit Global" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                                            <input :type="map._showUser ? 'text' : 'password'" x-model="map.user" maxlength="30" placeholder="Inherit Global" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="min-width: 100%; width: max-content; padding-right: 30px; box-sizing: border-box;">
                                             <div @click="map._showUser = !map._showUser" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
                                                 <svg x-show="!map._showUser" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                                                 <svg x-show="map._showUser" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
@@ -94,7 +113,7 @@
                                         </div>
                                     </template>
                                     <template x-if="map._isUserAlias">
-                                        <select class="auto-width" x-model="map.user">
+                                        <select class="token-input" x-model="map.user" style="min-width: 100%; width: max-content;">
                                             <option value="">-- Inherit Global --</option>
                                             <template x-for="v in sortedVaultUser" :key="v.name"><option :value="v.name" x-text="v.name" :selected="map.user === v.name"></option></template>
                                         </select>
@@ -114,13 +133,11 @@
                         </div>
                     </template>
 
-                    <div class="flex-row" style="gap: 1.5rem; margin-top: 1rem;">
+                    <div class="flex-row" style="gap: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem;">
                         <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="map.disable_attachments"><span class="slider"></span></div> Disable Attachments</label>
                         <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="map.force_plaintext"><span class="slider"></span></div> Force Plaintext Formatting</label>
                     </div>
                 </div>
-
-                <div style="text-align: right;"><button type="button" class="danger" @click="mappings.splice(idx, 1)" title="Remove Mapping"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></div>
             </div>
         </div>
     </template>

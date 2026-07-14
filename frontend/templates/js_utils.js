@@ -81,7 +81,7 @@ addMapping() {
     this.mappings.push({
         _uid: Date.now().toString(36) + Math.random().toString(36).substr(2),
         _key: '', match: 'to', method: 'pushover', token: '', user: '', _isRegex: false,
-        _isTokenAlias: true, _isUserAlias: false,
+        _isTokenAlias: true, _isUserAlias: true,
         _tokenAliasVal: '', _tokenRaw: '', _userAliasVal: '', _userRaw: '', smarthost_alias: '',
         _showToken: false, _showUser: false, _showAdv: this.ui_expand_adv, disable_attachments: false, force_plaintext: false
     });

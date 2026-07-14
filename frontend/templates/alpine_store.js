@@ -79,7 +79,9 @@ document.addEventListener('alpine:init', () => {
 
                 if (method === 'pushover') {
                     const isTokenAlias = this.vaultAppAliases.includes(v.token);
-                    const isUserAlias = this.vaultUserAliases.includes(v.user);
+                    // If v.user is empty, it's inheriting the global alias, so we map it to alias selection
+                    const isUserAlias = this.vaultUserAliases.includes(v.user) || !v.user;
+
                     this.mappings.push({
                         _uid: Date.now().toString(36) + Math.random().toString(36).substr(2),
                         _key: displayKey,
