@@ -19,8 +19,11 @@ openListenerModal(mode, idx=null) {
 },
 saveListenerModal() {
     const ip = this.listenerModal.ip.trim() || '0.0.0.0';
+    if (!this.isValidIP(ip)) { this.listenerModal.error = 'Must be a valid IPv4, IPv6, or localhost.'; return; }
+
     const port = this.listenerModal.port;
     if(!port || port < 1 || port > 65535) { this.listenerModal.error = 'Port must be between 1 and 65535.'; return; }
+
     const bind = ip + ':' + port;
     const obj = { bind: bind, starttls: this.listenerModal.starttls };
     if(this.listenerModal.hostname.trim()) obj.hostname = this.listenerModal.hostname.trim();
@@ -157,8 +160,11 @@ openUiListenerModal(mode, idx=null) {
 },
 saveUiListenerModal() {
     const ip = this.uiListenerModal.ip.trim() || '0.0.0.0';
+    if (!this.isValidIP(ip)) { this.uiListenerModal.error = 'Must be a valid IPv4, IPv6, or localhost.'; return; }
+
     const port = this.uiListenerModal.port;
     if(!port || port < 1 || port > 65535) { this.uiListenerModal.error = 'Port must be between 1 and 65535.'; return; }
+
     const bind = ip + ':' + port;
     const obj = { bind: bind, https: this.uiListenerModal.https };
     if(this.uiListenerModal.https) {
