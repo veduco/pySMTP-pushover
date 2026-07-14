@@ -590,6 +590,29 @@ def delivery_worker(msg_queue, state):
         now = int(time.time())
         next_retry = payload.get("next_retry", 0)
 
+        # --- DYNAMIC DISK SYNC ---
+        # If persistence is enabled, ensure the UI hasn't deleted or modified this queue item
+        if not payload.get("disable_persistence"):
+            filepath = os.path.join(state.smtp["queue_dir"], f"{payload['id']}.json")
+            if payload.get("retry_count", 0) > 0:
+                if not os.path.exists(filepath):
+                    logging.info(f"Message ID {payload['id']} was deleted by UI. Dropping from memory queue.")
+                    msg_queue.task_done()
+                    continue
+
+                # Check if the UI requested an immediate retry (modified the file)
+                try:
+                    file_mtime = os.path.getmtime(filepath)
+                    if payload.get("_last_mtime", 0) < file_mtime:
+                        payload["_last_mtime"] = file_mtime
+                        with open(filepath, 'r') as f:
+                            disk_data = json.load(f)
+                        payload["next_retry"] = disk_data.get("next_retry", next_retry)
+                        payload["retry_count"] = disk_data.get("retry_count", payload.get("retry_count"))
+                        next_retry = payload["next_retry"]
+                except Exception:
+                    pass
+
         if now < next_retry:
             # Not time for this message to retry yet. Put it back in the queue.
             msg_queue.put(payload)
@@ -597,14 +620,6 @@ def delivery_worker(msg_queue, state):
             # Brief sleep prevents 100% CPU lock if queue is entirely composed of items waiting for backoff
             shutdown_event.wait(1.0)
             continue
-
-        # Real-Time UI Deletion Sync: If the file was removed from the disk via the UI, drop it from memory.
-        if not payload.get("disable_persistence"):
-            filepath = os.path.join(state.smtp["queue_dir"], f"{payload['id']}.json")
-            if payload.get("retry_count", 0) > 0 and not os.path.exists(filepath):
-                logging.info(f"Message ID {payload['id']} was deleted by UI. Dropping from memory queue.")
-                msg_queue.task_done()
-                continue
 
         method = payload.get("method", "pushover")
         success = False
@@ -749,14 +764,19 @@ def load_queue_from_disk(msg_queue, state):
     """Runs once on startup to grab any pending messages off the disk and put them back into memory."""
     if not os.path.exists(state.smtp["queue_dir"]):
         return
+    count = 0
     for filename in os.listdir(state.smtp["queue_dir"]):
         if filename.endswith(".json"):
             filepath = os.path.join(state.smtp["queue_dir"], filename)
             try:
                 with open(filepath, 'r') as f:
                     msg_queue.put(json.load(f))
+                    count += 1
             except Exception as e:
                 logging.error(f"Failed to load queued file {filepath}: {e}")
+
+    if count > 0:
+        logging.info(f"Read {count} messages from persistent store")
 
 def load_config(is_reload=False):
     """

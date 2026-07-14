@@ -42,6 +42,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # Dynamic Configuration Paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+TEMPLATE_DIR = os.path.dirname(os.path.realpath(__file__))
 CONFIG_FILE = os.environ.get("GATEWAY_CONFIG", os.path.join(SCRIPT_DIR, "config.json"))
 UI_CONFIG_FILE = os.environ.get("UI_CONFIG", os.path.join(SCRIPT_DIR, "ui_config.json"))
 VAULT_FILE = os.environ.get("VAULT_FILE", os.path.join(SCRIPT_DIR, "vault.json"))
@@ -91,8 +92,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# Bind the template engine directly to the directory containing this python script
-templates = Jinja2Templates(directory=SCRIPT_DIR)
+# Bind the template engine directly to the absolute resolved directory containing this python script
+templates = Jinja2Templates(directory=TEMPLATE_DIR)
 
 def signal_smtp_app(restart_listeners=False):
     if not os.path.exists(SMTP_PID_FILE): return False
@@ -138,6 +139,22 @@ async def get_queue():
     # Sort logically: Items currently backing off (highest last_attempt) to the top
     items.sort(key=lambda x: x["last_attempt"] if x["last_attempt"] else x["timestamp"], reverse=True)
     return JSONResponse(items)
+
+@app.post("/api/queue/{item_id}/retry")
+async def retry_queue_item(item_id: str):
+    config = load_clean_json(CONFIG_FILE)
+    q_dir = config.get("smtp", {}).get("queue_dir", "queue")
+    q_path = os.path.normpath(os.path.join(SCRIPT_DIR, q_dir))
+    filepath = os.path.join(q_path, f"{item_id}.json")
+    if os.path.exists(filepath):
+        try:
+            with open(filepath, 'r') as f:
+                data = json.load(f)
+            data["next_retry"] = 0
+            data["retry_count"] = 0
+            save_json(filepath, data)
+        except Exception: pass
+    return JSONResponse({"status": "ok"})
 
 @app.delete("/api/queue/{item_id}")
 async def delete_queue_item(item_id: str):
