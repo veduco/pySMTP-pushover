@@ -4,9 +4,51 @@
         font-size: 0.75rem;
         letter-spacing: -0.2px;
     }
+    .validation-error {
+        color: var(--danger-color);
+        font-size: 0.8rem;
+        font-weight: bold;
+        margin-top: 0.25rem;
+        display: block;
+    }
+    .input-invalid {
+        border-color: var(--danger-color) !important;
+        box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.2);
+    }
 </style>
 
-<form hx-post="/save/ui" hx-target="#status" @htmx:config-request.camel="$event.detail.parameters['ui_listeners_json'] = JSON.stringify(uiListeners);">
+<form hx-post="/save/ui"
+      hx-target="#status"
+      x-data="{
+          tzError: '',
+          validTimezones: [],
+          init() {
+              // Dynamically harvest the full, authoritative IANA database from the browser engine
+              try {
+                  this.validTimezones = Intl.supportedValuesOf('timeZone');
+              } catch (e) {
+                  // Fallback array if running in legacy client runtimes lacking Intl support
+                  this.validTimezones = ['UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'Europe/London', 'Asia/Tokyo'];
+              }
+          },
+          checkTimezone() {
+              if (this.ui_tz && !this.validTimezones.includes(this.ui_tz)) {
+                  this.tzError = 'Please select a valid timezone location from the list.';
+                  return false;
+              }
+              this.tzError = '';
+              return true;
+          },
+          validateAndSubmit(e) {
+              if (!this.checkTimezone()) {
+                  return;
+              }
+              htmx.trigger(e.target, 'submit');
+          }
+      }"
+      @submit.prevent="validateAndSubmit($event)"
+      @htmx:config-request.camel="$event.detail.parameters['ui_listeners_json'] = JSON.stringify(uiListeners);">
+
     <div class="card">
         <h3>Web UI Display Settings</h3>
         <div class="flex-row" style="margin-bottom: 1rem; align-items: flex-end;">
@@ -24,9 +66,11 @@
 
             <div class="flex-col" style="flex: 1; min-width: 200px; padding-bottom: 2px;">
                 <label>Display Timezone Location</label>
-                <select style="width: 100%;" name="timezone" x-model="ui_tz">
-                    <option value="UTC">UTC / GMT</option><option value="America/New_York">Eastern Time</option><option value="America/Chicago">Central Time</option><option value="America/Denver">Mountain Time</option><option value="America/Los_Angeles">Pacific Time</option><option value="Europe/London">London (GMT/BST)</option>
-                </select>
+                <input type="text" name="timezone" x-model="ui_tz" @blur="checkTimezone()" @input="tzError = ''" :class="tzError ? 'input-invalid' : ''" list="timezone-list" placeholder="Search timezone... e.g. America/New_York" autocomplete="off" style="width: 100%;">
+                <span class="validation-error" x-show="tzError" x-text="tzError" style="display: none;"></span>
+                <datalist id="timezone-list">
+                    <template x-for="tz in validTimezones" :key="tz"><option :value="tz"></option></template>
+                </datalist>
             </div>
 
             <div class="flex-col" style="flex: 1; min-width: 200px;">
