@@ -1,14 +1,14 @@
 <div class="card">
     <h3>Global API Fallbacks</h3>
 
-    <div class="flex-row" style="margin-bottom: 0.75rem;">
-        <div style="flex: 0 0 auto;">
-            <div style="display: flex; align-items: center; justify-content: flex-start; gap: 1.5rem; margin-bottom: 0.25rem;">
+    <div class="flex-row" style="margin-bottom: 1rem;">
+        <div class="flex-col" style="flex: 1; min-width: 250px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.25rem;">
                 <label style="margin: 0;">Default App Token</label>
                 <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" :checked="pushGlobals._isTokenAlias" @change="toggleAlias(pushGlobals, 'token')"><span class="slider"></span></div> Use Alias</label>
             </div>
             <template x-if="!pushGlobals._isTokenAlias">
-                <div class="token-input" style="position: relative; display: inline-block;">
+                <div class="token-input" style="position: relative; display: block; width: 100%;">
                     <input :type="pushGlobals._showToken ? 'text' : 'password'" x-model="pushGlobals.token" maxlength="30" placeholder="Required for Catch-All" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
                     <div @click="pushGlobals._showToken = !pushGlobals._showToken" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
                         <svg x-show="!pushGlobals._showToken" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
@@ -17,22 +17,20 @@
                 </div>
             </template>
             <template x-if="pushGlobals._isTokenAlias">
-                <select class="auto-width" x-model="pushGlobals.token">
+                <select x-model="pushGlobals.token" style="width: 100%;">
                     <option value="">-- Select App Alias --</option>
                     <template x-for="v in sortedVaultApp" :key="v.name"><option :value="v.name" x-text="v.name" :selected="pushGlobals.token === v.name"></option></template>
                 </select>
             </template>
         </div>
-    </div>
 
-    <div class="flex-row">
-        <div style="flex: 0 0 auto;">
-            <div style="display: flex; align-items: center; justify-content: flex-start; gap: 1.5rem; margin-bottom: 0.25rem;">
+        <div class="flex-col" style="flex: 1; min-width: 250px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.25rem;">
                 <label style="margin: 0;">Default User Key</label>
                 <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" :checked="pushGlobals._isUserAlias" @change="toggleAlias(pushGlobals, 'user')"><span class="slider"></span></div> Use Alias</label>
             </div>
             <template x-if="!pushGlobals._isUserAlias">
-                <div class="token-input" style="position: relative; display: inline-block;">
+                <div class="token-input" style="position: relative; display: block; width: 100%;">
                     <input :type="pushGlobals._showUser ? 'text' : 'password'" x-model="pushGlobals.user" maxlength="30" placeholder="Required for Catch-All" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
                     <div @click="pushGlobals._showUser = !pushGlobals._showUser" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
                         <svg x-show="!pushGlobals._showUser" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
@@ -41,7 +39,7 @@
                 </div>
             </template>
             <template x-if="pushGlobals._isUserAlias">
-                <select class="auto-width" x-model="pushGlobals.user">
+                <select x-model="pushGlobals.user" style="width: 100%;">
                     <option value="">-- Select User Alias --</option>
                     <template x-for="v in sortedVaultUser" :key="v.name"><option :value="v.name" x-text="v.name" :selected="pushGlobals.user === v.name"></option></template>
                 </select>
@@ -49,7 +47,12 @@
         </div>
     </div>
 
-    <button type="button" class="outline" @click="showGlobalAdv = !showGlobalAdv" style="margin-bottom: 1rem; margin-top: 0.5rem;"><span x-text="showGlobalAdv ? 'Hide Advanced Globals' : 'Show Advanced Globals'"></span></button>
+    <div class="flex-row" style="gap: 1.5rem; margin-bottom: 1rem;">
+        <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="pushGlobals.disable_attachments"><span class="slider"></span></div> Disable Attachments</label>
+        <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="pushGlobals.force_plaintext"><span class="slider"></span></div> Force Plaintext Formatting</label>
+    </div>
+
+    <button type="button" class="outline" @click="showGlobalAdv = !showGlobalAdv" style="margin-bottom: 1rem;"><span x-text="showGlobalAdv ? 'Hide Advanced Globals' : 'Show Advanced Globals'"></span></button>
 
     <div x-show="showGlobalAdv" class="adv-card">
         <div class="flex-row" style="margin-bottom: 1rem;">
@@ -67,11 +70,6 @@
         </div>
         <div class="flex-row" style="margin-bottom: 1rem;"><div class="flex-col" style="flex: 1; min-width: 200px;"><label>Supplementary URL</label><input type="text" x-model="pushGlobals.url" placeholder="Optional" maxlength="512" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div></div>
         <div class="flex-row" style="margin-bottom: 1rem;"><div style="flex: 0 0 auto;"><label>URL Title</label><input type="text" x-model="pushGlobals.url_title" placeholder="Optional" maxlength="100" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100ch; max-width: 100%;"></div></div>
-    </div>
-
-    <div class="flex-row" style="gap: 1.5rem; margin-top: 0.5rem;">
-        <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="pushGlobals.disable_attachments"><span class="slider"></span></div> Disable Attachments</label>
-        <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="pushGlobals.force_plaintext"><span class="slider"></span></div> Force Plaintext Formatting</label>
     </div>
 </div>
 
