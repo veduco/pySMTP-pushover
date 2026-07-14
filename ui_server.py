@@ -182,6 +182,7 @@ async def index(request: Request):
             "ui_tz": ui_config.get("timezone", "UTC"),
             "ui_fmt": ui_config.get("date_format", "YYYY-MM-DD HH:mm:ss"),
             "ui_relative": ui_config.get("relative_time", True),
+            "ui_loglevel": ui_config.get("ui_loglevel", "INFO"),
             "ui_cert": ui_config.get("tls_cert", ""),
             "ui_key": ui_config.get("tls_key", "")
         }
@@ -241,12 +242,12 @@ async def save_vault_state(vault_json: str = Form(...)):
 async def save_ui(
     port: int = Form(...), timezone: str = Form(...), date_format: str = Form(...),
     relative_time: bool = Form(False), expand_adv: bool = Form(False), https: bool = Form(False), tls_cert: str = Form(""), tls_key: str = Form(""),
-    vault_sort: str = Form("name_asc"), smtp_sort: str = Form("name_asc"), smarthost_sort: str = Form("alias_asc")
+    vault_sort: str = Form("name_asc"), smtp_sort: str = Form("name_asc"), smarthost_sort: str = Form("alias_asc"), ui_loglevel: str = Form("INFO")
 ):
     ui_config = {
         "port": port, "timezone": timezone, "date_format": date_format,
         "relative_time": relative_time, "expand_adv": expand_adv, "https": https, "tls_cert": tls_cert, "tls_key": tls_key,
-        "vault_sort": vault_sort, "smtp_sort": smtp_sort, "smarthost_sort": smarthost_sort
+        "vault_sort": vault_sort, "smtp_sort": smtp_sort, "smarthost_sort": smarthost_sort, "ui_loglevel": ui_loglevel
     }
     save_json(UI_CONFIG_FILE, ui_config)
     os.kill(os.getpid(), signal.SIGUSR1)
@@ -282,12 +283,19 @@ if __name__ == "__main__":
         port = ui_config.get("port", 8443)
         use_https = ui_config.get("https", True)
 
+        # Implement Dynamic Logging Levels for the UI Thread and Uvicorn
+        ui_loglevel_str = ui_config.get("ui_loglevel", "INFO")
+        log_level = getattr(logging, ui_loglevel_str.upper(), logging.INFO)
+        logging.getLogger().setLevel(log_level)
+        for handler in logging.getLogger().handlers:
+            handler.setLevel(log_level)
+
         if use_https:
             cert_file, key_file = ui_config.get("tls_cert"), ui_config.get("tls_key")
             if not cert_file or not os.path.exists(cert_file): cert_file, key_file = generate_ui_cert()
-            server_config = uvicorn.Config(app, host="0.0.0.0", port=port, ssl_keyfile=key_file, ssl_certfile=cert_file, log_level="info")
+            server_config = uvicorn.Config(app, host="0.0.0.0", port=port, ssl_keyfile=key_file, ssl_certfile=cert_file, log_level=ui_loglevel_str.lower())
         else:
-            server_config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")
+            server_config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level=ui_loglevel_str.lower())
 
         server = uvicorn.Server(server_config)
         t = threading.Thread(target=server.run)

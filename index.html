@@ -322,11 +322,11 @@
                                 </label>
                             </div>
                         </div>
-                        <div style="flex: 1; min-width: 150px;"><label>Alias Name</label><input type="text" x-model="newVaultName" required autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
+                        <div style="flex: 1; min-width: 150px;"><label>Alias Name</label><input type="text" x-model="newVaultName" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
                         <div style="flex: 0 0 auto;">
                             <label>Token Value</label>
                             <div class="token-input" style="position: relative; display: inline-block;">
-                                <input :type="showNewVaultToken ? 'text' : 'password'" x-model="newVaultToken" maxlength="30" required autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                                <input :type="showNewVaultToken ? 'text' : 'password'" x-model="newVaultToken" maxlength="30" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
                                 <div @click="showNewVaultToken = !showNewVaultToken" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
                                     <svg x-show="!showNewVaultToken" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                                     <svg x-show="showNewVaultToken" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
@@ -560,7 +560,21 @@
             <form hx-post="/save/ui" hx-target="#status">
                 <div class="card">
                     <h3>Web UI Settings</h3>
-                    <div class="form-group" style="margin-bottom: 1rem;"><label>UI Listen Port</label><input type="number" name="port" value="{{ ui_port }}" required style="width: 120px; max-width: 100%;" oninput="if(this.value.length > 5) this.value = this.value.slice(0, 5);" min="1" max="65535"></div>
+                    <div class="flex-row" style="margin-bottom: 1rem;">
+                        <div style="flex: 0 0 auto;">
+                            <label>UI Listen Port</label>
+                            <input type="number" name="port" value="{{ ui_port }}" required style="width: 120px;" min="1" max="65535">
+                        </div>
+                        <div style="flex: 0 0 auto;">
+                            <label>UI Log Level</label>
+                            <select class="auto-width" name="ui_loglevel" x-model="ui_loglevel">
+                                <option value="INFO">INFO</option>
+                                <option value="DEBUG">DEBUG</option>
+                                <option value="WARNING">WARNING</option>
+                                <option value="ERROR">ERROR</option>
+                            </select>
+                        </div>
+                    </div>
                     <div class="flex-row">
                         <div style="flex: 0 0 auto;">
                             <label>Display Timezone Location</label>
@@ -656,7 +670,7 @@
                     </div>
                     <div class="flex-col" style="flex: 1; min-width: 0;">
                         <label>Port</label>
-                        <input type="number" x-model.number="smarthostModal.port" required style="width: 100px; max-width: 100%;" oninput="if(this.value.length > 5) this.value = this.value.slice(0, 5);" min="1" max="65535">
+                        <input type="number" x-model.number="smarthostModal.port" style="width: 100px; max-width: 100%;" oninput="if(this.value.length > 5) this.value = this.value.slice(0, 5);" min="1" max="65535">
                     </div>
                 </div>
 
@@ -710,7 +724,7 @@
                     </div>
                     <div class="flex-col" style="flex: 1; min-width: 0;">
                         <label>Port</label>
-                        <input type="number" x-model.number="listenerModal.port" required style="width: 100px; max-width: 100%;" oninput="if(this.value.length > 5) this.value = this.value.slice(0, 5);" min="1" max="65535">
+                        <input type="number" x-model.number="listenerModal.port" style="width: 100px; max-width: 100%;" oninput="if(this.value.length > 5) this.value = this.value.slice(0, 5);" min="1" max="65535">
                     </div>
                 </div>
 
@@ -760,6 +774,7 @@
             rawConfig: {{ config_json | safe }},
             smtp_meta: {{ smtp_meta_json | safe }},
             vaultMeta: {{ vault_meta_json | safe }},
+            ui_loglevel: '{{ ui_loglevel }}',
             vaultApp: [], vaultUser: [], vaultSmarthost: {}, vaultAppAliases: [], vaultUserAliases: [],
             newVaultType: 'app', newVaultName: '', newVaultToken: '', showNewVaultToken: false,
 
