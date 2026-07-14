@@ -5,22 +5,20 @@
             <label style="margin-bottom: 0.25rem;">Default Catch-All Route</label>
             <div class="segment-track">
                 <div class="segment-thumb" :style="smtp.default_route === 'pushover' ? 'transform: translateX(0);' : 'transform: translateX(100%);'"></div>
-                <label class="segment-label" :style="smtp.default_route === 'pushover' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'">
-                    <input type="radio" x-model="smtp.default_route" value="pushover" @change="changeDefaultRoute($event)"> Pushover
-                </label>
-                <label class="segment-label" :style="smtp.default_route === 'smarthost' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'">
-                    <input type="radio" x-model="smtp.default_route" value="smarthost" @change="changeDefaultRoute($event)"> Smarthost
-                </label>
+                <label class="segment-label" :style="smtp.default_route === 'pushover' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="smtp.default_route" value="pushover" @change="changeDefaultRoute($event)"> Pushover</label>
+                <label class="segment-label" :style="smtp.default_route === 'smarthost' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="smtp.default_route" value="smarthost" @change="changeDefaultRoute($event)"> Smarthost</label>
             </div>
         </div>
+        <div style="flex: 0 0 auto;"><label>Log Level</label><select class="auto-width" x-model="smtp.loglevel"><option value="INFO">INFO</option><option value="DEBUG">DEBUG</option><option value="WARNING">WARNING</option><option value="ERROR">ERROR</option></select></div>
         <div style="flex: 0 0 auto; padding-bottom: 0.5rem;"><label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="smtp.disable_persistence"><span class="slider"></span></div> Disable Disk Persistence</label></div>
     </div>
-    <div class="flex-row" style="margin-bottom: 1rem;"><div style="flex: 0 0 auto;"><label>Log Level</label><select class="auto-width" x-model="smtp.loglevel"><option value="INFO">INFO</option><option value="DEBUG">DEBUG</option><option value="WARNING">WARNING</option><option value="ERROR">ERROR</option></select></div></div>
-    <div class="flex-row" style="margin-bottom: 1rem;"><div class="flex-col" style="flex: 1; min-width: 200px;"><label>Disk Queue Directory</label><input type="text" x-model="smtp.queue_dir" placeholder="/tmp/queue" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div></div>
-    <div class="flex-row" style="margin-bottom: 1rem;"><div class="flex-col" style="flex: 1; min-width: 200px;"><label>Global Hostname (Greeting Banner)</label><input type="text" x-model="smtp.hostname" placeholder="gateway.local" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div></div>
+    <div class="flex-row" style="margin-bottom: 1rem;">
+        <div class="flex-col" style="flex: 1; min-width: 200px;"><label>Global Hostname (Greeting Banner)</label><input type="text" x-model="smtp.hostname" placeholder="gateway.local" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
+        <div class="flex-col" style="flex: 1; min-width: 200px;"><label>Disk Queue Directory</label><input type="text" x-model="smtp.queue_dir" placeholder="data/queue" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
+    </div>
     <div class="flex-row">
-        <div class="flex-col" style="flex: 1; min-width: 200px;"><label>Global TLS Cert File (Fallback)</label><input type="text" x-model="smtp.tls_cert_file" placeholder="/etc/ssl/certs/global.pem" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
-        <div class="flex-col" style="flex: 1; min-width: 200px;"><label>Global TLS Key File (Fallback)</label><input type="text" x-model="smtp.tls_key_file" placeholder="/etc/ssl/private/global.key" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
+        <div class="flex-col" style="flex: 1; min-width: 200px;"><label>Global TLS Cert File (Fallback)</label><input type="text" x-model="smtp.tls_cert_file" placeholder="Leave blank to use auto-generated cert" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
+        <div class="flex-col" style="flex: 1; min-width: 200px;"><label>Global TLS Key File (Fallback)</label><input type="text" x-model="smtp.tls_key_file" placeholder="Leave blank to use auto-generated key" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
     </div>
 </div>
 
