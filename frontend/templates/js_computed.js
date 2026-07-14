@@ -78,3 +78,44 @@ get sortedUiListeners() {
         return res * this.uiListenerSortDir;
     });
 },
+
+// Reactive Form State Checking
+get hasUiChanges() {
+    if (!this.initialState || !this.initialState.ui) return false;
+    if (this.ui_loglevel !== this.initialState.ui.ui_loglevel) return true;
+    if (this.ui_tz !== this.initialState.ui.ui_tz) return true;
+    if (this.ui_fmt !== this.initialState.ui.ui_fmt) return true;
+    if (this.ui_relative !== this.initialState.ui.ui_relative) return true;
+    if (this.ui_expand_adv !== this.initialState.ui.ui_expand_adv) return true;
+    if (this.ui_vault_sort !== this.initialState.ui.ui_vault_sort) return true;
+    if (this.ui_smtp_sort !== this.initialState.ui.ui_smtp_sort) return true;
+    if (this.ui_smarthost_sort !== this.initialState.ui.ui_smarthost_sort) return true;
+    if (JSON.stringify(this.uiListeners) !== JSON.stringify(this.initialState.ui.uiListeners)) return true;
+    return false;
+},
+
+get hasAppChanges() {
+    if (!this.initialState || !this.initialState.server) return false;
+    if (this.smtp.default_route !== this.initialState.server.smtp.default_route) return true;
+    if (this.smtp.loglevel !== this.initialState.server.smtp.loglevel) return true;
+    if (this.smtp.disable_persistence !== this.initialState.server.smtp.disable_persistence) return true;
+    if (this.smtp.hostname !== this.initialState.server.smtp.hostname) return true;
+    if (this.smtp.queue_dir !== this.initialState.server.smtp.queue_dir) return true;
+    if (this.smtp.tls_cert_file !== this.initialState.server.smtp.tls_cert_file) return true;
+    if (this.smtp.tls_key_file !== this.initialState.server.smtp.tls_key_file) return true;
+    if (JSON.stringify(this.smtp.listeners) !== JSON.stringify(this.initialState.server.smtp.listeners)) return true;
+    if (JSON.stringify(this.smtp.auth) !== JSON.stringify(this.initialState.server.smtp.auth)) return true;
+    if (JSON.stringify(this.smarthosts) !== JSON.stringify(this.initialState.smarthost.smarthosts)) return true;
+    if (JSON.stringify(this.smartGlobals) !== JSON.stringify(this.initialState.smarthost.smartGlobals)) return true;
+    if (JSON.stringify(this.pushGlobals) !== JSON.stringify(this.initialState.pushover.pushGlobals)) return true;
+
+    const currentVaultStr = JSON.stringify({ vaultApp: this.vaultApp, vaultUser: this.vaultUser, vaultSmarthost: this.vaultSmarthost });
+    const initialVaultStr = JSON.stringify({ vaultApp: this.initialState.vault.vaultApp, vaultUser: this.initialState.vault.vaultUser, vaultSmarthost: this.initialState.vault.vaultSmarthost });
+    if (initialVaultStr !== currentVaultStr) return true;
+
+    const cleanOldRoutes = this.initialState.routes.mappings.map(({_uid, ...rest}) => rest);
+    const cleanNewRoutes = this.mappings.map(({_uid, ...rest}) => rest);
+    if (JSON.stringify(cleanOldRoutes) !== JSON.stringify(cleanNewRoutes)) return true;
+
+    return false;
+},

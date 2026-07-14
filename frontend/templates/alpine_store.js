@@ -3,6 +3,10 @@ document.addEventListener('htmx:afterSwap', (e) => {
     if(e.detail.target.id === 'status' && e.detail.target.innerHTML) {
         clearTimeout(statusTimer);
         statusTimer = setTimeout(() => { e.detail.target.innerHTML = ''; }, 5000);
+
+        // Refresh the local pristine snapshot to match the freshly saved configuration
+        const component = Alpine.$data(document.querySelector('[x-data]'));
+        if (component && component.takeSnapshot) component.takeSnapshot();
     }
 });
 
@@ -38,6 +42,12 @@ document.addEventListener('alpine:init', () => {
                 }];
             }
             this.uiListeners = ul;
+
+            try {
+                this.validTimezones = Intl.supportedValuesOf('timeZone');
+            } catch (e) {
+                this.validTimezones = ['UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'Europe/London', 'Asia/Tokyo'];
+            }
 
             document.documentElement.setAttribute('data-theme', this.theme);
 
@@ -79,7 +89,6 @@ document.addEventListener('alpine:init', () => {
 
                 if (method === 'pushover') {
                     const isTokenAlias = this.vaultAppAliases.includes(v.token);
-                    // If v.user is empty, it's inheriting the global alias, so we map it to alias selection
                     const isUserAlias = this.vaultUserAliases.includes(v.user) || !v.user;
 
                     this.mappings.push({
@@ -139,6 +148,9 @@ document.addEventListener('alpine:init', () => {
             if(!this.smtp.auth) this.smtp.auth = {};
             if(!this.smtp.default_route) this.smtp.default_route = 'pushover';
             if(this.smtp.disable_persistence === undefined) this.smtp.disable_persistence = false;
+
+            // Generate initial pristine state snapshot for diff comparisons
+            this.takeSnapshot();
         }
     }));
 });

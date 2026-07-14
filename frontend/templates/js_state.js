@@ -33,3 +33,8 @@ editModal: { open: false, type: '', subType: '', name: '', value: '', showToken:
 smarthostModal: { open: false, mode: 'add', oldAlias: '', alias: '', hostname: '', advertised_hostname: '', port: 25, starttls: false, disable_tls_validation: false, auth: false, username: '', password: '', showPass: false, disable_attachments: false, force_plaintext: false, error: '' },
 listenerModal: { open: false, mode: 'add', idx: null, ip: '0.0.0.0', port: 25, hostname: '', starttls: false, tls_cert_file: '', tls_key_file: '', error: '' },
 uiListenerModal: { open: false, mode: 'add', idx: null, ip: '0.0.0.0', port: 8443, https: true, tls_cert: '', tls_key: '', error: '' },
+diffModal: { open: false, targetForm: '', changes: [] },
+
+initialState: {},
+tzError: '',
+validTimezones: [],

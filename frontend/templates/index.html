@@ -5,7 +5,7 @@
 
         {% include "navigation.html" %}
 
-        <form hx-post="/save/config" hx-target="#status" @htmx:config-request.camel="$event.detail.parameters['config_json'] = preparePayload(); $event.detail.parameters['vault_json'] = prepareVaultPayload();">
+        <form id="app_form" hx-post="/save/config" hx-target="#status" @htmx:config-request.camel="$event.detail.parameters['config_json'] = preparePayload();$event.detail.parameters['vault_json'] = prepareVaultPayload();">
 
             <div x-show="tab === 'routes'">{% include "tab_routes.html" %}</div>
             <div x-show="tab === 'queue'">{% include "tab_queue.html" %}</div>
@@ -14,12 +14,12 @@
             <div x-show="tab === 'server'">{% include "tab_smtp.html" %}</div>
 
             <div x-show="['routes', 'pushover', 'smarthost', 'server'].includes(tab)" style="margin-top: 1.5rem; display: flex; gap: 1rem;">
-                <button type="submit" style="font-size: 1.1rem; padding: 1rem;">Save Application Configuration</button>
-                <button type="button" class="warning" @click="window.location.reload()" style="font-size: 1.1rem; padding: 1rem;">Discard Changes & Reload from Disk</button>
+                <button type="button" @click="requestSave('app_form')" :disabled="!hasAppChanges" style="font-size: 1.1rem; padding: 1rem;">Save Configuration</button>
+                <button type="button" class="warning" @click="['routes', 'pushover', 'smarthost', 'server'].forEach(t => resetTab(t))" :disabled="!hasAppChanges" style="font-size: 1.1rem; padding: 1rem;">Discard Changes & Reload</button>
             </div>
         </form>
 
-        <div x-show="tab === 'ui'" x-data="{ httpsEnabled: {{ 'true' if ui_https else 'false' }} }">
+        <div x-show="tab === 'ui'">
             {% include "tab_ui.html" %}
         </div>
 
