@@ -189,7 +189,7 @@ async def index(request: Request):
     )
 
 @app.post("/save/config")
-async def save_config(config_json: str = Form(...)):
+async def save_config(config_json: str = Form(...), vault_json: str = Form(None)):
     try:
         parsed = json.loads(config_json)
         old_config = load_clean_json(CONFIG_FILE)
@@ -203,6 +203,29 @@ async def save_config(config_json: str = Form(...)):
         parsed["smtp"]["_smtp_meta"] = meta_block
         if "_smtp_meta" in parsed: del parsed["_smtp_meta"]
         save_json(CONFIG_FILE, parsed)
+
+        # If the frontend bundled the vault payload, process and save the passwords securely
+        if vault_json:
+            vault_parsed = json.loads(vault_json)
+            vault_data = load_vault_safe(VAULT_FILE)
+            new_data = {"app": {}, "user": {}, "smarthost": {}}
+            new_meta = {"app": {}, "user": {}, "smarthost": {}}
+
+            for vtype in ["app", "user"]:
+                for item in vault_parsed.get(vtype, []):
+                    name = item["name"]; tok = item["token"]; epoch = item["epoch"]
+                    if tok == "__RETAIN__": new_data[vtype][name] = vault_data[vtype].get(name, "")
+                    else: new_data[vtype][name] = tok
+                    new_meta[vtype][name] = epoch
+
+            for alias, tok in vault_parsed.get("smarthost", {}).items():
+                if tok == "__RETAIN__": new_data["smarthost"][alias] = vault_data.get("smarthost", {}).get(alias, "")
+                else: new_data["smarthost"][alias] = tok
+                new_meta["smarthost"][alias] = int(time.time())
+
+            save_json(VAULT_FILE, new_data)
+            save_json(VAULT_META_FILE, new_meta)
+
         old_smtp = old_config.get("smtp", {})
         new_smtp = parsed.get("smtp", {})
         if "_smtp_meta" in old_smtp: del old_smtp["_smtp_meta"]
@@ -227,10 +250,11 @@ async def save_vault_state(vault_json: str = Form(...)):
                 else: new_data[vtype][name] = tok
                 new_meta[vtype][name] = epoch
 
+        # Handle the new dictionary-based Smarthost vault structure payload
         for alias, tok in parsed.get("smarthost", {}).items():
             if tok == "__RETAIN__": new_data["smarthost"][alias] = vault_data.get("smarthost", {}).get(alias, "")
             else: new_data["smarthost"][alias] = tok
-            new_meta["smarthost"][alias] = int(time.time())
+            new_meta["smarthost"][alias] = int(time.time()) # Keep timestamp fresh on save
 
         save_json(VAULT_FILE, new_data)
         save_json(VAULT_META_FILE, new_meta)
@@ -250,6 +274,7 @@ async def save_ui(
         "vault_sort": vault_sort, "smtp_sort": smtp_sort, "smarthost_sort": smarthost_sort, "ui_loglevel": ui_loglevel
     }
     save_json(UI_CONFIG_FILE, ui_config)
+    # Native signal handler notification triggers loop rotation
     os.kill(os.getpid(), signal.SIGUSR1)
     return HTMLResponse("UI engine configuration altered successfully.")
 
@@ -277,6 +302,7 @@ if __name__ == "__main__":
     while not ui_shutdown_event.is_set():
         if ui_reload_configs_event.is_set():
             ui_reload_configs_event.clear()
+            # Re-read configurations seamlessly from disk context. FastAPI intercepts state on pull.
             logging.info("Caught SIGUSR2 inside UI process space. Configuration cache cleared.")
 
         ui_config = load_clean_json(UI_CONFIG_FILE)
