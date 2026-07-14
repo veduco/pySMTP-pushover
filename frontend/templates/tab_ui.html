@@ -37,29 +37,48 @@
 
         <div class="flex-row" style="margin-bottom: 1.5rem;">
             <div class="flex-col" style="flex: 1; min-width: 200px;">
-                <label>Token Default Sort</label>
-                <select style="width: 100%;" name="vault_sort" x-model="ui_vault_sort">
-                    <option value="name_asc">Alias Name (Ascending)</option>
-                    <option value="name_desc">Alias Name (Descending)</option>
-                    <option value="epoch_asc">Last Modification (Ascending)</option>
-                    <option value="epoch_desc">Last Modification (Descending)</option>
-                </select>
+                <label style="margin-bottom: 0.25rem;">Token Default Sort</label>
+                <input type="hidden" name="vault_sort" x-model="ui_vault_sort">
+                <div style="display: flex; gap: 0.5rem;">
+                    <button type="button" style="flex: 1; padding: 0.4rem; font-size: 0.85rem;"
+                            :class="ui_vault_sort.startsWith('name') ? '' : 'outline'"
+                            @click="ui_vault_sort = ui_vault_sort.startsWith('name') ? (ui_vault_sort === 'name_asc' ? 'name_desc' : 'name_asc') : 'name_asc'">
+                        Alias Name <span style="margin-left: 0.25rem;" x-show="ui_vault_sort.startsWith('name')" x-text="ui_vault_sort.endsWith('asc') ? '▲' : '▼'"></span>
+                    </button>
+                    <button type="button" style="flex: 1; padding: 0.4rem; font-size: 0.85rem;"
+                            :class="ui_vault_sort.startsWith('epoch') ? '' : 'outline'"
+                            @click="ui_vault_sort = ui_vault_sort.startsWith('epoch') ? (ui_vault_sort === 'epoch_asc' ? 'epoch_desc' : 'epoch_asc') : 'epoch_asc'">
+                        Last Mod <span style="margin-left: 0.25rem;" x-show="ui_vault_sort.startsWith('epoch')" x-text="ui_vault_sort.endsWith('asc') ? '▲' : '▼'"></span>
+                    </button>
+                </div>
             </div>
+
             <div class="flex-col" style="flex: 1; min-width: 200px;">
-                <label>SMTP Users Default Sort</label>
-                <select style="width: 100%;" name="smtp_sort" x-model="ui_smtp_sort">
-                    <option value="name_asc">Username (Ascending)</option>
-                    <option value="name_desc">Username (Descending)</option>
-                    <option value="epoch_asc">Last Modification (Ascending)</option>
-                    <option value="epoch_desc">Last Modification (Descending)</option>
-                </select>
+                <label style="margin-bottom: 0.25rem;">SMTP Users Default Sort</label>
+                <input type="hidden" name="smtp_sort" x-model="ui_smtp_sort">
+                <div style="display: flex; gap: 0.5rem;">
+                    <button type="button" style="flex: 1; padding: 0.4rem; font-size: 0.85rem;"
+                            :class="ui_smtp_sort.startsWith('name') ? '' : 'outline'"
+                            @click="ui_smtp_sort = ui_smtp_sort.startsWith('name') ? (ui_smtp_sort === 'name_asc' ? 'name_desc' : 'name_asc') : 'name_asc'">
+                        Username <span style="margin-left: 0.25rem;" x-show="ui_smtp_sort.startsWith('name')" x-text="ui_smtp_sort.endsWith('asc') ? '▲' : '▼'"></span>
+                    </button>
+                    <button type="button" style="flex: 1; padding: 0.4rem; font-size: 0.85rem;"
+                            :class="ui_smtp_sort.startsWith('epoch') ? '' : 'outline'"
+                            @click="ui_smtp_sort = ui_smtp_sort.startsWith('epoch') ? (ui_smtp_sort === 'epoch_asc' ? 'epoch_desc' : 'epoch_asc') : 'epoch_asc'">
+                        Last Mod <span style="margin-left: 0.25rem;" x-show="ui_smtp_sort.startsWith('epoch')" x-text="ui_smtp_sort.endsWith('asc') ? '▲' : '▼'"></span>
+                    </button>
+                </div>
             </div>
+
             <div class="flex-col" style="flex: 1; min-width: 200px;">
-                <label>Smarthost Default Sort</label>
-                <select style="width: 100%;" name="smarthost_sort" x-model="ui_smarthost_sort">
-                    <option value="alias_asc">Alias Name (Ascending)</option>
-                    <option value="alias_desc">Alias Name (Descending)</option>
-                </select>
+                <label style="margin-bottom: 0.25rem;">Smarthost Default Sort</label>
+                <input type="hidden" name="smarthost_sort" x-model="ui_smarthost_sort">
+                <div style="display: flex; gap: 0.5rem;">
+                    <button type="button" style="flex: 1; padding: 0.4rem; font-size: 0.85rem;"
+                            @click="ui_smarthost_sort = ui_smarthost_sort === 'alias_asc' ? 'alias_desc' : 'alias_asc'">
+                        Alias Name <span style="margin-left: 0.25rem;" x-text="ui_smarthost_sort.endsWith('asc') ? '▲' : '▼'"></span>
+                    </button>
+                </div>
             </div>
         </div>
 
