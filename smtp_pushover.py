@@ -572,20 +572,43 @@ def delivery_worker(msg_queue, state):
     """
     Unified background worker thread running continuously.
     Pops messages off the memory queue and multiplexes them to Pushover API or Smarthost relays.
-    Handles exponential backoff if the upstream connections are down or rate-limited.
+    Handles exponential backoff cleanly via interruptible sleeps to prevent thread-locking.
     """
     logging.debug("Delivery worker thread started.")
-    while True:
-        # Blocks here until an item is available in the queue
-        payload = msg_queue.get()
+    while not shutdown_event.is_set():
+        try:
+            # Short interruptible wait allows fast exit on SIGTERM
+            payload = msg_queue.get(timeout=1.0)
+        except queue.Empty:
+            continue
 
         # A payload of None is our signal from the main thread to shut down cleanly
         if payload is None:
             msg_queue.task_done()
             break
 
+        now = int(time.time())
+        next_retry = payload.get("next_retry", 0)
+
+        if now < next_retry:
+            # Not time for this message to retry yet. Put it back in the queue.
+            msg_queue.put(payload)
+            msg_queue.task_done()
+            # Brief sleep prevents 100% CPU lock if queue is entirely composed of items waiting for backoff
+            shutdown_event.wait(1.0)
+            continue
+
+        # Real-Time UI Deletion Sync: If the file was removed from the disk via the UI, drop it from memory.
+        if not payload.get("disable_persistence"):
+            filepath = os.path.join(state.smtp["queue_dir"], f"{payload['id']}.json")
+            if payload.get("retry_count", 0) > 0 and not os.path.exists(filepath):
+                logging.info(f"Message ID {payload['id']} was deleted by UI. Dropping from memory queue.")
+                msg_queue.task_done()
+                continue
+
         method = payload.get("method", "pushover")
         success = False
+        error_msg = None
 
         if method == "pushover":
             api_payload = {
@@ -618,16 +641,19 @@ def delivery_worker(msg_queue, state):
                     logging.info(f"Successfully sent Pushover notification: '{payload['title']}'")
                     success = True
                 else:
-                    logging.error(f"Pushover API returned {response.status_code}: {response.text}")
+                    error_msg = f"HTTP {response.status_code}: {response.text}"
+                    logging.error(f"Pushover API returned {error_msg}")
             except Exception as e:
-                logging.error(f"Failed to communicate with Pushover API: {e}")
+                error_msg = repr(e)
+                logging.error(f"Failed to communicate with Pushover API: {error_msg}")
 
         elif method == "smarthost":
             alias = payload.get("smarthost_alias")
             sh_conf = state.smarthost.get("aliases", {}).get(alias)
 
             if not sh_conf:
-                logging.error(f"Smarthost relay failed. Alias '{alias}' is not defined in the configuration.")
+                error_msg = f"Alias '{alias}' is not defined in the configuration."
+                logging.error(f"Smarthost relay failed. {error_msg}")
             else:
                 try:
                     # Determine if we need to synthesize a new email boundary to satisfy formatting constraints
@@ -657,7 +683,11 @@ def delivery_worker(msg_queue, state):
 
                     host = sh_conf.get("hostname")
                     port = int(sh_conf.get("port", 25))
-                    local_ehlo = state.smtp.get("hostname", "localhost")
+
+                    # Dynamically compute EHLO inheritance block
+                    local_ehlo = sh_conf.get("advertised_hostname")
+                    if not local_ehlo: local_ehlo = state.smtp.get("hostname")
+                    if not local_ehlo: local_ehlo = "localhost"
 
                     with smtplib.SMTP(host, port, timeout=15) as server:
                         server.ehlo(local_ehlo)
@@ -677,7 +707,8 @@ def delivery_worker(msg_queue, state):
                     logging.info(f"Successfully relayed email '{payload['title']}' via Smarthost '{alias}'.")
                     success = True
                 except Exception as e:
-                    logging.error(f"Smarthost relay failed for '{alias}': {e}")
+                    error_msg = repr(e)
+                    logging.error(f"Smarthost relay failed for '{alias}': {error_msg}")
 
 
         if success:
@@ -690,9 +721,14 @@ def delivery_worker(msg_queue, state):
                     except OSError as e:
                         logging.error(f"Failed to delete disk queue file {filepath}: {e}")
         else:
-            # Handle failure with exponential backoff: 5s base, then doubling, capped by max_retry_backoff limit
+            # Handle failure with exponential backoff and update the UI readable parameters
             payload["retry_count"] = payload.get("retry_count", 0) + 1
+            payload["last_error"] = error_msg or "Unknown error"
+            payload["last_attempt"] = now
+
             backoff_delay = min(5 * (2 ** (payload["retry_count"] - 1)), state.smtp["max_retry_backoff"])
+            payload["next_retry"] = now + backoff_delay
+
             logging.warning(f"Delivery failed for ID: {payload['id']}. Retrying in {backoff_delay}s.")
 
             # Update the disk file so if the app crashes during the sleep, we remember the retry count
@@ -705,8 +741,6 @@ def delivery_worker(msg_queue, state):
                     except Exception as e:
                         logging.error(f"Failed to update retry metadata on disk: {e}")
 
-            # Sleep the thread and push the item back to the end of the line
-            time.sleep(backoff_delay)
             msg_queue.put(payload)
 
         msg_queue.task_done()
@@ -852,6 +886,7 @@ def load_config(is_reload=False):
             new_state.smarthost["aliases"][alias] = {
                 "hostname": sh.get("hostname", ""),
                 "port": int(sh.get("port", 25)),
+                "advertised_hostname": sh.get("advertised_hostname", ""),
                 "starttls": get_bool(sh.get("starttls")),
                 "disable_tls_validation": get_bool(sh.get("disable_tls_validation")),
                 "auth": get_bool(sh.get("auth")),
@@ -1155,7 +1190,7 @@ if __name__ == "__main__":
 
     auth_status = "Enabled" if app_state.smtp.get("auth") else "Disabled (Permissive)"
     total_mapped = len(app_state.mappings["to"]) + len(app_state.mappings["from"]) + len(app_state.regex_mappings["to"]) + len(app_state.regex_mappings["from"])
-    logging.info(f"Loaded config from file '{app_state.config_file}'. Explicit rules: {total_mapped}. Routing Method: {app_state.smtp['default_route']}. SMTP Auth: {auth_status}")
+    logging.info(f"Loaded config from file '{app_state.config_file}'. Explicit rules: {total_mapped}. Global Routing Method: {app_state.smtp['default_route']}. SMTP Auth: {auth_status}")
 
     # 2. Setup thread-safe queue and retrieve un-sent disk persistence items
     msg_queue = queue.Queue()
@@ -1279,7 +1314,7 @@ if __name__ == "__main__":
                         new_auth_status = "Enabled" if app_state.smtp.get("auth") else "Disabled (Permissive)"
                         new_total = len(app_state.mappings["to"]) + len(app_state.mappings["from"]) + len(app_state.regex_mappings["to"]) + len(app_state.regex_mappings["from"])
 
-                        logging.info(f"Reload success. Mappings tracked: {new_total}. Routing Method: {app_state.smtp['default_route']}. SMTP Auth: {new_auth_status}")
+                        logging.info(f"Reload success. Mappings tracked: {new_total}. Global Routing Method: {app_state.smtp['default_route']}. SMTP Auth: {new_auth_status}")
                         logging.info("Note: Changes to listener endpoints or TLS settings require a SIGUSR1 to take effect.")
                     else:
                         logging.warning("Config reload failed. Retaining active rules matrix.")

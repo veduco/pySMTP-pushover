@@ -28,7 +28,7 @@ import logging
 import hashlib
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Form
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 import uvicorn
 from cryptography import x509
@@ -56,7 +56,7 @@ ui_reload_configs_event = threading.Event()     # USR2 parities configuration re
 class EndpointFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         # Match both GET /healthcheck and HEAD /healthcheck by checking the URI path directly
-        return "/healthcheck" not in record.getMessage()
+        return "/healthcheck" not in record.getMessage() and "/api/queue" not in record.getMessage()
 
 logging.getLogger("uvicorn.access").addFilter(EndpointFilter())
 
@@ -109,6 +109,47 @@ def signal_smtp_app(restart_listeners=False):
 @app.api_route("/healthcheck", methods=["GET", "HEAD"])
 async def healthcheck_endpoint(request: Request):
     return {"status": "healthy"}
+
+@app.get("/api/queue")
+async def get_queue():
+    config = load_clean_json(CONFIG_FILE)
+    q_dir = config.get("smtp", {}).get("queue_dir", "queue")
+    q_path = os.path.normpath(os.path.join(SCRIPT_DIR, q_dir))
+    items = []
+    if os.path.exists(q_path):
+        for fname in os.listdir(q_path):
+            if fname.endswith(".json"):
+                try:
+                    with open(os.path.join(q_path, fname), "r") as f:
+                        data = json.load(f)
+                        items.append({
+                            "id": data.get("id"),
+                            "title": data.get("title", "No Subject"),
+                            "method": data.get("method", "pushover"),
+                            "retry_count": data.get("retry_count", 0),
+                            "last_attempt": data.get("last_attempt", 0),
+                            "next_retry": data.get("next_retry", 0),
+                            "last_error": data.get("last_error", "None"),
+                            "sender": data.get("sender", "gateway@localhost"),
+                            "timestamp": data.get("timestamp", 0)
+                        })
+                except Exception: pass
+
+    # Sort logically: Items currently backing off (highest last_attempt) to the top
+    items.sort(key=lambda x: x["last_attempt"] if x["last_attempt"] else x["timestamp"], reverse=True)
+    return JSONResponse(items)
+
+@app.delete("/api/queue/{item_id}")
+async def delete_queue_item(item_id: str):
+    config = load_clean_json(CONFIG_FILE)
+    q_dir = config.get("smtp", {}).get("queue_dir", "queue")
+    q_path = os.path.normpath(os.path.join(SCRIPT_DIR, q_dir))
+    filepath = os.path.join(q_path, f"{item_id}.json")
+    if os.path.exists(filepath):
+        try:
+            os.remove(filepath)
+        except OSError: pass
+    return JSONResponse({"status": "ok"})
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
@@ -204,7 +245,8 @@ async def save_config(config_json: str = Form(...), vault_json: str = Form(None)
         if "_smtp_meta" in parsed: del parsed["_smtp_meta"]
         save_json(CONFIG_FILE, parsed)
 
-        # If the frontend bundled the vault payload, process and save the passwords securely
+        # If the frontend bundled the vault payload (which contains Smarthost passwords),
+        # process and save them securely to the Vault before restarting the daemon.
         if vault_json:
             vault_parsed = json.loads(vault_json)
             vault_data = load_vault_safe(VAULT_FILE)
@@ -250,11 +292,11 @@ async def save_vault_state(vault_json: str = Form(...)):
                 else: new_data[vtype][name] = tok
                 new_meta[vtype][name] = epoch
 
-        # Handle the new dictionary-based Smarthost vault structure payload
+        # Handle the dictionary-based Smarthost vault structure payload cleanly
         for alias, tok in parsed.get("smarthost", {}).items():
             if tok == "__RETAIN__": new_data["smarthost"][alias] = vault_data.get("smarthost", {}).get(alias, "")
             else: new_data["smarthost"][alias] = tok
-            new_meta["smarthost"][alias] = int(time.time()) # Keep timestamp fresh on save
+            new_meta["smarthost"][alias] = int(time.time())
 
         save_json(VAULT_FILE, new_data)
         save_json(VAULT_META_FILE, new_meta)
@@ -302,7 +344,6 @@ if __name__ == "__main__":
     while not ui_shutdown_event.is_set():
         if ui_reload_configs_event.is_set():
             ui_reload_configs_event.clear()
-            # Re-read configurations seamlessly from disk context. FastAPI intercepts state on pull.
             logging.info("Caught SIGUSR2 inside UI process space. Configuration cache cleared.")
 
         ui_config = load_clean_json(UI_CONFIG_FILE)

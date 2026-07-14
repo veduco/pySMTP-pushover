@@ -29,7 +29,7 @@
         .card { border: 1px solid var(--border-color); padding: 1.5rem; border-radius: 6px; margin-bottom: 1.5rem; background: var(--surface-color); }
         .adv-card { border-left: 4px solid var(--primary-color); padding: 1rem 1rem 0.5rem 1.5rem; background: var(--secondary-bg); margin-bottom: 1rem; border-radius: 0 4px 4px 0; }
         .flex-row { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; align-items: flex-end; }
-        .flex-col { flex: 1; min-width: 200px; }
+        .flex-col { flex: 1; min-width: 0; }
         label { display: block; font-weight: bold; margin-bottom: 0.25rem; font-size: 0.9rem; }
         input, select, textarea { width: 100%; padding: 0.5rem; box-sizing: border-box; background: var(--input-bg); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 4px; }
         button { background: var(--primary-color); color: white; padding: 0.5rem 1rem; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; display: inline-flex; align-items: center; justify-content: center; }
@@ -88,14 +88,16 @@
 
         <div class="tabs">
             <div class="tab" :class="{ 'active': tab === 'routes' }" @click="tab = 'routes'">Routes</div>
+            <div class="tab" :class="{ 'active': tab === 'queue' }" @click="tab = 'queue'">Queue Manager</div>
             <div class="tab" :class="{ 'active': tab === 'pushover' }" @click="tab = 'pushover'">Pushover Settings</div>
             <div class="tab" :class="{ 'active': tab === 'smarthost' }" @click="tab = 'smarthost'">Smarthost Settings</div>
             <div class="tab" :class="{ 'active': tab === 'server' }" @click="tab = 'server'">SMTP Server</div>
             <div class="tab" :class="{ 'active': tab === 'ui' }" @click="tab = 'ui'">UI Settings</div>
         </div>
 
-        <form hx-post="/save/config" hx-target="#status" @submit="document.getElementById('config_payload').value = preparePayload()">
+        <form hx-post="/save/config" hx-target="#status" @submit="document.getElementById('config_payload').value = preparePayload(); document.getElementById('vault_bundle').value = prepareVaultPayload();">
             <input type="hidden" name="config_json" id="config_payload">
+            <input type="hidden" name="vault_json" id="vault_bundle">
 
             <div x-show="tab === 'routes'">
                 <div class="card">
@@ -225,6 +227,52 @@
                         </div>
                     </template>
                     <button type="button" @click="addMapping()">+ Add Mapping</button>
+                </div>
+            </div>
+
+            <div x-show="tab === 'queue'">
+                <div class="card">
+                    <div class="header-controls" style="margin-bottom: 0;">
+                        <h3>Stuck Queue Messages</h3>
+                        <button type="button" class="outline" @click="loadQueue()">↻ Refresh</button>
+                    </div>
+                    <p style="margin-top: 0;">Messages that failed upstream delivery are stored here securely for backoff retries. (Memory-only payloads where persistence is disabled will not appear here).</p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Method</th>
+                                <th>Sender</th>
+                                <th>Subject</th>
+                                <th class="table-col-min">Retry Count</th>
+                                <th class="table-col-min">Next Attempt</th>
+                                <th>Last Error</th>
+                                <th class="table-col-min">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="item in queueItems" :key="item.id">
+                                <tr>
+                                    <td class="table-col-min"><span class="time-display" x-text="formatTime(item.timestamp)" :title="getFullTime(item.timestamp)"></span></td>
+                                    <td class="table-col-min" style="text-transform: capitalize;" x-text="item.method"></td>
+                                    <td x-text="item.sender"></td>
+                                    <td x-text="item.title"></td>
+                                    <td class="table-col-min" style="text-align: center;" x-text="item.retry_count"></td>
+                                    <td class="table-col-min">
+                                        <div style="font-size: 0.85em; white-space: nowrap;">
+                                            <div x-show="item.last_attempt > 0">Failed: <span class="time-display" x-text="formatTime(item.last_attempt)" :title="getFullTime(item.last_attempt)"></span></div>
+                                            <div x-show="item.next_retry > 0">Retry: <span class="time-display" x-text="formatTime(item.next_retry)" :title="getFullTime(item.next_retry)"></span></div>
+                                        </div>
+                                    </td>
+                                    <td style="color: var(--danger-color); font-size: 0.85em;" x-text="item.last_error"></td>
+                                    <td class="table-col-min">
+                                        <button type="button" class="danger" @click="deleteQueueItem(item.id)" title="Delete from Queue"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+                                    </td>
+                                </tr>
+                            </template>
+                            <tr x-show="queueItems.length === 0"><td colspan="8" style="text-align: center; opacity: 0.7; padding: 1.5rem;">No stuck messages in the queue.</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
@@ -670,8 +718,12 @@
                     </div>
                     <div class="flex-col" style="flex: 1; min-width: 0;">
                         <label>Port</label>
-                        <input type="number" x-model.number="smarthostModal.port" style="width: 100px; max-width: 100%;" oninput="if(this.value.length > 5) this.value = this.value.slice(0, 5);" min="1" max="65535">
+                        <input type="number" x-model.number="smarthostModal.port" required style="width: 100px; max-width: 100%;" oninput="if(this.value.length > 5) this.value = this.value.slice(0, 5);" min="1" max="65535">
                     </div>
+                </div>
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label>Advertised Hostname (EHLO)</label>
+                    <input type="text" x-model="smarthostModal.advertised_hostname" placeholder="Optional. Defaults to Global Hostname" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
                 </div>
 
                 <div class="flex-row" style="gap: 1.5rem; margin-bottom: 1rem;">
@@ -724,7 +776,7 @@
                     </div>
                     <div class="flex-col" style="flex: 1; min-width: 0;">
                         <label>Port</label>
-                        <input type="number" x-model.number="listenerModal.port" style="width: 100px; max-width: 100%;" oninput="if(this.value.length > 5) this.value = this.value.slice(0, 5);" min="1" max="65535">
+                        <input type="number" x-model.number="listenerModal.port" required style="width: 100px; max-width: 100%;" oninput="if(this.value.length > 5) this.value = this.value.slice(0, 5);" min="1" max="65535">
                     </div>
                 </div>
 
@@ -778,6 +830,8 @@
             vaultApp: [], vaultUser: [], vaultSmarthost: {}, vaultAppAliases: [], vaultUserAliases: [],
             newVaultType: 'app', newVaultName: '', newVaultToken: '', showNewVaultToken: false,
 
+            queueItems: [], queueInterval: null,
+
             ui_tz: '{{ ui_tz }}', ui_fmt: '{{ ui_fmt }}',
             ui_relative: {{ 'true' if ui_relative else 'false' }},
             ui_expand_adv: {{ 'true' if ui_expand_adv else 'false' }},
@@ -796,13 +850,27 @@
             dragHover: null, draggedRouteIdx: null,
 
             editModal: { open: false, type: '', subType: '', name: '', value: '', showToken: false },
-            smarthostModal: { open: false, mode: 'add', oldAlias: '', alias: '', hostname: '', port: 25, starttls: false, disable_tls_validation: false, auth: false, username: '', password: '', showPass: false, disable_attachments: false, force_plaintext: false, error: '' },
+            smarthostModal: { open: false, mode: 'add', oldAlias: '', alias: '', hostname: '', advertised_hostname: '', port: 25, starttls: false, disable_tls_validation: false, auth: false, username: '', password: '', showPass: false, disable_attachments: false, force_plaintext: false, error: '' },
             listenerModal: { open: false, mode: 'add', idx: null, ip: '0.0.0.0', port: 25, hostname: '', starttls: false, tls_cert_file: '', tls_key_file: '', error: '' },
 
             init() {
                 this.$watch('theme', val => { localStorage.setItem('theme', val); document.documentElement.setAttribute('data-theme', val); });
-                this.$watch('tab', val => localStorage.setItem('activeTab', val));
+                this.$watch('tab', val => {
+                    localStorage.setItem('activeTab', val);
+                    if (val === 'queue') {
+                        this.loadQueue();
+                        this.queueInterval = setInterval(() => this.loadQueue(), 5000);
+                    } else if (this.queueInterval) {
+                        clearInterval(this.queueInterval);
+                    }
+                });
+
                 document.documentElement.setAttribute('data-theme', this.theme);
+
+                if (this.tab === 'queue') {
+                    this.loadQueue();
+                    this.queueInterval = setInterval(() => this.loadQueue(), 5000);
+                }
 
                 const vsParts = this.ui_vault_sort.split('_');
                 this.vaultSortCol = vsParts[0]; this.vaultSortDir = vsParts[1] === 'desc' ? -1 : 1;
@@ -895,6 +963,14 @@
                 if(!this.smtp.auth) this.smtp.auth = {};
                 if(!this.smtp.default_route) this.smtp.default_route = 'pushover';
                 if(this.smtp.disable_persistence === undefined) this.smtp.disable_persistence = false;
+            },
+
+            loadQueue() {
+                fetch('/api/queue').then(r => r.json()).then(d => this.queueItems = d);
+            },
+
+            deleteQueueItem(id) {
+                fetch('/api/queue/' + id, {method: 'DELETE'}).then(() => this.loadQueue());
             },
 
             reorderRoute(oldIdx, newIdx) {
@@ -1009,14 +1085,29 @@
             },
 
             formatTime(epoch) {
-                if(!epoch) return "Never"; const d = new Date(epoch * 1000);
+                if(!epoch) return "Never";
+                const d = new Date(epoch * 1000);
                 if(this.ui_relative) {
-                    const seconds = Math.floor((new Date() - d) / 1000); let interval = Math.floor(seconds / 31536000);
-                    if (interval >= 1) return interval + " years ago"; interval = Math.floor(seconds / 2592000);
-                    if (interval >= 1) return interval + " months ago"; interval = Math.floor(seconds / 84600);
-                    if (interval >= 1) return interval + " days ago"; interval = Math.floor(seconds / 3600);
-                    if (interval >= 1) return interval + " hours ago"; interval = Math.floor(seconds / 60);
-                    if (interval >= 1) return interval + " minutes ago"; return "Just now";
+                    const now = new Date();
+                    const isFuture = d > now;
+                    const seconds = Math.abs(Math.floor((now - d) / 1000));
+
+                    let interval = Math.floor(seconds / 31536000);
+                    if (interval >= 1) return isFuture ? "in " + interval + " years" : interval + " years ago";
+
+                    interval = Math.floor(seconds / 2592000);
+                    if (interval >= 1) return isFuture ? "in " + interval + " months" : interval + " months ago";
+
+                    interval = Math.floor(seconds / 84600);
+                    if (interval >= 1) return isFuture ? "in " + interval + " days" : interval + " days ago";
+
+                    interval = Math.floor(seconds / 3600);
+                    if (interval >= 1) return isFuture ? "in " + interval + " hours" : interval + " hours ago";
+
+                    interval = Math.floor(seconds / 60);
+                    if (interval >= 1) return isFuture ? "in " + interval + " minutes" : interval + " minutes ago";
+
+                    return isFuture ? "in a few seconds" : "Just now";
                 }
                 return this.executeAbsoluteFormat(d);
             },
@@ -1083,12 +1174,12 @@
                 this.smarthostModal.error = '';
                 this.smarthostModal.showPass = false;
                 if(mode === 'add') {
-                    this.smarthostModal.alias = ''; this.smarthostModal.hostname = ''; this.smarthostModal.port = 25;
+                    this.smarthostModal.alias = ''; this.smarthostModal.hostname = ''; this.smarthostModal.advertised_hostname = ''; this.smarthostModal.port = 25;
                     this.smarthostModal.starttls = false; this.smarthostModal.disable_tls_validation = false; this.smarthostModal.auth = false;
                     this.smarthostModal.username = ''; this.smarthostModal.password = ''; this.smarthostModal.disable_attachments = false; this.smarthostModal.force_plaintext = false;
                 } else {
                     const sh = this.smarthosts[alias];
-                    this.smarthostModal.alias = alias; this.smarthostModal.hostname = sh.hostname || ''; this.smarthostModal.port = parseInt(sh.port) || 25;
+                    this.smarthostModal.alias = alias; this.smarthostModal.hostname = sh.hostname || ''; this.smarthostModal.advertised_hostname = sh.advertised_hostname || ''; this.smarthostModal.port = parseInt(sh.port) || 25;
                     this.smarthostModal.starttls = sh.starttls === true; this.smarthostModal.disable_tls_validation = sh.disable_tls_validation === true; this.smarthostModal.auth = sh.auth === true;
                     this.smarthostModal.username = sh.username || ''; this.smarthostModal.password = '';
                     this.smarthostModal.disable_attachments = sh.disable_attachments === true; this.smarthostModal.force_plaintext = sh.force_plaintext === true;
@@ -1122,6 +1213,7 @@
                 this.smarthosts[alias] = {
                     hostname: host,
                     port: port,
+                    advertised_hostname: this.smarthostModal.advertised_hostname.trim(),
                     starttls: this.smarthostModal.starttls,
                     disable_tls_validation: this.smarthostModal.disable_tls_validation,
                     auth: this.smarthostModal.auth,
