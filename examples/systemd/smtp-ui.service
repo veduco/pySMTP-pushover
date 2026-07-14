@@ -12,6 +12,7 @@ WorkingDirectory=/opt/smtp-pushover
 Environment="GATEWAY_CONFIG=/opt/smtp-pushover/config.json"
 Environment="UI_CONFIG=/opt/smtp-pushover/ui_config.json"
 Environment="PYTHONDONTWRITEBYTECODE=1"
+Environment="PYTHONUNBUFFERED=1"
 
 ExecStart=/usr/bin/python3 /opt/smtp-pushover/run_frontend.py
 

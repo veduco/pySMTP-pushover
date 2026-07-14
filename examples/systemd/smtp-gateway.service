@@ -10,6 +10,7 @@ WorkingDirectory=/opt/smtp-pushover
 # Environment variable declarations for runtime configuration path scopes
 Environment="GATEWAY_CONFIG=/opt/smtp-pushover/config.json"
 Environment="PYTHONDONTWRITEBYTECODE=1"
+Environment="PYTHONUNBUFFERED=1"
 
 ExecStart=/usr/bin/python3 /opt/smtp-pushover/run_backend.py
 
