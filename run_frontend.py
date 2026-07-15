@@ -44,6 +44,14 @@ ui_shutdown_event = threading.Event()
 ui_reload_listeners_event = threading.Event()
 ui_reload_configs_event = threading.Event()
 
+def start_server(srv, bnd):
+    try:
+        srv.run()
+    except SystemExit:
+        logging.critical(f"CRITICAL: UI listener on {bnd} aborted unexpectedly. Port may be occupied.")
+    except Exception as e:
+        logging.critical(f"CRITICAL: Failed to start UI listener on {bnd}. Error: {e}")
+
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, lambda s, f: ui_shutdown_event.set())
     signal.signal(signal.SIGTERM, lambda s, f: ui_shutdown_event.set())
@@ -79,6 +87,7 @@ if __name__ == "__main__":
 
         servers = []
         threads = []
+        startup_tracking = []
 
         for l_conf in listeners:
             bind = l_conf.get("bind", "0.0.0.0:8443")
@@ -87,7 +96,6 @@ if __name__ == "__main__":
             port = int(port_str)
 
             protocol = "https" if use_https else "http"
-            logging.info(f"Control panel running on {protocol}://{host}:{port} (Press CTRL+C to quit)")
 
             if use_https:
                 cert_file, key_file = l_conf.get("tls_cert", ""), l_conf.get("tls_key", "")
@@ -98,12 +106,40 @@ if __name__ == "__main__":
 
             server = uvicorn.Server(server_config)
             servers.append(server)
-            t = threading.Thread(target=server.run)
+            t = threading.Thread(target=start_server, args=(server, bind))
             threads.append(t)
+
+            startup_tracking.append({
+                "server": server,
+                "thread": t,
+                "protocol": protocol,
+                "host": host,
+                "port": port
+            })
+
+            logging.debug(f"Starting UI listener at {protocol}://{host}:{port}")
             t.start()
 
-        logging.info("Application startup complete.")
+        startup_errors = False
+        for tracker in startup_tracking:
+            server = tracker["server"]
+            t = tracker["thread"]
 
+            # Pause main thread momentarily to verify this specific Uvicorn server successfully bound
+            while not server.started and t.is_alive():
+                time.sleep(0.05)
+
+            if server.started:
+                logging.info(f"UI listener started at {tracker['protocol']}://{tracker['host']}:{tracker['port']}")
+            else:
+                startup_errors = True
+
+        if startup_errors:
+            logging.warning("Application startup completed with errors.")
+        else:
+            logging.info("Application startup complete.")
+
+        # Main process keep-alive loop
         while any(t.is_alive() for t in threads):
             if ui_reload_configs_event.is_set():
                 ui_reload_configs_event.clear()

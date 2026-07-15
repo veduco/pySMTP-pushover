@@ -61,32 +61,45 @@ if __name__ == "__main__":
     authenticator = GatewayAuthenticator(app_state)
     active_controllers = {}
 
+    startup_errors = False
+
     for l_conf in app_state.smtp["listeners"]:
         bind = l_conf["bind"]
         listen_address, listen_port = get_listen_params(bind)
         eff_hostname = l_conf.get("hostname", app_state.smtp.get("hostname"))
 
-        tls_context = get_tls_context(l_conf, eff_hostname)
-        ctrl = GatewayController(
-            handler, hostname=listen_address, port=listen_port, server_hostname=eff_hostname,
-            tls_context=tls_context, authenticator=authenticator, auth_require_tls=False
-        )
-        ctrl.start()
-        active_controllers[bind] = {
-            "controller": ctrl,
-            "config": {
-                "hostname": eff_hostname,
-                "starttls": l_conf.get("starttls", False),
-                "tls_cert_file": l_conf.get("tls_cert_file"),
-                "tls_key_file": l_conf.get("tls_key_file"),
-                "cert_hash": get_file_hash(l_conf.get("tls_cert_file")),
-                "key_hash": get_file_hash(l_conf.get("tls_key_file"))
-            }
-        }
-        starttls_status = "enabled" if tls_context else "disabled"
-        logging.info(f"Starting SMTP server on {listen_address}:{listen_port} (STARTTLS: {starttls_status}, Hostname: {eff_hostname})")
+        try:
+            tls_context = get_tls_context(l_conf, eff_hostname)
+            starttls_status = "enabled" if tls_context else "disabled"
 
-    logging.info("Application startup complete.")
+            logging.debug(f"Starting SMTP listener on {listen_address}:{listen_port} (STARTTLS: {starttls_status}, Hostname: {eff_hostname})")
+
+            ctrl = GatewayController(
+                handler, hostname=listen_address, port=listen_port, server_hostname=eff_hostname,
+                tls_context=tls_context, authenticator=authenticator, auth_require_tls=False
+            )
+            ctrl.start()
+
+            active_controllers[bind] = {
+                "controller": ctrl,
+                "config": {
+                    "hostname": eff_hostname,
+                    "starttls": l_conf.get("starttls", False),
+                    "tls_cert_file": l_conf.get("tls_cert_file"),
+                    "tls_key_file": l_conf.get("tls_key_file"),
+                    "cert_hash": get_file_hash(l_conf.get("tls_cert_file")),
+                    "key_hash": get_file_hash(l_conf.get("tls_key_file"))
+                }
+            }
+            logging.info(f"SMTP listener started on {listen_address}:{listen_port} (STARTTLS: {starttls_status}, Hostname: {eff_hostname})")
+        except Exception as e:
+            startup_errors = True
+            logging.critical(f"CRITICAL: Failed to bind SMTP listener to {bind}. Port may be occupied. Skipping. Error: {e}")
+
+    if startup_errors:
+        logging.warning("Application startup completed with errors.")
+    else:
+        logging.info("Application startup complete.")
 
     try:
         while not shutdown_event.is_set():
@@ -96,6 +109,8 @@ if __name__ == "__main__":
 
                 current_binds = set(active_controllers.keys())
                 new_binds = set(l["bind"] for l in app_state.smtp["listeners"])
+
+                reload_errors = False
 
                 for bind in current_binds - new_binds:
                     logging.info(f"Removing deprecated listener on {bind}...")
@@ -118,7 +133,7 @@ if __name__ == "__main__":
 
                     needs_restart = False
                     if bind not in active_controllers:
-                        logging.info(f"New listener declaration discovered for {bind}. Starting...")
+                        logging.info(f"New listener declaration discovered for {bind}.")
                         needs_restart = True
                     elif active_controllers[bind]["config"] != eff_config:
                         logging.info(f"Configuration or TLS modification detected for {bind}. Restarting listener...")
@@ -127,15 +142,28 @@ if __name__ == "__main__":
 
                     if needs_restart:
                         listen_address, listen_port = get_listen_params(bind)
-                        tls_context = get_tls_context(l_conf, eff_hostname)
-                        ctrl = GatewayController(
-                            handler, hostname=listen_address, port=listen_port, server_hostname=eff_hostname,
-                            tls_context=tls_context, authenticator=authenticator, auth_require_tls=False
-                        )
-                        ctrl.start()
-                        active_controllers[bind] = {"controller": ctrl, "config": eff_config}
-                        starttls_status = "enabled" if tls_context else "disabled"
-                        logging.info(f"Listener {bind} hot-reload complete (STARTTLS: {starttls_status}, Hostname: {eff_hostname}).")
+                        try:
+                            tls_context = get_tls_context(l_conf, eff_hostname)
+                            starttls_status = "enabled" if tls_context else "disabled"
+
+                            logging.info(f"Attempting to start SMTP listener on {bind} (STARTTLS: {starttls_status}, Hostname: {eff_hostname})")
+
+                            ctrl = GatewayController(
+                                handler, hostname=listen_address, port=listen_port, server_hostname=eff_hostname,
+                                tls_context=tls_context, authenticator=authenticator, auth_require_tls=False
+                            )
+                            ctrl.start()
+
+                            active_controllers[bind] = {"controller": ctrl, "config": eff_config}
+                            logging.info(f"SMTP listener started on {bind}")
+                        except Exception as e:
+                            reload_errors = True
+                            logging.critical(f"CRITICAL: Failed to start SMTP listener on {bind}. Port may be occupied. Skipping. Error: {e}")
+
+                if reload_errors:
+                    logging.warning("Listener hot-reload completed with errors.")
+                else:
+                    logging.info("Listener hot-reload complete.")
 
             if mappings_reload_event.is_set():
                 mappings_reload_event.clear()
