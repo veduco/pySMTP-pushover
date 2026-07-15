@@ -79,7 +79,53 @@ get sortedUiListeners() {
     });
 },
 
-// Reactive Form State Checking
+// Modal Reactive State Checking
+get hasVaultModalChanges() { return this.vaultModal.name !== this.vaultModal.orig.name || this.vaultModal.token !== this.vaultModal.orig.token; },
+get hasSmtpUserModalChanges() { return this.smtpUserModal.name !== this.smtpUserModal.orig.name || this.smtpUserModal.password !== this.smtpUserModal.orig.password; },
+get hasEditModalChanges() { return this.editModal.value !== this.editModal.orig.value; },
+get hasSmarthostModalChanges() {
+    const m = this.smarthostModal; const o = m.orig;
+    return m.alias !== o.alias || m.hostname !== o.hostname || m.port !== o.port || m.advertised_hostname !== o.advertised_hostname || m.starttls !== o.starttls || m.disable_tls_validation !== o.disable_tls_validation || m.auth !== o.auth || m.username !== o.username || m.password !== o.password || m.disable_attachments !== o.disable_attachments || m.force_plaintext !== o.force_plaintext;
+},
+get hasListenerModalChanges() {
+    const m = this.listenerModal; const o = m.orig;
+    return m.ip !== o.ip || m.port !== o.port || m.hostname !== o.hostname || m.starttls !== o.starttls || m.tls_cert_file !== o.tls_cert_file || m.tls_key_file !== o.tls_key_file;
+},
+get hasUiListenerModalChanges() {
+    const m = this.uiListenerModal; const o = m.orig;
+    return m.ip !== o.ip || m.port !== o.port || m.https !== o.https || m.tls_cert !== o.tls_cert || m.tls_key !== o.tls_key;
+},
+
+// Granular Modal Save Validators
+get canSaveVaultModal() { return this.hasVaultModalChanges && this.vaultModal.name.trim() !== '' && this.vaultModal.token.trim() !== ''; },
+get canSaveSmtpUserModal() { return this.hasSmtpUserModalChanges && this.smtpUserModal.name.trim() !== '' && this.smtpUserModal.password.trim() !== ''; },
+get canSaveEditModal() { return this.hasEditModalChanges && this.editModal.value.trim() !== ''; },
+get canSaveSmarthostModal() {
+    if (!this.hasSmarthostModalChanges) return false;
+    const m = this.smarthostModal;
+    if (!m.alias.trim() || !m.hostname.trim() || !m.port) return false;
+    if (m.auth) {
+        if (!m.username.trim()) return false;
+        if (m.mode === 'add' && !m.password.trim()) return false;
+    }
+    return true;
+},
+get canSaveListenerModal() {
+    if (!this.hasListenerModalChanges) return false;
+    const m = this.listenerModal;
+    if (!m.port) return false;
+    const ip = m.ip.trim() || '0.0.0.0';
+    return this.isValidIP(ip);
+},
+get canSaveUiListenerModal() {
+    if (!this.hasUiListenerModalChanges) return false;
+    const m = this.uiListenerModal;
+    if (!m.port) return false;
+    const ip = m.ip.trim() || '0.0.0.0';
+    return this.isValidIP(ip);
+},
+
+// Core Tab Reactive State Checking
 get hasUiChanges() {
     if (!this.initialState || !this.initialState.ui) return false;
     if (this.ui_loglevel !== this.initialState.ui.ui_loglevel) return true;
@@ -92,6 +138,15 @@ get hasUiChanges() {
     if (this.ui_smarthost_sort !== this.initialState.ui.ui_smarthost_sort) return true;
     if (JSON.stringify(this.uiListeners) !== JSON.stringify(this.initialState.ui.uiListeners)) return true;
     return false;
+},
+
+get canSaveUi() {
+    if (!this.hasUiChanges) return false;
+    if (this.ui_tz && !this.validTimezones.includes(this.ui_tz)) return false;
+    for (let l of this.uiListeners) {
+        if (!l.bind || l.bind.trim() === '') return false;
+    }
+    return true;
 },
 
 get hasAppChanges() {
@@ -118,4 +173,27 @@ get hasAppChanges() {
     if (JSON.stringify(cleanOldRoutes) !== JSON.stringify(cleanNewRoutes)) return true;
 
     return false;
+},
+
+get canSaveApp() {
+    if (!this.hasAppChanges) return false;
+
+    // Reject save if any routing definitions are improperly formed or left entirely blank
+    for (let m of this.mappings) {
+        if (!m._key || m._key.trim() === '') return false;
+        if (m.method === 'pushover') {
+            if (!m.token || m.token.trim() === '') return false;
+        } else if (m.method === 'smarthost') {
+            if (!m.smarthost_alias || m.smarthost_alias.trim() === '') return false;
+        }
+    }
+
+    // Guard against applying an incomplete Global Fallback parameter
+    if (this.smtp.default_route === 'pushover') {
+        if (!this.pushGlobals.token || !this.pushGlobals.user) return false;
+    } else if (this.smtp.default_route === 'smarthost') {
+        if (!this.smartGlobals.alias) return false;
+    }
+
+    return true;
 },

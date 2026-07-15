@@ -54,8 +54,8 @@
                     </div>
 
                     <template x-if="map.method === 'pushover'">
-                        <div style="flex: 0 1 auto; min-width: 0; max-width: 100%;">
-                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.25rem; white-space: nowrap;">
+                        <div style="width: max-content; max-width: 100%;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.25rem; white-space: nowrap;">
                                 <label style="margin: 0;">App Token</label>
                                 <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" :checked="map._isTokenAlias" @change="toggleAlias(map, 'token')"><span class="slider"></span></div> Use Alias</label>
                             </div>
@@ -69,7 +69,7 @@
                                 </div>
                             </template>
                             <template x-if="map._isTokenAlias">
-                                <select style="width: max-content; max-width: 100%;" x-model="map.token">
+                                <select style="width: 100%; box-sizing: border-box;" x-model="map.token">
                                     <option value="">-- Select App Alias --</option>
                                     <template x-for="v in sortedVaultApp" :key="v.name"><option :value="v.name" x-text="v.name" :selected="map.token === v.name"></option></template>
                                 </select>
@@ -78,9 +78,9 @@
                     </template>
 
                     <template x-if="map.method === 'smarthost'">
-                        <div style="flex: 0 1 auto; min-width: 0; max-width: 100%;">
-                            <label style="margin-bottom: 0.25rem;">Smarthost Alias</label>
-                            <select style="width: max-content; max-width: 100%;" x-model="map.smarthost_alias">
+                        <div style="width: max-content; max-width: 100%;">
+                            <label style="margin-bottom: 0.25rem; display: block;">Smarthost Alias</label>
+                            <select style="width: 100%; box-sizing: border-box;" x-model="map.smarthost_alias">
                                 <option value="">-- Select Smarthost --</option>
                                 <template x-for="sh in sortedSmarthostKeys" :key="sh"><option :value="sh" x-text="sh" :selected="map.smarthost_alias === sh"></option></template>
                             </select>
@@ -101,9 +101,9 @@
                 <div x-show="map._showAdv" class="adv-card" style="margin-bottom: 0;">
                     <template x-if="map.method === 'pushover'">
                         <div>
-                            <div class="flex-row" style="margin-bottom: 1.5rem; justify-content: flex-start;">
-                                <div style="flex: 0 1 auto; min-width: 0; max-width: 100%;">
-                                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.25rem; white-space: nowrap;">
+                            <div class="flex-row" style="margin-bottom: 1.5rem; justify-content: flex-start; gap: 2rem;">
+                                <div style="width: max-content; max-width: 100%;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.25rem; white-space: nowrap;">
                                         <label style="margin: 0;">User Key Override</label>
                                         <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" :checked="map._isUserAlias" @change="toggleAlias(map, 'user')"><span class="slider"></span></div> Use Alias</label>
                                     </div>
@@ -117,7 +117,7 @@
                                         </div>
                                     </template>
                                     <template x-if="map._isUserAlias">
-                                        <select style="width: max-content; max-width: 100%;" x-model="map.user">
+                                        <select style="width: 100%; box-sizing: border-box;" x-model="map.user">
                                             <option value="">-- Inherit Global --</option>
                                             <template x-for="v in sortedVaultUser" :key="v.name"><option :value="v.name" x-text="v.name" :selected="map.user === v.name"></option></template>
                                         </select>

@@ -60,7 +60,7 @@
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23aaaa0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='4 6 8 10 12 6'%3E%3C/polyline%3E%3C/svg%3E");
         }
 
-        button { background: var(--primary-color); color: white; padding: 0.6rem 1.2rem; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; display: inline-flex; align-items: center; justify-content: center; font-size: 0.9rem; transition: background 0.2s, border-color 0.2s, color 0.2s, opacity 0.2s; }
+        button { background: var(--primary-color); color: white; padding: 0.6rem 1.2rem; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; display: inline-flex; align-items: center; justify-content: center; font-size: 0.9rem; transition: background 0.2s, border-color 0.2s, color 0.2s, opacity 0.2s; box-sizing: border-box; }
         button:hover:not(:disabled) { background: var(--primary-hover); }
         button.warning { background: var(--warning-color); }
         button.warning:hover:not(:disabled) { background: var(--warning-hover); }
@@ -73,8 +73,13 @@
         button.outline.danger { border-color: var(--danger-color); color: var(--danger-color); opacity: 0.7; }
         button.outline.danger:hover:not(:disabled) { background: var(--danger-color); border-color: var(--danger-color); color: white; opacity: 1; }
 
-        /* Unified Square Icon Button Styling */
-        button.icon-btn { padding: 0; height: 36px; width: 36px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        button.outline.warning { border-color: var(--warning-color); color: var(--warning-color); opacity: 0.7; }
+        button.outline.warning:hover:not(:disabled) { background: var(--warning-color); border-color: var(--warning-color); color: white; opacity: 1; }
+
+        button.outline.success { border-color: #10b981; color: #10b981; opacity: 0.85; }
+        button.outline.success:hover:not(:disabled) { background-color: #10b981 !important; border-color: #10b981 !important; color: #ffffff !important; opacity: 1; }
+
+        button.icon-btn { padding: 0; height: 36px; width: 36px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; box-sizing: border-box; }
 
         button:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -89,10 +94,13 @@
         .table-col-min { width: 1%; white-space: nowrap; }
         .time-display { cursor: help; border-bottom: 1px dashed var(--text-color); }
 
+        .table-header-row { display: flex; align-items: center; gap: 0.75rem; margin-top: 1.5rem; margin-bottom: 0.75rem; }
+        .table-header-row h3, .table-header-row h4 { margin: 0; }
+
         .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; box-sizing: border-box; }
         .modal-content { background: var(--surface-color); padding: 2rem; border-radius: 8px; width: 440px; max-width: 100%; box-shadow: 0 10px 25px -3px rgba(0,0,0,0.2); border: 1px solid var(--border-color); box-sizing: border-box; overflow-y: auto; max-height: 100vh; }
 
-        .token-input { width: 42ch; max-width: 100%; }
+        .token-input { width: 42ch; max-width: 100%; box-sizing: border-box; }
         .auto-width { width: auto; max-width: 100%; }
 
         .toggle-switch { position: relative; display: inline-block; width: 36px; height: 18px; margin-right: 0.5rem; flex-shrink: 0; }
@@ -116,14 +124,12 @@
         .table-sort { cursor: pointer; user-select: none; }
         .table-sort:hover { background-color: var(--row-hover); }
 
-        /* Mobile Responsive Adjustments */
         @media (max-width: 768px) {
             body { padding: 0.5rem; }
             .container { padding: 1rem; border-radius: 0; border: none; box-shadow: none; }
             .card { padding: 1rem; }
             .flex-row { gap: 0.5rem; }
 
-            /* The Table Blowout Fix */
             table {
                 display: block;
                 width: 100%;
@@ -133,7 +139,6 @@
             }
             th, td { white-space: nowrap; }
 
-            /* Segment Label Mobile Fix */
             .segment-label { padding: 0.3rem 0.5rem; font-size: 0.75rem; }
         }
     </style>
