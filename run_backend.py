@@ -5,6 +5,8 @@ import threading
 import queue
 import signal
 import logging
+import asyncio
+import concurrent.futures
 
 # Fortified path injection to ensure the module root is always found
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -16,10 +18,15 @@ from core.logger import apply_logging_level
 from backend.smtp_handler import PushoverSMTPHandler, GatewayAuthenticator, GatewayController
 from backend.delivery_worker import delivery_worker, load_queue_from_disk
 from backend.server import get_tls_context, get_listen_params, get_file_hash
+from backend.control_api import start_control_api, stop_control_api
+from backend.events import broker
 
 shutdown_event = threading.Event()
 reload_event = threading.Event()
 mappings_reload_event = threading.Event()
+
+api_loop = None
+api_thread = None
 
 def sig_handler(signum, frame):
     if signum in (signal.SIGINT, signal.SIGTERM):
@@ -31,6 +38,29 @@ def sig_handler(signum, frame):
     elif hasattr(signal, 'SIGUSR2') and signum == signal.SIGUSR2:
         logging.info("Received SIGUSR2. Scheduling full configuration reload...")
         mappings_reload_event.set()
+
+def run_api_server(api_conf):
+    global api_loop
+    api_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(api_loop)
+    api_loop.run_until_complete(start_control_api(api_conf, reload_event, mappings_reload_event))
+    api_loop.run_forever()
+
+def stop_api_server():
+    global api_loop, api_thread
+    if api_loop and api_loop.is_running():
+        future = asyncio.run_coroutine_threadsafe(stop_control_api(), api_loop)
+        try:
+            future.result(timeout=2.0)
+        except concurrent.futures.TimeoutError:
+            logging.debug("Control API graceful teardown timed out. Forcing termination.")
+        except Exception as e:
+            logging.error(f"Error stopping Control API: {repr(e)}")
+
+        api_loop.call_soon_threadsafe(api_loop.stop)
+
+    if api_thread and api_thread.is_alive():
+        api_thread.join(timeout=2.0)
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, sig_handler)
@@ -51,13 +81,18 @@ if __name__ == "__main__":
     cap_method = app_state.smtp['default_route'].capitalize()
     logging.info(f"Explicit rules: {total_mapped}. Global Routing Method: {cap_method}. SMTP Auth: {auth_status}")
 
+    api_conf = app_state.smtp.get("api", {})
+    if api_conf.get("enabled"):
+        api_thread = threading.Thread(target=run_api_server, args=(api_conf,), daemon=True)
+        api_thread.start()
+
     msg_queue = queue.Queue()
     load_queue_from_disk(msg_queue, app_state)
 
-    worker_thread = threading.Thread(target=delivery_worker, args=(msg_queue, app_state, shutdown_event), daemon=True)
+    worker_thread = threading.Thread(target=delivery_worker, args=(msg_queue, app_state, shutdown_event, broker), daemon=True)
     worker_thread.start()
 
-    handler = PushoverSMTPHandler(app_state, msg_queue)
+    handler = PushoverSMTPHandler(app_state, msg_queue, broker)
     authenticator = GatewayAuthenticator(app_state)
     active_controllers = {}
 
@@ -146,7 +181,7 @@ if __name__ == "__main__":
                             tls_context = get_tls_context(l_conf, eff_hostname)
                             starttls_status = "enabled" if tls_context else "disabled"
 
-                            logging.info(f"Attempting to start SMTP listener on {bind} (STARTTLS: {starttls_status}, Hostname: {eff_hostname})")
+                            logging.debug(f"Starting SMTP listener on {listen_address}:{listen_port} (STARTTLS: {starttls_status}, Hostname: {eff_hostname})")
 
                             ctrl = GatewayController(
                                 handler, hostname=listen_address, port=listen_port, server_hostname=eff_hostname,
@@ -155,7 +190,7 @@ if __name__ == "__main__":
                             ctrl.start()
 
                             active_controllers[bind] = {"controller": ctrl, "config": eff_config}
-                            logging.info(f"SMTP listener started on {bind}")
+                            logging.info(f"SMTP listener started on {listen_address}:{listen_port} (STARTTLS: {starttls_status}, Hostname: {eff_hostname})")
                         except Exception as e:
                             reload_errors = True
                             logging.critical(f"CRITICAL: Failed to start SMTP listener on {bind}. Port may be occupied. Skipping. Error: {e}")
@@ -167,9 +202,13 @@ if __name__ == "__main__":
 
             if mappings_reload_event.is_set():
                 mappings_reload_event.clear()
+
+                old_api_conf = app_state.smtp.get("api", {})
+
                 if app_state.config_file:
                     logging.info(f"Reloading gateway configurations from file '{app_state.config_file}'...")
                     new_state = load_config(is_reload=True)
+
                     if new_state is not None:
                         app_state.smtp.clear(); app_state.smtp.update(new_state.smtp)
                         app_state.pushover.clear(); app_state.pushover.update(new_state.pushover)
@@ -177,6 +216,15 @@ if __name__ == "__main__":
                         app_state.mappings.clear(); app_state.mappings.update(new_state.mappings)
                         app_state.regex_mappings.clear(); app_state.regex_mappings.update(new_state.regex_mappings)
                         app_state.vault.clear(); app_state.vault.update(new_state.vault)
+                        broker.publish("CONFIG_RELOADED")
+
+                        new_api_conf = app_state.smtp.get("api", {})
+                        if old_api_conf != new_api_conf:
+                            logging.info("Control API configuration change detected. Restarting API listener...")
+                            stop_api_server()
+                            if new_api_conf.get("enabled"):
+                                api_thread = threading.Thread(target=run_api_server, args=(new_api_conf,), daemon=True)
+                                api_thread.start()
 
                         apply_logging_level(app_state.smtp["loglevel"])
                         os.makedirs(app_state.smtp["queue_dir"], exist_ok=True)
@@ -194,6 +242,7 @@ if __name__ == "__main__":
         logging.info("Keyboard interrupt received.")
     finally:
         logging.info("Shutting down... Flashing queues to disk safely...")
+        stop_api_server()
         for data in active_controllers.values():
             data["controller"].stop()
 

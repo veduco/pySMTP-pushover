@@ -6,7 +6,8 @@ RUN apk update && \
         py3-requests \
         py3-cryptography \
         py3-aiosmtpd \
-        py3-passlib
+        py3-passlib \
+        py3-aiohttp
 
 WORKDIR /app
 

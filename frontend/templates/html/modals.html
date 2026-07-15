@@ -1,3 +1,46 @@
+<div x-show="linkEditModal.open" class="modal-overlay" style="display: none;" x-transition @keydown.escape.window="linkEditModal.open = false">
+    <div class="modal-content" @click.away="linkEditModal.open = false">
+        <h3 style="margin-top: 0;">Link Management Settings</h3>
+        <div class="flex-row" style="margin-bottom: 1.5rem;">
+            <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="linkEditModal.backend_remote"><span class="slider"></span></div> Connect via Remote API</label>
+        </div>
+        <div x-show="!linkEditModal.backend_remote" style="margin-bottom: 1rem;">
+            <div class="form-group">
+                <label>Local Configuration File Path</label>
+                <input type="text" x-model="linkEditModal.local_config_path" placeholder="/opt/smtp-pushover/config.json" autocomplete="off" style="width: 100%;">
+            </div>
+        </div>
+        <div x-show="linkEditModal.backend_remote" style="margin-bottom: 1rem;">
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label>Control API Address</label>
+                <input type="text" x-model="linkEditModal.remote_url" placeholder="https://127.0.0.1:6443" autocomplete="off" style="width: 100%;">
+            </div>
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label>API Bearer Secret</label>
+                <div class="token-input" style="position: relative; display: block; width: 100%;">
+                    <input :type="linkEditModal.showSecret ? 'text' : 'password'" x-model="linkEditModal.remote_secret" placeholder="Leave blank to retain existing secret." autocomplete="new-password" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                    <div @click="linkEditModal.showSecret = !linkEditModal.showSecret" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
+                        <svg x-show="!linkEditModal.showSecret" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                        <svg x-show="linkEditModal.showSecret" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                    </div>
+                </div>
+            </div>
+            <div class="flex-row">
+                <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="linkEditModal.remote_verify_tls"><span class="slider"></span></div> Verify TLS Certificate</label>
+            </div>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem;">
+            <button type="button" class="outline warning icon-btn" @click="clearLinkEditModal()" :disabled="!hasLinkModalChanges" title="Reset Changes">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"></path><path d="M22 21H7"></path><path d="m5 11 9 9"></path></svg>
+            </button>
+            <div style="display: flex; gap: 1rem;">
+                <button type="button" class="outline" @click="linkEditModal.open = false">Cancel</button>
+                <button type="button" @click="saveLinkEditModal()" :disabled="!canSaveLinkModal">Apply Context</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div x-show="editModal.open" class="modal-overlay" style="display: none;" x-transition @keydown.escape.window="editModal.open = false">
     <div class="modal-content" @click.away="editModal.open = false">
         <h3 style="margin-top: 0;" x-text="editModal.type === 'smtp' ? 'Change Password for ' + editModal.name : 'Modify Secret for ' + editModal.name"></h3>
@@ -13,7 +56,7 @@
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem;">
             <button type="button" class="outline warning icon-btn" @click="clearEditModal()" :disabled="!hasEditModalChanges" title="Reset Field">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"></path><path d="M22 21H7"></path><path d="m5 11 9 9"></path></svg>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"></path><path d="M22 21H7"></path><path d="m5 11 9 9"></path></svg>
             </button>
             <div style="display: flex; gap: 1rem;">
                 <button type="button" class="outline" @click="editModal.open = false">Cancel</button>
@@ -26,10 +69,7 @@
 <div x-show="vaultModal.open" class="modal-overlay" style="display: none;" x-transition @keydown.escape.window="vaultModal.open = false">
     <div class="modal-content" @click.away="vaultModal.open = false">
         <h3 style="margin-top: 0;" x-text="vaultModal.type === 'app' ? 'Add App Token' : 'Add User Key'"></h3>
-        <div class="form-group" style="margin-bottom: 1rem;">
-            <label>Alias Name</label>
-            <input type="text" x-model="vaultModal.name" placeholder="e.g. MyServer" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
-        </div>
+        <div class="form-group" style="margin-bottom: 1rem;"><label>Alias Name</label><input type="text" x-model="vaultModal.name" placeholder="e.g. MyServer" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
         <div class="form-group">
             <label>Token Value</label>
             <div class="token-input" style="position: relative; display: inline-block;">
@@ -43,7 +83,7 @@
         <div x-show="vaultModal.error" class="danger" style="color: var(--danger-color); font-weight: bold; margin-top: 1rem; font-size: 0.9rem;" x-text="vaultModal.error"></div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem;">
             <button type="button" class="outline warning icon-btn" @click="clearVaultModal()" :disabled="!hasVaultModalChanges" title="Reset Fields">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3h4a2 2 0 0 1 2 2v6H8V5a2 2 0 0 1 2-2z"></path><rect x="4" y="11" width="16" height="4" rx="1"></rect><path d="M6 15l-1 6"></path><path d="M10 15l-.5 6"></path><path d="M14 15l.5 6"></path><path d="M18 15l1 6"></path></svg>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"></path><path d="M22 21H7"></path><path d="m5 11 9 9"></path></svg>
             </button>
             <div style="display: flex; gap: 1rem;">
                 <button type="button" class="outline" @click="vaultModal.open = false">Cancel</button>
@@ -56,10 +96,7 @@
 <div x-show="smtpUserModal.open" class="modal-overlay" style="display: none;" x-transition @keydown.escape.window="smtpUserModal.open = false">
     <div class="modal-content" @click.away="smtpUserModal.open = false">
         <h3 style="margin-top: 0;">Add SMTP User</h3>
-        <div class="form-group" style="margin-bottom: 1rem;">
-            <label>Username</label>
-            <input type="text" x-model="smtpUserModal.name" placeholder="e.g. gateway_user" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
-        </div>
+        <div class="form-group" style="margin-bottom: 1rem;"><label>Username</label><input type="text" x-model="smtpUserModal.name" placeholder="e.g. gateway_user" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
         <div class="form-group">
             <label>Password</label>
             <div class="token-input" style="position: relative; display: inline-block;">
@@ -73,7 +110,7 @@
         <div x-show="smtpUserModal.error" class="danger" style="color: var(--danger-color); font-weight: bold; margin-top: 1rem; font-size: 0.9rem;" x-text="smtpUserModal.error"></div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem;">
             <button type="button" class="outline warning icon-btn" @click="clearSmtpUserModal()" :disabled="!hasSmtpUserModalChanges" title="Reset Fields">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3h4a2 2 0 0 1 2 2v6H8V5a2 2 0 0 1 2-2z"></path><rect x="4" y="11" width="16" height="4" rx="1"></rect><path d="M6 15l-1 6"></path><path d="M10 15l-.5 6"></path><path d="M14 15l.5 6"></path><path d="M18 15l1 6"></path></svg>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"></path><path d="M22 21H7"></path><path d="m5 11 9 9"></path></svg>
             </button>
             <div style="display: flex; gap: 1rem;">
                 <button type="button" class="outline" @click="smtpUserModal.open = false">Cancel</button>
@@ -89,7 +126,7 @@
 
         <div class="form-group" style="margin-bottom: 1rem;">
             <label>Alias Name</label>
-            <input type="text" x-model="smarthostModal.alias" placeholder="e.g. gmail_relay" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+            <input type="text" x-model="smarthostModal.alias" placeholder="e.g. gmail_relay" :disabled="smarthostModal.mode === 'edit'" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
         </div>
         <div class="flex-row" style="margin-bottom: 1.5rem;">
             <div class="flex-col" style="flex: 2; min-width: 0;">
@@ -135,7 +172,7 @@
             <div class="form-group">
                 <label>Password</label>
                 <div class="token-input" style="position: relative; display: block; width: 100%;">
-                    <input :type="smarthostModal.showPass ? 'text' : 'password'" x-model="smarthostModal.password" placeholder="Password or App Password" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
+                    <input :type="smarthostModal.showPass ? 'text' : 'password'" x-model="smarthostModal.password" :placeholder="smarthostModal.mode === 'edit' ? 'Leave blank to retain existing password.' : 'Password or App Password'" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
                     <div @click="smarthostModal.showPass = !smarthostModal.showPass" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
                         <svg x-show="!smarthostModal.showPass" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                         <svg x-show="smarthostModal.showPass" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
@@ -148,7 +185,7 @@
 
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem;">
             <button type="button" class="outline warning icon-btn" @click="clearSmarthostModal()" :disabled="!hasSmarthostModalChanges" title="Reset Fields">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3h4a2 2 0 0 1 2 2v6H8V5a2 2 0 0 1 2-2z"></path><rect x="4" y="11" width="16" height="4" rx="1"></rect><path d="M6 15l-1 6"></path><path d="M10 15l-.5 6"></path><path d="M14 15l.5 6"></path><path d="M18 15l1 6"></path></svg>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"></path><path d="M22 21H7"></path><path d="m5 11 9 9"></path></svg>
             </button>
             <div style="display: flex; gap: 1rem;">
                 <button type="button" class="outline" @click="smarthostModal.open = false">Cancel</button>
@@ -188,7 +225,7 @@
         </div>
 
         <div x-show="listenerModal.starttls" style="margin-bottom: 1rem;">
-            <div class="form-group" style="margin-bottom: 1rem;">
+            <div class="form-group" style="margin-bottom: 0.5rem;">
                 <label>Dedicated TLS Cert File</label>
                 <input type="text" x-model="listenerModal.tls_cert_file" placeholder="Leave blank to use Global or auto-generated cert" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
             </div>
@@ -202,7 +239,7 @@
 
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem;">
             <button type="button" class="outline warning icon-btn" @click="clearListenerModal()" :disabled="!hasListenerModalChanges" title="Reset Fields">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3h4a2 2 0 0 1 2 2v6H8V5a2 2 0 0 1 2-2z"></path><rect x="4" y="11" width="16" height="4" rx="1"></rect><path d="M6 15l-1 6"></path><path d="M10 15l-.5 6"></path><path d="M14 15l.5 6"></path><path d="M18 15l1 6"></path></svg>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"></path><path d="M22 21H7"></path><path d="m5 11 9 9"></path></svg>
             </button>
             <div style="display: flex; gap: 1rem;">
                 <button type="button" class="outline" @click="listenerModal.open = false">Cancel</button>
@@ -216,7 +253,7 @@
     <div class="modal-content" @click.away="uiListenerModal.open = false">
         <h3 style="margin-top: 0;" x-text="uiListenerModal.mode === 'add' ? 'Add UI Listener' : 'Modify UI Listener'"></h3>
 
-        <div class="flex-row" style="margin-bottom: 1.5rem;">
+        <div class="flex-row" style="margin-bottom: 1rem;">
             <div class="flex-col" style="flex: 2; min-width: 0;">
                 <label>Listen Address</label>
                 <input type="text" x-model="uiListenerModal.ip" placeholder="0.0.0.0" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
@@ -232,26 +269,19 @@
                 <input type="checkbox" x-model="uiListenerModal.https" style="display: none;">
                 <svg x-show="uiListenerModal.https" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
                 <svg x-show="!uiListenerModal.https" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>
-                Use HTTPS
+                Enable HTTPS
             </label>
         </div>
 
-        <div x-show="uiListenerModal.https" style="margin-bottom: 1rem;">
-            <div class="form-group" style="margin-bottom: 1rem;">
-                <label>Dedicated TLS Cert File</label>
-                <input type="text" x-model="uiListenerModal.tls_cert" placeholder="Leave blank to use auto-generated cert" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
-            </div>
-            <div class="form-group">
-                <label>Dedicated TLS Key File</label>
-                <input type="text" x-model="uiListenerModal.tls_key" placeholder="Leave blank to use auto-generated key" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
-            </div>
+        <div x-show="uiListenerModal.https" style="margin-top: 1rem;">
+            <div class="form-group" style="margin-bottom: 0.5rem;"><label>TLS Cert File</label><input type="text" x-model="uiListenerModal.tls_cert" placeholder="Leave blank to auto-generate" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
+            <div class="form-group" style="margin-bottom: 1rem;"><label>TLS Key File</label><input type="text" x-model="uiListenerModal.tls_key" placeholder="Leave blank to auto-generate" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
         </div>
-
-        <div x-show="uiListenerModal.error" class="danger" style="color: var(--danger-color); font-weight: bold; margin-top: 1rem; font-size: 0.9rem;" x-text="uiListenerModal.error"></div>
+        <span class="validation-error" x-show="uiListenerModal.error" x-text="uiListenerModal.error"></span>
 
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem;">
             <button type="button" class="outline warning icon-btn" @click="clearUiListenerModal()" :disabled="!hasUiListenerModalChanges" title="Reset Fields">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3h4a2 2 0 0 1 2 2v6H8V5a2 2 0 0 1 2-2z"></path><rect x="4" y="11" width="16" height="4" rx="1"></rect><path d="M6 15l-1 6"></path><path d="M10 15l-.5 6"></path><path d="M14 15l.5 6"></path><path d="M18 15l1 6"></path></svg>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"></path><path d="M22 21H7"></path><path d="m5 11 9 9"></path></svg>
             </button>
             <div style="display: flex; gap: 1rem;">
                 <button type="button" class="outline" @click="uiListenerModal.open = false">Cancel</button>
@@ -262,31 +292,25 @@
 </div>
 
 <div x-show="diffModal.open" class="modal-overlay" style="display: none;" x-transition @keydown.escape.window="diffModal.open = false">
-    <div class="modal-content" @click.away="diffModal.open = false" style="width: 650px;">
+    <div class="modal-content" @click.away="diffModal.open = false" style="width: max-content; max-width: 100%; box-sizing: border-box;">
         <h3 style="margin-top: 0; border-bottom: 2px solid var(--primary-color); padding-bottom: 0.5rem;">Review Configuration Changes</h3>
 
         <p style="font-size: 0.9rem; margin-bottom: 1rem;">The following modifications will be committed to the server. Active connections may be temporarily paused for hot-reloads.</p>
 
-        <table style="margin-bottom: 1.5rem;">
+        <table style="margin-bottom: 1.5rem; width: 100%; min-width: 500px;">
             <thead>
                 <tr>
-                    <th>Setting Block</th>
-                    <th>Previous State</th>
-                    <th>New State</th>
-                    <th class="table-col-min" style="text-align: center;">Revert</th>
+                    <th style="width: 35%;">Setting Block</th>
+                    <th style="width: 30%;">Previous State</th>
+                    <th style="width: 30%;">New State</th>
                 </tr>
             </thead>
             <tbody>
-                <template x-for="(change, index) in diffModal.changes" :key="change.key">
+                <template x-for="change in diffModal.changes" :key="change.key">
                     <tr>
-                        <td><strong x-text="change.key"></strong></td>
-                        <td style="color: var(--danger-color); text-decoration: line-through;" x-text="change.old"></td>
-                        <td style="color: #10b981; font-weight: bold;" x-text="change.new"></td>
-                        <td class="table-col-min" style="text-align: center;">
-                            <button type="button" class="outline danger icon-btn" @click="revertChange(index)" title="Revert this specific change">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                            </button>
-                        </td>
+                        <td style="word-wrap: break-word; word-break: break-all; white-space: normal;"><strong x-text="change.humanLabel"></strong></td>
+                        <td style="color: var(--danger-color); text-decoration: line-through; word-wrap: break-word; word-break: break-all; white-space: normal;" x-text="change.old"></td>
+                        <td style="color: #10b981; font-weight: bold; word-wrap: break-word; word-break: break-all; white-space: normal;" x-text="change.new"></td>
                     </tr>
                 </template>
             </tbody>
@@ -297,5 +321,16 @@
             <button type="button" class="warning" @click="discardAllChanges()">Discard All</button>
             <button type="button" @click="confirmSave()">Commit</button>
         </div>
+    </div>
+</div>
+
+<div x-show="alertModal.open" class="modal-overlay" style="display: none; z-index: 1000;" x-transition @keydown.escape.window="alertModal.open = false">
+    <div class="modal-content" @click.away="alertModal.open = false" style="width: 400px; max-width: 90%; text-align: center; padding: 2rem;">
+        <div style="margin-bottom: 1rem; color: var(--danger-color);">
+            <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+        </div>
+        <h3 style="margin-top: 0; border-bottom: none; padding-bottom: 0;" x-text="alertModal.title"></h3>
+        <p style="font-size: 0.95rem; opacity: 0.8; margin-bottom: 1.5rem;" x-text="alertModal.message"></p>
+        <button type="button" class="warning" @click="alertModal.open = false" style="width: 100%; justify-content: center;">Acknowledge</button>
     </div>
 </div>

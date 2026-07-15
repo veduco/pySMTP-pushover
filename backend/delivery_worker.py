@@ -2,21 +2,16 @@ import os
 import time
 import json
 import logging
-import base64
-import smtplib
 import queue
-import requests
-import ssl
-import email.utils
-from email.message import EmailMessage
-from email import message_from_bytes, policy
-from core.config import PUSHOVER_API_URL
+from backend.delivery_clients import send_pushover, send_smarthost
 
-def delivery_worker(msg_queue, state, shutdown_event):
+def delivery_worker(msg_queue, state, shutdown_event, broker=None):
     logging.debug("Delivery worker thread started.")
     while not shutdown_event.is_set():
-        try: payload = msg_queue.get(timeout=1.0)
-        except queue.Empty: continue
+        try:
+            payload = msg_queue.get(timeout=1.0)
+        except queue.Empty:
+            continue
 
         if payload is None:
             msg_queue.task_done()
@@ -39,7 +34,8 @@ def delivery_worker(msg_queue, state, shutdown_event):
                         payload["next_retry"] = disk_data.get("next_retry", next_retry)
                         payload["retry_count"] = disk_data.get("retry_count", payload.get("retry_count"))
                         next_retry = payload["next_retry"]
-                except Exception: pass
+                except Exception:
+                    pass
 
         if now < next_retry:
             msg_queue.put(payload)
@@ -48,99 +44,17 @@ def delivery_worker(msg_queue, state, shutdown_event):
             continue
 
         method = payload.get("method", "pushover")
-        success = False
-        error_msg = None
 
+        # Execute the cleanly modularized delivery client block
         if method == "pushover":
-            api_payload = {
-                "token": payload["token"], "user": payload["user"], "message": payload["message"],
-                "title": payload["title"], "timestamp": payload["timestamp"], "html": 1 if payload.get("is_html") else 0
-            }
-            for param in ["device", "sound", "url", "url_title", "priority", "ttl", "tags", "retry", "expire"]:
-                if param in payload: api_payload[param] = payload[param]
-            try:
-                post_kwargs = {}
-                if payload.get("attachment_base64"):
-                    img_bytes = base64.b64decode(payload["attachment_base64"])
-                    files = {"attachment": (payload.get("attachment_name", "image.jpg"), img_bytes, payload.get("attachment_type", "image/jpeg"))}
-                    post_kwargs = {"data": api_payload, "files": files}
-                else: post_kwargs = {"json": api_payload}
-                response = requests.post(PUSHOVER_API_URL, timeout=10, **post_kwargs)
-                if response.status_code == 200:
-                    logging.info(f"Successfully sent Pushover notification: '{payload['title']}'")
-                    success = True
-                else:
-                    error_msg = f"HTTP {response.status_code}: {response.text}"
-                    logging.error(f"Pushover API returned {error_msg}")
-            except Exception as e:
-                error_msg = repr(e)
-                logging.error(f"Failed to communicate with Pushover API: {error_msg}")
-
+            success, error_msg = send_pushover(payload)
         elif method == "smarthost":
-            alias = payload.get("smarthost_alias")
-            sh_conf = state.smarthost.get("aliases", {}).get(alias)
-            if not sh_conf:
-                error_msg = f"Alias '{alias}' is not defined in the configuration."
-                logging.error(f"Smarthost relay failed. {error_msg}")
-            else:
-                try:
-                    if payload.get("force_plaintext") or payload.get("disable_attachments"):
-                        raw_bytes = base64.b64decode(payload["raw_eml_base64"])
-                        original_msg = message_from_bytes(raw_bytes, policy=policy.default)
-                        raw_plain = ""; raw_html = ""
-                        for part in original_msg.walk():
-                            if part.get_content_maintype() == 'multipart': continue
-                            if "attachment" in str(part.get("Content-Disposition", "")): continue
-                            ctype = part.get_content_type()
-                            if ctype == "text/plain": raw_plain = part.get_payload(decode=True).decode(part.get_content_charset() or 'utf-8', errors='replace')
-                            elif ctype == "text/html": raw_html = part.get_payload(decode=True).decode(part.get_content_charset() or 'utf-8', errors='replace')
-
-                        msg = EmailMessage()
-                        for key, val in original_msg.items():
-                            if key.lower() not in ['content-type', 'mime-version', 'content-transfer-encoding', 'content-disposition']: msg[key] = val
-                        if 'MIME-Version' not in msg: msg['MIME-Version'] = '1.0'
-
-                        if not msg.get('Subject'): msg['Subject'] = payload.get("title", "No Subject")
-                        if not msg.get('From'): msg['From'] = payload.get("sender", "gateway@localhost")
-                        if not msg.get('To'): msg['To'] = ", ".join(payload.get("recipients", []))
-                        if not msg.get('Date'): msg['Date'] = email.utils.formatdate(localtime=False)
-                        if not msg.get('Message-ID'): msg['Message-ID'] = email.utils.make_msgid()
-
-                        if payload.get("force_plaintext"): msg.set_content(raw_plain or payload.get("message", ""), charset="utf-8")
-                        else:
-                            msg.set_content(raw_plain or payload.get("message", ""), charset="utf-8")
-                            if raw_html: msg.add_alternative(raw_html, subtype="html", charset="utf-8")
-
-                        if not payload.get("disable_attachments") and payload.get("attachment_base64"):
-                            img_bytes = base64.b64decode(payload["attachment_base64"])
-                            maintype, subtype = payload["attachment_type"].split('/', 1)
-                            msg.add_attachment(img_bytes, maintype=maintype, subtype=subtype, filename=payload["attachment_name"])
-                        final_send_bytes = bytes(msg)
-                    else:
-                        final_send_bytes = base64.b64decode(payload["raw_eml_base64"])
-
-                    host = sh_conf.get("hostname")
-                    port = int(sh_conf.get("port", 25))
-                    local_ehlo = sh_conf.get("advertised_hostname")
-                    if not local_ehlo: local_ehlo = state.smtp.get("hostname")
-                    if not local_ehlo: local_ehlo = "localhost"
-
-                    with smtplib.SMTP(host, port, timeout=15) as server:
-                        server.ehlo(local_ehlo)
-                        if sh_conf.get("starttls"):
-                            if sh_conf.get("disable_tls_validation"): server.starttls(context=ssl._create_unverified_context())
-                            else: server.starttls()
-                            server.ehlo(local_ehlo)
-                        if sh_conf.get("auth"):
-                            sh_pass = state.vault.get("smarthost", {}).get(alias, "")
-                            server.login(sh_conf.get("username", ""), sh_pass)
-                        server.sendmail(payload.get("sender"), payload.get("recipients"), final_send_bytes)
-                    logging.info(f"Successfully relayed email '{payload['title']}' via Smarthost '{alias}'.")
-                    success = True
-                except Exception as e:
-                    error_msg = repr(e)
+            success, error_msg = send_smarthost(payload, state)
+        else:
+            success, error_msg = False, "Unknown delivery method."
 
         if success:
+            if broker: broker.publish("delete", {"id": payload["id"]})
             if not payload.get("disable_persistence"):
                 filepath = os.path.join(state.smtp["queue_dir"], f"{payload['id']}.json")
                 if os.path.exists(filepath):
@@ -153,6 +67,9 @@ def delivery_worker(msg_queue, state, shutdown_event):
             backoff_delay = min(5 * (2 ** (payload["retry_count"] - 1)), state.smtp["max_retry_backoff"])
             payload["next_retry"] = now + backoff_delay
             logging.warning(f"Delivery failed for ID: {payload['id']}. Retrying in {backoff_delay}s.")
+
+            if broker: broker.publish("update", payload)
+
             if not payload.get("disable_persistence"):
                 filepath = os.path.join(state.smtp["queue_dir"], f"{payload['id']}.json")
                 if os.path.exists(filepath):
@@ -160,6 +77,7 @@ def delivery_worker(msg_queue, state, shutdown_event):
                         with open(filepath, 'w') as f: json.dump(payload, f)
                     except Exception: pass
             msg_queue.put(payload)
+
         msg_queue.task_done()
 
 def load_queue_from_disk(msg_queue, state):

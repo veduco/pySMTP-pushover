@@ -1,0 +1,140 @@
+<style>
+    .segment-label.compact {
+        padding: 0.3rem 0;
+        font-size: 0.75rem;
+        letter-spacing: -0.2px;
+    }
+</style>
+
+<div class="card" style="margin-bottom: 1.5rem;">
+    <h3>Global Configuration</h3>
+    <div class="flex-row" style="margin-bottom: 1rem; align-items: flex-end;">
+        <div style="flex: 0 0 auto;">
+            <label style="margin-bottom: 0.25rem;">Default Catch-All Route</label>
+            <div class="segment-track">
+                <div class="segment-thumb" :style="smtp.default_route === 'pushover' ? 'transform: translateX(0);' : 'transform: translateX(100%);'"></div>
+                <label class="segment-label" :style="smtp.default_route === 'pushover' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="smtp.default_route" value="pushover" @change="changeDefaultRoute($event)"> Pushover</label>
+                <label class="segment-label" :style="smtp.default_route === 'smarthost' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="smtp.default_route" value="smarthost" @change="changeDefaultRoute($event)"> Smarthost</label>
+            </div>
+        </div>
+
+        <div style="flex: 0 1 450px; min-width: 250px;">
+            <label style="margin-bottom: 0.25rem;">Log Level Severity</label>
+            <div class="segment-track" style="width: 100%; display: flex;">
+                <div class="segment-thumb" :style="'width: calc(20% - 1.2px); background-color: ' + getLogLevelColor(smtp.loglevel) + '; transform: translateX(' + (Math.max(0, ['DEBUG','INFO','WARNING','ERROR','CRITICAL'].indexOf(smtp.loglevel)) * 100) + '%);'"></div>
+                <label class="segment-label compact" :style="smtp.loglevel === 'DEBUG' ? 'color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.4);' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="smtp.loglevel" value="DEBUG"> DEBUG</label>
+                <label class="segment-label compact" :style="smtp.loglevel === 'INFO' ? 'color: #121212;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="smtp.loglevel" value="INFO"> INFO</label>
+                <label class="segment-label compact" :style="smtp.loglevel === 'WARNING' ? 'color: #121212;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="smtp.loglevel" value="WARNING"> WARN</label>
+                <label class="segment-label compact" :style="smtp.loglevel === 'ERROR' ? 'color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.4);' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="smtp.loglevel" value="ERROR"> ERROR</label>
+                <label class="segment-label compact" :style="smtp.loglevel === 'CRITICAL' ? 'color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.4);' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="smtp.loglevel" value="CRITICAL"> CRIT</label>
+            </div>
+        </div>
+    </div>
+    <div class="flex-row" style="margin-bottom: 1rem;">
+        <div class="flex-col" style="flex: 1; min-width: 200px;"><label>Global Hostname (Greeting Banner)</label><input type="text" x-model="smtp.hostname" placeholder="SMTPtoPushover" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
+        <div class="flex-col" style="flex: 1; min-width: 200px;"><label>Disk Queue Directory</label><input type="text" x-model="smtp.queue_dir" placeholder="/var/spool/pushover_queue" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
+    </div>
+    <div class="flex-row" style="margin-bottom: 1rem;">
+        <div class="flex-col" style="flex: 1; min-width: 200px;"><label>Global TLS Cert File (Fallback)</label><input type="text" x-model="smtp.tls_cert_file" placeholder="Leave blank to use auto-generated cert" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
+        <div class="flex-col" style="flex: 1; min-width: 200px;"><label>Global TLS Key File (Fallback)</label><input type="text" x-model="smtp.tls_key_file" placeholder="Leave blank to use auto-generated key" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
+    </div>
+    <div class="flex-row" style="margin-top: 1.5rem; margin-bottom: 0.5rem;">
+        <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="smtp.disable_persistence"><span class="slider"></span></div> Disable Disk Persistence</label>
+    </div>
+</div>
+
+<div class="card" style="margin-bottom: 1.5rem;">
+    <div class="table-header-row" style="margin-top: 0;">
+        <h3 style="display: flex; align-items: center; gap: 0.75rem; margin: 0;">SMTP Authentication Users
+            <button type="button" class="outline success icon-btn" @click="openSmtpUserModal()" title="Add User" style="padding: 0.2rem 0.4rem;">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </button>
+        </h3>
+    </div>
+    <p style="margin-top: 0.5rem; margin-bottom: 1rem; font-size: 0.9rem; opacity: 0.8;">Configure local usernames and passwords to restrict gateway access. Plaintext items are securely auto-hashed.</p>
+    <div style="overflow-x: auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th class="sortable" @click="smtpSortCol = 'name'; smtpSortDir *= -1">Username <span x-show="smtpSortCol === 'name'" x-text="smtpSortDir === 1 ? '▲' : '▼'"></span></th>
+                    <th>Password Hash</th>
+                    <th class="sortable" @click="smtpSortCol = 'epoch'; smtpSortDir *= -1">Last Modification <span x-show="smtpSortCol === 'epoch'" x-text="smtpSortDir === 1 ? '▲' : '▼'"></span></th>
+                    <th style="width: 80px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr x-show="sortedSmtpAuth.length === 0">
+                    <td colspan="4" style="text-align: center; font-style: italic; opacity: 0.7; padding: 1.5rem;">No configured SMTP users. Click the green plus icon to provision.</td>
+                </tr>
+                <template x-for="u in sortedSmtpAuth" :key="u.name">
+                    <tr>
+                        <td x-text="u.name"></td>
+                        <td><span style="font-family: monospace; opacity: 0.5;">••••••••••••••••</span></td>
+                        <td x-text="formatTime(u.epoch)"></td>
+                        <td>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <button type="button" class="outline icon-btn" @click="openEditModal('smtp', u.name)" title="Change Password">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                                </button>
+                                <button type="button" class="outline danger icon-btn" @click="delete smtp.auth[u.name]; delete smtp_meta[u.name]" title="Delete User">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                </template>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-header-row" style="margin-top: 0;">
+        <h3 style="display: flex; align-items: center; gap: 0.75rem; margin: 0;">SMTP Listeners
+            <button type="button" class="outline success icon-btn" @click="openListenerModal('add')" title="Add Listener" style="padding: 0.2rem 0.4rem;">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </button>
+        </h3>
+    </div>
+    <div style="overflow-x: auto; margin-top: 1rem;">
+        <table>
+            <thead>
+                <tr>
+                    <th class="sortable" @click="smtpListenerSortCol = 'bind'; smtpListenerSortDir *= -1">Bind Address <span x-show="smtpListenerSortCol === 'bind'" x-text="smtpListenerSortDir === 1 ? '▲' : '▼'"></span></th>
+                    <th class="sortable" @click="smtpListenerSortCol = 'hostname'; smtpListenerSortDir *= -1">Hostname <span x-show="smtpListenerSortCol === 'hostname'" x-text="smtpListenerSortDir === 1 ? '▲' : '▼'"></span></th>
+                    <th class="sortable" @click="smtpListenerSortCol = 'starttls'; smtpListenerSortDir *= -1">STARTTLS <span x-show="smtpListenerSortCol === 'starttls'" x-text="smtpListenerSortDir === 1 ? '▲' : '▼'"></span></th>
+                    <th>Dedicated TLS Cert File</th>
+                    <th>Dedicated TLS Key File</th>
+                    <th style="width: 80px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr x-show="sortedSmtpListeners.length === 0">
+                    <td colspan="6" style="text-align: center; font-style: italic; opacity: 0.7; padding: 1.5rem;">No configured SMTP listeners. Click the green plus icon to provision.</td>
+                </tr>
+                <template x-for="l in sortedSmtpListeners" :key="l._idx">
+                    <tr>
+                        <td x-text="l.bind" style="font-weight: bold;"></td>
+                        <td x-text="l.hostname || '-'"></td>
+                        <td>
+                            <svg x-show="l.starttls === true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                            <svg x-show="!l.starttls" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>
+                        </td>
+                        <td x-text="l.tls_cert_file || '-'"></td>
+                        <td x-text="l.tls_key_file || '-'"></td>
+                        <td>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <button type="button" class="outline icon-btn" @click="openListenerModal('edit', l._idx)" title="Edit Listener">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                                </button>
+                                <button type="button" class="outline danger icon-btn" @click="smtp.listeners.splice(l._idx, 1)" title="Delete Listener">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                </template>
+            </tbody>
+        </table>
+    </div>
+</div>

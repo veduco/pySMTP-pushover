@@ -15,12 +15,9 @@ SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 
-from core.config import load_clean_json, UI_CONFIG_FILE
-from frontend.api import app, generate_ui_cert
-
-class EndpointFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        return "/healthcheck" not in record.getMessage() and "/api/queue" not in record.getMessage()
+from core.config import load_clean_json, save_json, UI_CONFIG_FILE
+from frontend.api import app
+from frontend.utils import generate_ui_cert
 
 class UvicornQuietFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
@@ -36,7 +33,6 @@ class UvicornQuietFilter(logging.Filter):
         ]
         return not any(s in msg for s in suppress_list)
 
-logging.getLogger("uvicorn.access").addFilter(EndpointFilter())
 logging.getLogger("uvicorn.error").addFilter(UvicornQuietFilter())
 logging.getLogger("uvicorn").addFilter(UvicornQuietFilter())
 
@@ -58,12 +54,21 @@ if __name__ == "__main__":
     if hasattr(signal, 'SIGUSR1'): signal.signal(signal.SIGUSR1, lambda s, f: ui_reload_listeners_event.set())
     if hasattr(signal, 'SIGUSR2'): signal.signal(signal.SIGUSR2, lambda s, f: ui_reload_configs_event.set())
 
+    ui_config = load_clean_json(UI_CONFIG_FILE)
+    if "local_config_path" not in ui_config:
+        env_config = os.environ.get("GATEWAY_CONFIG")
+        ui_config["local_config_path"] = env_config if env_config else os.path.join(SCRIPT_DIR, "config.json")
+        save_json(UI_CONFIG_FILE, ui_config)
+        logging.info(f"Migrated local config path '{ui_config['local_config_path']}' to UI state.")
+
     while not ui_shutdown_event.is_set():
         if ui_reload_configs_event.is_set():
             ui_reload_configs_event.clear()
             logging.info("Caught SIGUSR2 inside UI process space. Configuration cache cleared.")
 
         ui_config = load_clean_json(UI_CONFIG_FILE)
+
+        os.environ["GATEWAY_CONFIG"] = ui_config.get("local_config_path", os.path.join(SCRIPT_DIR, "config.json"))
 
         ui_loglevel_str = ui_config.get("ui_loglevel", "INFO")
         log_level = getattr(logging, ui_loglevel_str.upper(), logging.INFO)
@@ -73,7 +78,6 @@ if __name__ == "__main__":
 
         logging.info(f"Loading config from file '{UI_CONFIG_FILE}'.")
 
-        # Legacy UI config migration parser
         listeners = ui_config.get("listeners")
         if not listeners or not isinstance(listeners, list):
             port = ui_config.get("port", 8443)
@@ -100,9 +104,15 @@ if __name__ == "__main__":
             if use_https:
                 cert_file, key_file = l_conf.get("tls_cert", ""), l_conf.get("tls_key", "")
                 if not cert_file or not os.path.exists(cert_file): cert_file, key_file = generate_ui_cert()
-                server_config = uvicorn.Config(app, host=host, port=port, ssl_keyfile=key_file, ssl_certfile=cert_file, log_level=ui_loglevel_str.lower(), log_config=None)
+                server_config = uvicorn.Config(
+                    app, host=host, port=port, ssl_keyfile=key_file, ssl_certfile=cert_file,
+                    log_level=ui_loglevel_str.lower(), log_config=None, access_log=False
+                )
             else:
-                server_config = uvicorn.Config(app, host=host, port=port, log_level=ui_loglevel_str.lower(), log_config=None)
+                server_config = uvicorn.Config(
+                    app, host=host, port=port, log_level=ui_loglevel_str.lower(),
+                    log_config=None, access_log=False
+                )
 
             server = uvicorn.Server(server_config)
             servers.append(server)
@@ -125,7 +135,6 @@ if __name__ == "__main__":
             server = tracker["server"]
             t = tracker["thread"]
 
-            # Pause main thread momentarily to verify this specific Uvicorn server successfully bound
             while not server.started and t.is_alive():
                 time.sleep(0.05)
 
@@ -139,7 +148,6 @@ if __name__ == "__main__":
         else:
             logging.info("Application startup complete.")
 
-        # Main process keep-alive loop
         while any(t.is_alive() for t in threads):
             if ui_reload_configs_event.is_set():
                 ui_reload_configs_event.clear()

@@ -1,0 +1,67 @@
+<div class="card">
+    <div class="table-header-row" style="margin-top: 0;">
+        <h3>Active Link Summary</h3>
+        <button type="button" class="outline icon-btn" @click="openLinkEditModal()" title="Modify Connection Parameters">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            </svg>
+        </button>
+    </div>
+    <p>Current runtime linking parameters established by the frontend web engine process environment scope.</p>
+
+    <table>
+        <tbody>
+            <tr>
+                <td style="width: 35%;"><strong>Link Processing Mode</strong></td>
+                <td>
+                    <span x-show="!ui_backend_remote" style="font-weight: bold; color: var(--primary-color);">Local Daemon (Direct Filesystem Mapping)</span>
+                    <span x-show="ui_backend_remote" style="font-weight: bold; color: #10b981;">Remote Gateway (Control API Microservice)</span>
+                </td>
+            </tr>
+            <tr x-show="!ui_backend_remote">
+                <td><strong>Local Configuration File Path</strong></td>
+                <td><code x-text="ui_local_config_path"></code></td>
+            </tr>
+            <tr x-show="ui_backend_remote">
+                <td><strong>Control API Address</strong></td>
+                <td><code x-text="ui_remote_url || 'Not Set'"></code></td>
+            </tr>
+            <tr x-show="ui_backend_remote">
+                <td><strong>Verify TLS Certificate for Remote API</strong></td>
+                <td style="vertical-align: middle;">
+                    <svg x-show="ui_remote_verify_tls" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <svg x-show="!ui_remote_verify_tls" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#ef4444" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    <span style="margin-left: 0.25rem; vertical-align: middle;" x-text="ui_remote_verify_tls ? 'Enabled' : 'Disabled'"></span>
+                </td>
+            </tr>
+            <tr x-show="ui_backend_remote">
+                <td><strong>API Bearer Secret</strong></td>
+                <td><span style="font-family: monospace; opacity: 0.5;">••••••••••••••••••••••••••••••••</span></td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<form id="backend_form" hx-post="/save/ui" hx-trigger="confirmedSave" hx-target="#status" @htmx:config-request.camel="$event.detail.parameters['ui_listeners_json'] = JSON.stringify(uiListeners);">
+    <input type="hidden" name="timezone" :value="ui_tz">
+    <input type="hidden" name="date_format" :value="ui_fmt">
+    <input type="hidden" name="relative_time" :value="ui_relative">
+    <input type="hidden" name="expand_adv" :value="ui_expand_adv">
+    <input type="hidden" name="vault_sort" :value="ui_vault_sort">
+    <input type="hidden" name="smtp_sort" :value="ui_smtp_sort">
+    <input type="hidden" name="smarthost_sort" :value="ui_smarthost_sort">
+    <input type="hidden" name="ui_loglevel" :value="ui_loglevel">
+    <input type="hidden" name="trust_proxy" :value="ui_trust_proxy">
+
+    <input type="hidden" name="backend_mode" :value="ui_backend_remote ? 'remote' : 'local'">
+    <input type="hidden" name="local_config_path" :value="ui_local_config_path">
+    <input type="hidden" name="remote_url" :value="ui_remote_url">
+    <input type="hidden" name="remote_secret" :value="ui_remote_secret">
+    <input type="hidden" name="remote_verify_tls" :value="ui_remote_verify_tls">
+
+    <div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
+        <button type="button" @click="requestSave('backend_form')" :disabled="!hasBackendChanges" style="font-size: 1.1rem; padding: 1rem;">Save Context & Reconnect</button>
+        <button type="button" class="warning" @click="resetTab('backend')" :disabled="!hasBackendChanges" style="font-size: 1.1rem; padding: 1rem;">Discard Changes</button>
+    </div>
+</form>

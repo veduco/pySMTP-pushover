@@ -52,7 +52,7 @@
         <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="pushGlobals.force_plaintext"><span class="slider"></span></div> Force Plaintext Formatting</label>
     </div>
 
-    <button type="button" class="outline" @click="showGlobalAdv = !showGlobalAdv" style="margin-bottom: 1rem;"><span x-text="showGlobalAdv ? 'Hide Advanced Globals' : 'Show Advanced Globals'"></span></button>
+    <button type="button" class="outline" @click="showGlobalAdv = !showGlobalAdv" style="margin-bottom: 1rem;" x-text="showGlobalAdv ? 'Hide Advanced Globals' : 'Show Advanced Globals'">Show Advanced Globals</button>
 
     <div x-show="showGlobalAdv" class="adv-card">
         <div class="flex-row" style="margin-bottom: 1rem;">
