@@ -1,5 +1,8 @@
 import os
 import re
+import time
+import shutil
+import json
 
 # Facade: Expose separated components to maintain legacy import contracts
 from core.constants import *
@@ -32,6 +35,76 @@ class AppState:
         self.vault = {"app": {}, "user": {}, "smarthost": {}}
         self.vault_file = None
 
+def _execute_unified_snapshot(state):
+    """
+    Creates a unified backup frame bundling both the config and vault data structures.
+    Performs a semantic deep-diff against the latest backup to avoid redundant writes
+    when duplicate SIGUSR2 triggers are caught.
+    """
+    try:
+        max_backups = int(state.smtp.get("max_backups", 50))
+        if max_backups <= 0:
+            return
+
+        conf_dir = os.path.dirname(CONFIG_FILE) or "."
+
+        # 1. Read live clean data states directly from the verified sources
+        live_config = load_clean_json(CONFIG_FILE)
+        live_vault = load_clean_json(state.vault_file)
+
+        # Sanitize runtime transient tracking blocks to prevent false diff flags
+        if "smtp" in live_config and "_smtp_meta" in live_config["smtp"]:
+            del live_config["smtp"]["_smtp_meta"]
+
+        # 2. Gather historical unified backup frames
+        snapshots = []
+        for entry in os.listdir(conf_dir):
+            if entry.startswith(".gateway.valid.") and entry.endswith(".json"):
+                snapshots.append(os.path.join(conf_dir, entry))
+
+        snapshots.sort(key=os.path.getmtime)
+
+        # 3. Structural Data-Diff Pass (Ignores transient file metadata/blind hashes)
+        if snapshots:
+            latest_backup_path = snapshots[-1]
+            latest_data = load_clean_json(latest_backup_path)
+
+            cached_config = latest_data.get("config", {})
+            cached_vault = latest_data.get("vault", {})
+
+            if "smtp" in cached_config and "_smtp_meta" in cached_config["smtp"]:
+                del cached_config["smtp"]["_smtp_meta"]
+
+            # Compare underlying data values directly
+            if live_config == cached_config and live_vault == cached_vault:
+                # Structures are identical. Terminate snapshot slice without touching disk.
+                return
+
+        # 4. Content has changed or no backup exists; compile and write the unified file
+        unified_payload = {
+            "config": load_clean_json(CONFIG_FILE),
+            "vault": load_clean_json(state.vault_file)
+        }
+
+        epoch = int(time.time())
+        backup_path = os.path.join(conf_dir, f".gateway.valid.{epoch}.json")
+
+        with open(backup_path, 'w') as f:
+            json.dump(unified_payload, f, indent=2)
+
+        snapshots.append(backup_path)
+
+        # 5. Enforce rolling historical rotation policy
+        while len(snapshots) > max_backups:
+            oldest = snapshots.pop(0)
+            try:
+                os.remove(oldest)
+            except OSError:
+                pass
+    except Exception:
+        # Protect core lifecycle loops from crashing on local environment storage issues
+        pass
+
 def load_config(ignore_missing=False):
     """
     Executes a strict, unified compilation of the configuration state.
@@ -52,6 +125,7 @@ def load_config(ignore_missing=False):
     state.smtp["default_route"] = state.smtp.get("default_route", "pushover")
     state.smtp["listeners"] = state.smtp.get("listeners", [{"bind": "0.0.0.0:25", "starttls": False}])
     state.smtp["auth"] = state.smtp.get("auth", {})
+    state.smtp["max_backups"] = int(state.smtp.get("max_backups", 50))
 
     # 2. Extract Pushover and Smarthost structures natively
     state.pushover = data.get("pushover", {})
@@ -97,5 +171,8 @@ def load_config(ignore_missing=False):
 
     if state.pushover.get("token") in state.vault["app"]: state.pushover["token"] = state.vault["app"][state.pushover["token"]]
     if state.pushover.get("user") in state.vault["user"]: state.pushover["user"] = state.vault["user"][state.pushover["user"]]
+
+    # 5. Schema verification pass successful. Fire unified semantic data backup check.
+    _execute_unified_snapshot(state)
 
     return state
