@@ -172,3 +172,5 @@ async def stop_control_api():
         except Exception: pass
     if active_server:
         active_server.should_exit = True
+        await asyncio.sleep(0.05)
+        active_server = None
