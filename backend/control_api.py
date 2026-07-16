@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import uvicorn
 from backend.events import broker
-from backend.server import generate_secp384r1_cert
+from core.json_store import generate_self_signed_certificate
 
 # Disable built-in docs to keep the attack surface microscopic
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
@@ -169,7 +169,7 @@ async def start_control_api(api_conf, reload_event, mappings_reload_event, gatew
 
     if not (cert and os.path.exists(cert) and key and os.path.exists(key)):
         logging.warning("No valid TLS certificate found for Control API. Generating a random memory-bound certificate.")
-        cert, key = generate_secp384r1_cert(host, bind)
+        cert, key = generate_self_signed_certificate(host, f"control_api_{host}")
 
     logging.debug(f"Attempting to start HTTPS Control API listener at https://{host}:{port}")
 
