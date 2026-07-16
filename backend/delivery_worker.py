@@ -45,7 +45,7 @@ async def async_worker_task(worker_id, async_q, state, broker, pushover_client):
         method = payload.get("method", "pushover")
 
         if method == "pushover":
-            success, error_msg = await send_pushover(payload, pushover_client)
+            success, error_msg = await send_pushover(payload, pushover_client, state=state)
         elif method == "smarthost":
             success, error_msg = await send_smarthost(payload, state)
         else:

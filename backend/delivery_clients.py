@@ -8,14 +8,28 @@ from core.config import PUSHOVER_API_URL
 import httpx
 import aiosmtplib
 
-async def send_pushover(payload, client: httpx.AsyncClient):
+async def send_pushover(payload, client: httpx.AsyncClient, state=None):
     success = False
     error_msg = None
 
+    # Dynamically resolve alias names against the live RAM vault right before delivery
+    target_token = payload.get("token", "")
+    target_user = payload.get("user", "")
+
+    if state and hasattr(state, "vault"):
+        if target_token in state.vault.get("app", {}):
+            target_token = state.vault["app"][target_token]
+        if target_user in state.vault.get("user", {}):
+            target_user = state.vault["user"][target_user]
+
     # HTTPX explicitly requires string mappings when initiating multipart/form-data POSTs
     api_payload = {
-        "token": str(payload["token"]), "user": str(payload["user"]), "message": str(payload["message"]),
-        "title": str(payload["title"]), "timestamp": str(payload["timestamp"]), "html": "1" if payload.get("is_html") else "0"
+        "token": str(target_token),
+        "user": str(target_user),
+        "message": str(payload["message"]),
+        "title": str(payload["title"]),
+        "timestamp": str(payload["timestamp"]),
+        "html": "1" if payload.get("is_html") else "0"
     }
 
     for param in ["device", "sound", "url", "url_title", "priority", "ttl", "tags", "retry", "expire"]:
@@ -30,7 +44,6 @@ async def send_pushover(payload, client: httpx.AsyncClient):
         else:
             post_kwargs = {"json": api_payload}
 
-        # Pipelined through the shared globally-locked connection pool
         response = await client.post(PUSHOVER_API_URL, **post_kwargs)
         if response.status_code == 200:
             logging.info(f"Successfully sent Pushover notification: '{payload['title']}'")

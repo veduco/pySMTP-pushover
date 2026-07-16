@@ -203,7 +203,7 @@ class PushoverSMTPHandler:
             }
 
             if method == "pushover":
-                # Properly cascade missing route parameters to global fallbacks
+                # Save the configuration values directly (which may be Alias Names)
                 payload["user"] = route.get("user") or self.state.pushover.get("user", "")
                 payload["token"] = route.get("token") or self.state.pushover.get("token", "")
 
