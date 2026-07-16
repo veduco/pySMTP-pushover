@@ -1,13 +1,11 @@
 import os
 import json
-import requests
 import signal
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from frontend.utils import get_active_config_path, trigger_backend_reload
-from frontend.config_editor import save_normalized_config
-from core.config import UI_CONFIG_FILE, load_clean_json, save_json, load_vault_safe, load_config
+from frontend.config_manager import ConfigManager
+from core.config import UI_CONFIG_FILE, load_clean_json, save_json
 
 router = APIRouter()
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "templates")
@@ -19,35 +17,9 @@ templates = Jinja2Templates(directory=[HTML_DIR, JS_DIR])
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     ui_config = load_clean_json(UI_CONFIG_FILE)
-    bmode = ui_config.get("backend_mode", "local")
+    manager = ConfigManager(ui_config)
 
-    config = {}
-    vault_data = {"app": {}, "user": {}, "smarthost": {}}
-    smtp_meta = {}
-    config_ok = False
-
-    if bmode == "remote":
-        url = ui_config.get("remote_url", "")
-        sec = ui_config.get("remote_secret", "")
-        verify_tls = ui_config.get("remote_verify_tls", False)
-        try:
-            r = requests.get(f"{url.rstrip('/')}/api/config", headers={"Authorization": f"Bearer {sec}"}, verify=verify_tls, timeout=3)
-            if r.status_code == 200:
-                data = r.json()
-                config = data.get("config", {})
-                vault_data = data.get("vault", {})
-                smtp_meta = data.get("smtp_meta", {})
-                config_ok = True
-        except Exception: pass
-    else:
-        try:
-            parsed = load_config(is_reload=True, ignore_missing=True)
-            if parsed:
-                config = load_clean_json(get_active_config_path())
-                vault_data = load_vault_safe(parsed.vault_file)
-                smtp_meta = config.get("smtp", {}).get("_smtp_meta", {})
-                config_ok = True
-        except Exception: pass
+    config, vault_data, smtp_meta, config_ok = await manager.get_config()
 
     safe_vault_meta = {"app": {}, "user": {}, "smarthost": {}}
     if config_ok:
@@ -61,7 +33,7 @@ async def index(request: Request):
     return templates.TemplateResponse("index.html", {
         "request": request, "config_json": json.dumps(config), "smtp_meta_json": json.dumps(smtp_meta),
         "vault_meta_json": json.dumps(safe_vault_meta), "ui_config_json": json.dumps(safe_ui_config),
-        "config_ok": config_ok, "backend_mode": bmode,
+        "config_ok": config_ok, "backend_mode": manager.bmode,
         "ui_expand_adv": safe_ui_config.get("expand_adv", False), "ui_vault_sort": safe_ui_config.get("vault_sort", "name_asc"),
         "ui_smtp_sort": safe_ui_config.get("smtp_sort", "name_asc"), "ui_smarthost_sort": safe_ui_config.get("smarthost_sort", "alias_asc"),
         "ui_tz": safe_ui_config.get("timezone", "UTC"), "ui_fmt": safe_ui_config.get("date_format", "YYYY-MM-DD HH:mm:ss"),
@@ -72,7 +44,7 @@ async def index(request: Request):
 @router.post("/save/config")
 async def save_config(config_json: str = Form(...), vault_json: str = Form(None)):
     ui_config = load_clean_json(UI_CONFIG_FILE)
-    bmode = ui_config.get("backend_mode", "local")
+    manager = ConfigManager(ui_config)
 
     try:
         parsed = json.loads(config_json)
@@ -85,23 +57,10 @@ async def save_config(config_json: str = Form(...), vault_json: str = Form(None)
             if isinstance(vault_parsed, str):
                 vault_parsed = json.loads(vault_parsed)
 
-        if bmode == "remote":
-            url = ui_config.get("remote_url", "")
-            sec = ui_config.get("remote_secret", "")
-            verify_tls = ui_config.get("remote_verify_tls", False)
-            payload = {"config": parsed}
-            if vault_parsed: payload["vault"] = vault_parsed
-            requests.post(f"{url.rstrip('/')}/api/save", json=payload, headers={"Authorization": f"Bearer {sec}"}, verify=verify_tls, timeout=5)
-            trigger_backend_reload(ui_config, listeners_only=False)
-
-            # Returns simple HTML without triggering the UI process overlay
-            return HTMLResponse("Configuration successfully synchronized with the remote gateway daemon.")
-
-        listeners_changed = save_normalized_config(parsed, vault_parsed)
-        trigger_backend_reload(ui_config, listeners_only=listeners_changed)
+        success_message = await manager.save_config(parsed, vault_parsed)
 
         # Returns simple HTML without triggering the UI process overlay
-        return HTMLResponse("Configuration successfully synchronized with the local gateway daemon.")
+        return HTMLResponse(success_message)
     except Exception as e:
         return HTMLResponse(f"Error compiling config structure: {e}", status_code=500)
 
