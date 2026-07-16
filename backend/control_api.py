@@ -133,46 +133,23 @@ async def api_save_config(request: Request):
 
 @app.get("/api/queue", dependencies=[Depends(verify_token)])
 async def api_get_queue(request: Request):
+    from core.queue_store import get_queue_items
     state = request.app.state.gateway_state
-    q_path = state.smtp["queue_dir"]
-    items = []
-    if os.path.exists(q_path):
-        for fname in os.listdir(q_path):
-            if fname.endswith(".json"):
-                try:
-                    with open(os.path.join(q_path, fname), "r") as f:
-                        data = json.load(f)
-                        items.append({
-                            "id": data.get("id"), "title": data.get("title", "No Subject"), "method": data.get("method", "pushover"),
-                            "retry_count": data.get("retry_count", 0), "last_attempt": data.get("last_attempt", 0), "next_retry": data.get("next_retry", 0),
-                            "last_error": data.get("last_error", "None"), "sender": data.get("sender", "gateway@localhost"), "timestamp": data.get("timestamp", 0)
-                        })
-                except Exception: pass
-    items.sort(key=lambda x: x["last_attempt"] if x["last_attempt"] else x["timestamp"], reverse=True)
+    items = get_queue_items(state.smtp["queue_dir"])
     return JSONResponse(items)
 
 @app.post("/api/queue/{item_id}/retry", dependencies=[Depends(verify_token)])
 async def api_retry_queue_item(request: Request, item_id: str):
+    from core.queue_store import retry_queue_item
     state = request.app.state.gateway_state
-    q_path = state.smtp["queue_dir"]
-    filepath = os.path.join(q_path, f"{item_id}.json")
-    if os.path.exists(filepath):
-        from core.config import save_json
-        try:
-            with open(filepath, 'r') as f: data = json.load(f)
-            data["next_retry"] = 0; data["retry_count"] = 0
-            save_json(filepath, data)
-        except Exception: pass
+    retry_queue_item(state.smtp["queue_dir"], item_id)
     return JSONResponse({"status": "ok"})
 
 @app.delete("/api/queue/{item_id}", dependencies=[Depends(verify_token)])
 async def api_delete_queue_item(request: Request, item_id: str):
+    from core.queue_store import delete_queue_item
     state = request.app.state.gateway_state
-    q_path = state.smtp["queue_dir"]
-    filepath = os.path.join(q_path, f"{item_id}.json")
-    if os.path.exists(filepath):
-        try: os.remove(filepath)
-        except OSError: pass
+    delete_queue_item(state.smtp["queue_dir"], item_id)
     return JSONResponse({"status": "ok"})
 
 async def start_control_api(api_conf, reload_event, mappings_reload_event, gateway_state=None):

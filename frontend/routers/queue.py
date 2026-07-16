@@ -7,7 +7,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from frontend.state import app_state
 from frontend.utils import get_active_config_path
-from core.config import SCRIPT_DIR, UI_CONFIG_FILE, load_clean_json, save_json
+from core.config import SCRIPT_DIR, UI_CONFIG_FILE, load_clean_json
+from core.queue_store import get_queue_items, retry_queue_item, delete_queue_item
 
 router = APIRouter(prefix="/api/queue")
 
@@ -71,24 +72,11 @@ async def get_queue():
     else:
         config = load_clean_json(get_active_config_path())
         q_path = os.path.normpath(os.path.join(SCRIPT_DIR, config.get("smtp", {}).get("queue_dir", "queue")))
-        items = []
-        if os.path.exists(q_path):
-            for fname in os.listdir(q_path):
-                if fname.endswith(".json"):
-                    try:
-                        with open(os.path.join(q_path, fname), "r") as f:
-                            data = json.load(f)
-                            items.append({
-                                "id": data.get("id"), "title": data.get("title", "No Subject"), "method": data.get("method", "pushover"),
-                                "retry_count": data.get("retry_count", 0), "last_attempt": data.get("last_attempt", 0), "next_retry": data.get("next_retry", 0),
-                                "last_error": data.get("last_error", "None"), "sender": data.get("sender", "gateway@localhost"), "timestamp": data.get("timestamp", 0)
-                            })
-                    except Exception: pass
-        items.sort(key=lambda x: x["last_attempt"] if x["last_attempt"] else x["timestamp"], reverse=True)
+        items = get_queue_items(q_path)
         return JSONResponse(items)
 
 @router.post("/{item_id}/retry")
-async def retry_queue_item(item_id: str):
+async def proxy_retry_queue_item(item_id: str):
     ui_config = load_clean_json(UI_CONFIG_FILE)
     bmode = ui_config.get("backend_mode", "local")
 
@@ -107,17 +95,11 @@ async def retry_queue_item(item_id: str):
     else:
         config = load_clean_json(get_active_config_path())
         q_path = os.path.normpath(os.path.join(SCRIPT_DIR, config.get("smtp", {}).get("queue_dir", "queue")))
-        filepath = os.path.join(q_path, f"{item_id}.json")
-        if os.path.exists(filepath):
-            try:
-                with open(filepath, 'r') as f: data = json.load(f)
-                data["next_retry"] = 0; data["retry_count"] = 0
-                save_json(filepath, data)
-            except Exception: pass
+        retry_queue_item(q_path, item_id)
         return JSONResponse({"status": "ok"})
 
 @router.delete("/{item_id}")
-async def delete_queue_item(item_id: str):
+async def proxy_delete_queue_item(item_id: str):
     ui_config = load_clean_json(UI_CONFIG_FILE)
     bmode = ui_config.get("backend_mode", "local")
 
@@ -136,8 +118,5 @@ async def delete_queue_item(item_id: str):
     else:
         config = load_clean_json(get_active_config_path())
         q_path = os.path.normpath(os.path.join(SCRIPT_DIR, config.get("smtp", {}).get("queue_dir", "queue")))
-        filepath = os.path.join(q_path, f"{item_id}.json")
-        if os.path.exists(filepath):
-            try: os.remove(filepath)
-            except OSError: pass
+        delete_queue_item(q_path, item_id)
         return JSONResponse({"status": "ok"})
