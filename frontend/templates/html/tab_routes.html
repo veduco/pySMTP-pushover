@@ -55,7 +55,7 @@
 
                     <template x-if="map.method === 'pushover'">
                         <div style="width: max-content; max-width: 100%;">
-                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.25rem; white-space: nowrap;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.25rem; flex-wrap: wrap;">
                                 <label style="margin: 0;">App Token</label>
                                 <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" :checked="map._isTokenAlias" @change="toggleAlias(map, 'token')"><span class="slider"></span></div> Use Alias</label>
                             </div>
@@ -103,7 +103,7 @@
                         <div>
                             <div class="flex-row" style="margin-bottom: 1.5rem; justify-content: flex-start; gap: 2rem;">
                                 <div style="width: max-content; max-width: 100%;">
-                                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.25rem; white-space: nowrap;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.25rem; flex-wrap: wrap;">
                                         <label style="margin: 0;">User Key Override</label>
                                         <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" :checked="map._isUserAlias" @change="toggleAlias(map, 'user')"><span class="slider"></span></div> Use Alias</label>
                                     </div>

@@ -25,7 +25,11 @@
         }
         body { background: var(--bg-color); color: var(--text-color); font-family: system-ui, sans-serif; transition: background 0.3s; margin: 0; padding: 2rem; box-sizing: border-box; }
         .container { max-width: 100%; box-sizing: border-box; margin: auto; background: var(--surface-color); padding: 2rem; border-radius: 8px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .tabs { display: flex; gap: 1rem; border-bottom: 2px solid var(--border-color); margin-bottom: 1.5rem; padding-bottom: 0.5rem; flex-wrap: wrap; }
+
+        /* Converted to a clean swipeable mobile rail */
+        .tabs { display: flex; gap: 0.5rem; border-bottom: 2px solid var(--border-color); margin-bottom: 1.5rem; padding-bottom: 0.5rem; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+        .tabs::-webkit-scrollbar { display: none; }
+
         .tab { padding: 0.5rem 1rem; cursor: pointer; border-radius: 4px; }
         .tab.active { background: var(--primary-color); color: white; font-weight: bold; }
         .card { border: 1px solid var(--border-color); padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; background: var(--surface-color); box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
@@ -125,11 +129,12 @@
         .table-sort { cursor: pointer; user-select: none; }
         .table-sort:hover { background-color: var(--row-hover); }
 
+        /* Mobile constraint strict enforcement */
         @media (max-width: 768px) {
-            body { padding: 0.5rem; }
-            .container { padding: 1rem; border-radius: 0; border: none; box-shadow: none; }
-            .card { padding: 1rem; }
-            .flex-row { gap: 0.5rem; }
+            html, body { padding: 0; margin: 0; overflow-x: hidden; width: 100vw; }
+            .container { padding: 1rem; border-radius: 0; border: none; box-shadow: none; width: 100%; max-width: 100%; box-sizing: border-box; }
+            .card { padding: 1rem; width: 100%; box-sizing: border-box; }
+            .flex-row { gap: 0.75rem; }
 
             table {
                 display: block;
@@ -139,7 +144,6 @@
                 border: none;
             }
             th, td { white-space: nowrap; }
-
             .segment-label { padding: 0.3rem 0.5rem; font-size: 0.75rem; }
         }
     </style>
