@@ -5,41 +5,6 @@ import os
 from core.config import load_clean_json, save_json, load_vault_safe
 from frontend.utils import get_active_config_path
 
-def process_legacy_config(config):
-    changed = False
-    if "routes" not in config:
-        config["routes"] = {}
-        po = config.get("pushover", {})
-        to_del = []
-        for k, v in po.items():
-            if k not in ["user", "token", "device", "sound", "url", "url_title", "tags", "priority", "ttl", "retry", "expire", "attachments", "force_plaintext", "disable_persistence"] and isinstance(v, dict):
-                v["method"] = "pushover"; config["routes"][k] = v; to_del.append(k)
-        for k in to_del: del po[k]
-        changed = True
-
-    if "disable_persistence" in config.get("pushover", {}):
-        if "smtp" not in config: config["smtp"] = {}
-        config["smtp"]["disable_persistence"] = config["pushover"]["disable_persistence"]
-        del config["pushover"]["disable_persistence"]
-        changed = True
-
-    if "smarthost" not in config: config["smarthost"] = {"aliases": {}, "globals": {}}; changed = True
-    if "smtp" not in config: config["smtp"] = {}
-    if "default_route" not in config["smtp"]: config["smtp"]["default_route"] = "pushover"; changed = True
-
-    auth_block = config.get("smtp", {}).get("auth", {})
-    meta_block = config.get("smtp", {}).get("_smtp_meta", {})
-    for user, pwd in list(auth_block.items()):
-        if not pwd.startswith("$") and not re.match(r'^[a-fA-F0-9]{64}$', pwd):
-            auth_block[user] = hashlib.sha256(pwd.encode('utf-8')).hexdigest()
-            if user not in meta_block: meta_block[user] = int(time.time())
-            changed = True
-
-    if changed:
-        config["smtp"]["auth"] = auth_block
-        config["smtp"]["_smtp_meta"] = meta_block
-    return config, changed
-
 def save_normalized_config(parsed, vault_parsed=None):
     old_config = load_clean_json(get_active_config_path())
 

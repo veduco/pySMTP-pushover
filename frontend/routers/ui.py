@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from frontend.utils import get_active_config_path, trigger_backend_reload
-from frontend.config_editor import process_legacy_config, save_normalized_config
+from frontend.config_editor import save_normalized_config
 from core.config import UI_CONFIG_FILE, load_clean_json, save_json, load_vault_safe, load_config
 
 router = APIRouter()
@@ -55,12 +55,6 @@ async def index(request: Request):
             for alias, obj in vault_data.get(vtype, {}).items():
                 epoch_val = obj.get("epoch", 0) if isinstance(obj, dict) else 0
                 safe_vault_meta[vtype][alias] = epoch_val
-
-    if config_ok and bmode == "local":
-        config, changed = process_legacy_config(config)
-        if changed:
-            save_json(get_active_config_path(), config)
-            trigger_backend_reload(ui_config, listeners_only=False)
 
     safe_ui_config = ui_config.copy()
 
