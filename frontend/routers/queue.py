@@ -1,7 +1,6 @@
 import os
 import json
 import asyncio
-import requests
 import httpx
 import logging
 from fastapi import APIRouter, Request
@@ -60,8 +59,13 @@ async def get_queue():
         sec = ui_config.get("remote_secret", "")
         verify_tls = ui_config.get("remote_verify_tls", False)
         try:
-            r = requests.get(f"{url.rstrip('/')}/api/queue", headers={"Authorization": f"Bearer {sec}"}, verify=verify_tls, timeout=5)
-            if r.status_code == 200: return JSONResponse(r.json())
+            async with httpx.AsyncClient(verify=verify_tls, timeout=5.0) as client:
+                r = await client.get(
+                    f"{url.rstrip('/')}/api/queue",
+                    headers={"Authorization": f"Bearer {sec}"}
+                )
+            if r.status_code == 200:
+                return JSONResponse(r.json())
         except Exception: pass
         return JSONResponse([])
     else:
@@ -92,7 +96,12 @@ async def retry_queue_item(item_id: str):
         url = ui_config.get("remote_url", "")
         sec = ui_config.get("remote_secret", "")
         verify_tls = ui_config.get("remote_verify_tls", False)
-        try: requests.post(f"{url.rstrip('/')}/api/queue/{item_id}/retry", headers={"Authorization": f"Bearer {sec}"}, verify=verify_tls, timeout=5)
+        try:
+            async with httpx.AsyncClient(verify=verify_tls, timeout=5.0) as client:
+                await client.post(
+                    f"{url.rstrip('/')}/api/queue/{item_id}/retry",
+                    headers={"Authorization": f"Bearer {sec}"}
+                )
         except Exception: pass
         return JSONResponse({"status": "ok"})
     else:
@@ -116,7 +125,12 @@ async def delete_queue_item(item_id: str):
         url = ui_config.get("remote_url", "")
         sec = ui_config.get("remote_secret", "")
         verify_tls = ui_config.get("remote_verify_tls", False)
-        try: requests.delete(f"{url.rstrip('/')}/api/queue/{item_id}", headers={"Authorization": f"Bearer {sec}"}, verify=verify_tls, timeout=5)
+        try:
+            async with httpx.AsyncClient(verify=verify_tls, timeout=5.0) as client:
+                await client.delete(
+                    f"{url.rstrip('/')}/api/queue/{item_id}",
+                    headers={"Authorization": f"Bearer {sec}"}
+                )
         except Exception: pass
         return JSONResponse({"status": "ok"})
     else:
