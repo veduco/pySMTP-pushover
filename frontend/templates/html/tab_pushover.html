@@ -79,7 +79,7 @@
 
     <div class="table-header-row">
         <h4>App Token Aliases</h4>
-        <button type="button" class="outline success icon-btn" @click="openVaultModal('app')" title="Add App Token">
+        <button type="button" class="outline success icon-btn" @click="vaultModal.type = 'app'; vaultModal.name = ''; vaultModal.token = ''; vaultModal.error = ''; vaultModal.showToken = false; vaultModal.open = true;" title="Add App Token">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19"></line>
                 <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -120,7 +120,7 @@
 
     <div class="table-header-row">
         <h4>User Key Aliases</h4>
-        <button type="button" class="outline success icon-btn" @click="openVaultModal('user')" title="Add User Key">
+        <button type="button" class="outline success icon-btn" @click="vaultModal.type = 'user'; vaultModal.name = ''; vaultModal.token = ''; vaultModal.error = ''; vaultModal.showToken = false; vaultModal.open = true;" title="Add User Key">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19"></line>
                 <line x1="5" y1="12" x2="19" y2="12"></line>
