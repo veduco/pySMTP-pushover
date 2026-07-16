@@ -17,6 +17,7 @@ class SuppressAiosmtpdNoiseFilter(logging.Filter):
         return True
 
 class SuppressUvicornNoiseFilter(logging.Filter):
+    """Unified filter to strip transient framework process messages from console streams."""
     def filter(self, record):
         msg = record.getMessage()
         suppress_list = [

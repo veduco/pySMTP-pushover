@@ -16,25 +16,13 @@ if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 
 from core.config import load_clean_json, save_json, UI_CONFIG_FILE, clear_ui_config_cache, get_cached_ui_config
+from core.logger import SuppressUvicornNoiseFilter
 from frontend.api import app
 from frontend.utils import generate_ui_cert
 
-class UvicornQuietFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        msg = record.getMessage()
-        suppress_list = [
-            "Started server process",
-            "Waiting for application startup",
-            "Application startup complete",
-            "Uvicorn running on",
-            "Shutting down",
-            "Waiting for connections to close",
-            "Finished server process"
-        ]
-        return not any(s in msg for s in suppress_list)
-
-logging.getLogger("uvicorn.error").addFilter(UvicornQuietFilter())
-logging.getLogger("uvicorn").addFilter(UvicornQuietFilter())
+# Centralized hooks applied directly to the frontend process space
+logging.getLogger("uvicorn.error").addFilter(SuppressUvicornNoiseFilter())
+logging.getLogger("uvicorn").addFilter(SuppressUvicornNoiseFilter())
 
 ui_shutdown_event = threading.Event()
 ui_reload_listeners_event = threading.Event()
