@@ -2,6 +2,7 @@ import os
 import uuid
 import datetime
 import signal
+import logging
 from cryptography import x509
 from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes
@@ -16,6 +17,10 @@ def get_active_config_path():
 def generate_ui_cert():
     cert_path, key_path = "/tmp/ui_cert.pem", "/tmp/ui_key.pem"
     if os.path.exists(cert_path): return cert_path, key_path
+
+    # Standardized telemetry output matched cleanly with the backend engine signature
+    logging.warning("No valid TLS certificate found for Web UI. Generating a random memory-bound certificate.")
+
     private_key = ec.generate_private_key(ec.SECP384R1())
     subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, str(uuid.uuid4()))])
     now = datetime.datetime.now(datetime.timezone.utc)
