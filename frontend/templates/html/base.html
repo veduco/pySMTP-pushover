@@ -129,6 +129,9 @@
         .table-sort { cursor: pointer; user-select: none; }
         .table-sort:hover { background-color: var(--row-hover); }
 
+        .hover-scale { transition: transform 0.1s ease; }
+        .hover-scale:hover { transform: scale(1.05) !important; }
+
         /* Mobile constraint strict enforcement */
         @media (max-width: 768px) {
             html, body { padding: 0; margin: 0; overflow-x: hidden; width: 100vw; }
