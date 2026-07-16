@@ -39,7 +39,12 @@
         </div>
 
         <div class="form-group" style="margin-bottom: 1.5rem; margin-top: 0.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
-            <label class="toggle-label" style="font-weight: bold;"><div class="toggle-switch"><input type="checkbox" x-model="smarthostModal.auth"><span class="slider"></span></div> Use Authentication</label>
+            <label style="margin-bottom: 0.35rem;">Authentication</label>
+            <div class="segment-track" style="width: 100%; display: flex; box-sizing: border-box;">
+                <div class="segment-thumb" :style="!smarthostModal.auth ? 'width: calc(50% - 3px); transform: translateX(0);' : 'width: calc(50% - 3px); transform: translateX(100%);'"></div>
+                <label class="segment-label" :style="!smarthostModal.auth ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" name="sh_auth_mode" :checked="!smarthostModal.auth" @change="smarthostModal.auth = false"> None</label>
+                <label class="segment-label" :style="smarthostModal.auth ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" name="sh_auth_mode" :checked="smarthostModal.auth" @change="smarthostModal.auth = true"> Basic</label>
+            </div>
         </div>
 
         <div x-show="smarthostModal.auth" style="margin-bottom: 1rem;" x-transition>
