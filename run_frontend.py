@@ -151,6 +151,7 @@ if __name__ == "__main__":
                 if ui_reload_listeners_event.is_set():
                     ui_reload_listeners_event.clear()
                     logging.info("Caught SIGUSR1 inside UI process space. Hot-reloading network port binders...")
+                    clear_ui_config_cache()
                 break
             time.sleep(1)
 

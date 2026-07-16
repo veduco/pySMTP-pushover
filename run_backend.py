@@ -153,6 +153,10 @@ async def main():
                 reload_event.clear()
                 logging.info("Checking listeners for dynamic network or TLS modifications...")
 
+                fresh_state = load_config()
+                if fresh_state is not None:
+                    app_state.smtp["listeners"] = fresh_state.smtp.get("listeners", [])
+
                 current_binds = set(active_servers.keys())
                 new_binds = set(l["bind"] for l in app_state.smtp["listeners"])
 
