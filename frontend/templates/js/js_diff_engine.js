@@ -9,12 +9,6 @@ preparePayload() {
         routes: {}
     };
 
-    if (this.pushGlobals._isTokenAlias) payload.pushover.token = this.pushGlobals._tokenAliasVal;
-    else payload.pushover.token = this.pushGlobals._tokenRaw;
-
-    if (this.pushGlobals._isUserAlias) payload.pushover.user = this.pushGlobals._userAliasVal;
-    else payload.pushover.user = this.pushGlobals._userRaw;
-
     delete payload.pushover._isTokenAlias; delete payload.pushover._tokenAliasVal; delete payload.pushover._tokenRaw; delete payload.pushover._showToken;
     delete payload.pushover._isUserAlias; delete payload.pushover._userAliasVal; delete payload.pushover._userRaw; delete payload.pushover._showUser;
 
@@ -23,8 +17,8 @@ preparePayload() {
         const rObj = { match: m.match, method: m.method, disable_attachments: m.disable_attachments, force_plaintext: m.force_plaintext };
 
         if (m.method === 'pushover') {
-            rObj.token = m._isTokenAlias ? m._tokenAliasVal : m._tokenRaw;
-            rObj.user = m._isUserAlias ? m._userAliasVal : m._userRaw;
+            rObj.token = m.token;
+            rObj.user = m.user;
             ['device','sound','url','url_title','tags','priority','ttl','retry','expire'].forEach(k => {
                 if (m[k] !== undefined && m[k] !== '') rObj[k] = m[k];
             });
@@ -111,24 +105,20 @@ requestSave(formId) {
                     diffs.push(...getDiffs(val1, val2, currentPath));
                 } else {
                     let humanKey = currentPath;
-                    const normalizedPath = currentPath.toLowerCase();
 
+                    // Clean human-readable label generation based on the normalized dictionary keys
                     if (currentPath.startsWith('Gateway Config.routes.')) {
                         humanKey = `Route Mapping Rule [${currentPath.split('.')[2] || 'New'}]`;
                     } else if (currentPath.startsWith('Gateway Config.smtp.listeners.')) {
-                        let idx = currentPath.split('.')[3];
-                        let bindAddr = this.rawConfig.smtp?.listeners?.[idx]?.bind || newConfig.smtp?.listeners?.[idx]?.bind || idx;
-                        humanKey = `SMTP Port Listener [${bindAddr}]`;
+                        humanKey = `SMTP Port Listener [${currentPath.split('.')[3]}]`;
+                    } else if (currentPath.startsWith('UI/Backend Context.listeners.')) {
+                        humanKey = `UI Port Listener [${currentPath.split('.')[2]}]`;
                     } else if (currentPath.startsWith('Gateway Config.smarthost.aliases.')) {
                         humanKey = `Smarthost Configuration [${currentPath.split('.')[3] || 'New'}]`;
                     } else if (currentPath.startsWith('Token Vault.app.')) {
-                        let idx = currentPath.split('.')[2];
-                        let name = this.rawVault.app?.[idx]?.name || newVault.app?.[idx]?.name || idx;
-                        humanKey = `App Token Vault [${name}]`;
+                        humanKey = `App Token Vault [${currentPath.split('.')[2]}]`;
                     } else if (currentPath.startsWith('Token Vault.user.')) {
-                        let idx = currentPath.split('.')[2];
-                        let name = this.rawVault.user?.[idx]?.name || newVault.user?.[idx]?.name || idx;
-                        humanKey = `User Key Vault [${name}]`;
+                        humanKey = `User Key Vault [${currentPath.split('.')[2]}]`;
                     } else if (currentPath.startsWith('Token Vault.smarthost.')) {
                         humanKey = `Smarthost Vault Password [${currentPath.split('.')[2] || 'New'}]`;
                     } else if (currentPath.startsWith('UI/Backend Context.')) {
@@ -137,17 +127,29 @@ requestSave(formId) {
                         humanKey = `Gateway Parameter -> ${currentPath.split('.').pop()}`;
                     }
 
-                    let displayOld = val1 !== undefined ? val1 : 'None';
-                    let displayNew = val2 !== undefined ? val2 : 'None';
+                    let displayOld = (val1 !== undefined && val1 !== '') ? val1 : 'None';
+                    let displayNew = (val2 !== undefined && val2 !== '') ? val2 : 'None';
 
-                    if ((normalizedPath.includes('token') || normalizedPath.includes('password') || normalizedPath.includes('secret') || normalizedPath.includes('auth')) && !normalizedPath.includes('username')) {
-                        displayOld = val1 ? '••••••••' : 'None';
-                        displayNew = val2 ? '••••••••' : 'None';
+                    if (typeof displayOld === 'object' && displayOld !== null) displayOld = '[Active Configuration]';
+                    if (typeof displayNew === 'object' && displayNew !== null) displayNew = '[Active Configuration]';
+                    if (displayOld === '[Active Configuration]' && displayNew === 'None') displayNew = '[Deleted]';
+                    if (displayOld === 'None' && displayNew === '[Active Configuration]') displayOld = '[Not Configured]';
+
+                    const isSensitive = ['token', 'user', 'password', 'secret'].includes(key) || (currentPath.includes('.auth.') && key !== 'auth');
+
+                    if (isSensitive) {
+                        const allAliases = [...(this.vaultAppAliases || []), ...(this.vaultUserAliases || [])];
+
+                        const oldIsAlias = typeof val1 === 'string' && allAliases.includes(val1);
+                        const newIsAlias = typeof val2 === 'string' && allAliases.includes(val2);
+
+                        displayOld = (val1 && val1 !== '') ? (oldIsAlias ? `[Alias] ${val1}` : '••••••••') : 'None';
+                        displayNew = (val2 && val2 !== '') ? (newIsAlias ? `[Alias] ${val2}` : '••••••••') : 'None';
                     }
 
                     let revertClosure = () => { this.resetTab(this.tab); };
 
-                    if (currentPath.startsWith('UI/Backend Context.')) {
+                    if (currentPath.startsWith('UI/Backend Context.') && !currentPath.includes('.listeners.')) {
                         revertClosure = () => {
                             if (key === 'backend_mode') this.ui_backend_remote = (val1 === 'remote');
                             else if (key === 'local_config_path') this.ui_local_config_path = val1 || 'config.json';
@@ -182,8 +184,8 @@ requestSave(formId) {
                     diffs.push({
                         key: currentPath,
                         humanLabel: humanKey,
-                        old: JSON.stringify(displayOld),
-                        new: JSON.stringify(displayNew),
+                        old: typeof displayOld === 'string' && !displayOld.startsWith('[') ? JSON.stringify(displayOld).replace(/^"|"$/g, '') : displayOld,
+                        new: typeof displayNew === 'string' && !displayNew.startsWith('[') ? JSON.stringify(displayNew).replace(/^"|"$/g, '') : displayNew,
                         revert: revertClosure
                     });
                 }
@@ -193,19 +195,38 @@ requestSave(formId) {
     };
 
     if (formId === 'backend_form' || formId === 'ui_form') {
-        this.diffModal.changes.push(...getDiffs(this.rawUiConfig, newUi, 'UI/Backend Context'));
+        const oldUi = { ...this.rawUiConfig }; delete oldUi.listeners;
+        const newUiObj = { ...newUi }; delete newUiObj.listeners;
+        this.diffModal.changes.push(...getDiffs(oldUi, newUiObj, 'UI/Backend Context'));
+
+        const oldUiListeners = Object.fromEntries((this.rawUiConfig.listeners || []).map(x => [x.bind, x]));
+        const newUiListeners = Object.fromEntries((newUi.listeners || []).map(x => [x.bind, x]));
+        this.diffModal.changes.push(...getDiffs(oldUiListeners, newUiListeners, 'UI/Backend Context.listeners'));
     } else {
         if (this.tab === 'routes') {
             this.diffModal.changes.push(...getDiffs(this.rawConfig.routes || {}, newConfig.routes || {}, 'Gateway Config.routes'));
         } else if (this.tab === 'pushover') {
             this.diffModal.changes.push(...getDiffs(this.rawConfig.pushover || {}, newConfig.pushover || {}, 'Gateway Config.pushover'));
-            this.diffModal.changes.push(...getDiffs(this.rawVault.app || [], newVault.app || [], 'Token Vault.app'));
-            this.diffModal.changes.push(...getDiffs(this.rawVault.user || [], newVault.user || [], 'Token Vault.user'));
+
+            const oldVaultApp = Object.fromEntries((this.rawVault.app || []).map(x => [x.name, x]));
+            const newVaultApp = Object.fromEntries((newVault.app || []).map(x => [x.name, x]));
+            this.diffModal.changes.push(...getDiffs(oldVaultApp, newVaultApp, 'Token Vault.app'));
+
+            const oldVaultUser = Object.fromEntries((this.rawVault.user || []).map(x => [x.name, x]));
+            const newVaultUser = Object.fromEntries((newVault.user || []).map(x => [x.name, x]));
+            this.diffModal.changes.push(...getDiffs(oldVaultUser, newVaultUser, 'Token Vault.user'));
+
         } else if (this.tab === 'smarthost') {
             this.diffModal.changes.push(...getDiffs(this.rawConfig.smarthost || {}, newConfig.smarthost || {}, 'Gateway Config.smarthost'));
             this.diffModal.changes.push(...getDiffs(this.rawVault.smarthost || {}, newVault.smarthost || {}, 'Token Vault.smarthost'));
         } else if (this.tab === 'server') {
-            this.diffModal.changes.push(...getDiffs(this.rawConfig.smtp || {}, newConfig.smtp || {}, 'Gateway Config.smtp'));
+            const oldSmtp = { ...this.rawConfig.smtp }; delete oldSmtp.listeners;
+            const newSmtp = { ...newConfig.smtp }; delete newSmtp.listeners;
+            this.diffModal.changes.push(...getDiffs(oldSmtp, newSmtp, 'Gateway Config.smtp'));
+
+            const oldSmtpListeners = Object.fromEntries((this.rawConfig.smtp?.listeners || []).map(x => [x.bind, x]));
+            const newSmtpListeners = Object.fromEntries((newConfig.smtp?.listeners || []).map(x => [x.bind, x]));
+            this.diffModal.changes.push(...getDiffs(oldSmtpListeners, newSmtpListeners, 'Gateway Config.smtp.listeners'));
         }
     }
 
@@ -263,6 +284,11 @@ revertChange(idx) {
     } else if (item.key.includes('routes')) {
         this.resetTab('routes');
         this.diffModal.changes = this.diffModal.changes.filter(c => !c.key.includes('routes'));
+        complexResetTriggered = true;
+    } else if (item.key.includes('UI/Backend Context.listeners')) {
+        // Safe reversion hook for the newly mapped UI listeners
+        this.uiListeners = JSON.parse(JSON.stringify(JSON.parse(this.snapshots.ui).uiListeners || []));
+        this.diffModal.changes = this.diffModal.changes.filter(c => !c.key.includes('UI/Backend Context.listeners'));
         complexResetTriggered = true;
     }
 

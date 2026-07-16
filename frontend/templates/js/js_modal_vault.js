@@ -1,3 +1,45 @@
+saveVaultModal() {
+    this.vaultModal.error = '';
+    const name = this.vaultModal.name.trim();
+    const token = this.vaultModal.token.trim();
+
+    if (!name || !token) {
+        this.vaultModal.error = 'Both Alias Name and Token are required.';
+        return;
+    }
+
+    const targetArray = this.vaultModal.type === 'app' ? this.vaultApp : this.vaultUser;
+    const aliasesArray = this.vaultModal.type === 'app' ? this.vaultAppAliases : this.vaultUserAliases;
+
+    if (aliasesArray.includes(name)) {
+        this.vaultModal.error = 'An alias with this name already exists.';
+        return;
+    }
+
+    targetArray.push({
+        name: name,
+        token: token,
+        epoch: Math.floor(Date.now() / 1000)
+    });
+    aliasesArray.push(name);
+
+    this.vaultModal.open = false;
+},
+
+clearVaultModal() {
+    this.vaultModal.name = '';
+    this.vaultModal.token = '';
+    this.vaultModal.error = '';
+},
+
+get hasVaultModalChanges() {
+    return this.vaultModal.name.trim() !== '' || this.vaultModal.token.trim() !== '';
+},
+
+get canSaveVaultModal() {
+    return this.vaultModal.name.trim() !== '' && this.vaultModal.token.trim() !== '';
+},
+
 deleteVaultToken(type, name) {
     let isAssigned = false;
 

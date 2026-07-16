@@ -20,9 +20,6 @@ def trigger_local_backend_reload(listeners_only=False):
     with open(SMTP_PID_FILE, 'r') as f:
         pid = int(f.read().strip())
     try:
-        if listeners_only:
-            os.kill(pid, signal.SIGUSR1)
-        else:
-            os.kill(pid, signal.SIGUSR2)
+        os.kill(pid, signal.SIGUSR2)
     except ProcessLookupError:
         pass

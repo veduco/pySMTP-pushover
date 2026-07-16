@@ -35,6 +35,8 @@ class AppState:
         self.regex_mappings = {"to": [], "from": []}
         self.vault = {"app": {}, "user": {}, "smarthost": {}}
         self.vault_file = None
+        self.raw_config = {}
+        self.raw_vault = {}
 
 def _execute_unified_snapshot(state):
     """
@@ -118,6 +120,9 @@ def load_config(ignore_missing=False):
     data = load_clean_json(CONFIG_FILE)
     state = AppState(CONFIG_FILE)
 
+    # Store the pristine disk read into memory immediately
+    state.raw_config = data
+
     # 1. Normalize and hard-set SMTP Core parameters immediately
     state.smtp = data.get("smtp", {})
     state.smtp["queue_dir"] = state.smtp.get("queue_dir", "data/queue")
@@ -140,6 +145,9 @@ def load_config(ignore_missing=False):
     state.vault_file = os.path.normpath(os.path.join(conf_dir, v_path)) if v_path else os.path.join(conf_dir, "vault.json")
     vault_data = load_vault_safe(state.vault_file)
 
+    # Store the pristine vault read into memory immediately
+    state.raw_vault = vault_data
+
     for v_type in ["app", "user", "smarthost"]:
         for alias, val in vault_data.get(v_type, {}).items():
             if isinstance(val, dict): state.vault[v_type][alias] = val.get("token", "")
@@ -151,11 +159,6 @@ def load_config(ignore_missing=False):
         match_type = route.get("match", "to").lower()
         method = route.get("method", "pushover").lower()
 
-        if method == "pushover":
-            tok = route.get("token")
-            if tok in state.vault["app"]: route["token"] = state.vault["app"][tok]
-            usr = route.get("user")
-            if usr in state.vault["user"]: route["user"] = state.vault["user"][usr]
 
         is_regex = key.lower().startswith("regex:")
         actual_key = key[6:] if is_regex else key.lower()
@@ -170,8 +173,6 @@ def load_config(ignore_missing=False):
             if match_type in ["to", "both"]: state.mappings["to"][actual_key] = route
             if match_type in ["from", "both"]: state.mappings["from"][actual_key] = route
 
-    if state.pushover.get("token") in state.vault["app"]: state.pushover["token"] = state.vault["app"][state.pushover["token"]]
-    if state.pushover.get("user") in state.vault["user"]: state.pushover["user"] = state.vault["user"][state.pushover["user"]]
 
     # 5. Schema verification pass successful. Fire unified semantic data backup check.
     _execute_unified_snapshot(state)
@@ -181,7 +182,7 @@ def load_config(ignore_missing=False):
 def save_unified_config(config_path, new_config=None, new_vault=None):
     """
     Safely normalizes JSON payloads, hashes secrets securely, preserves existing API keys,
-    and commits config/vault structures to disk.
+    and commits config/vault structures to disk while protecting vault alias strings.
     Returns a boolean indicating if SMTP listeners were modified (useful for hot-reloads).
     """
     listeners_changed = False
@@ -195,7 +196,16 @@ def save_unified_config(config_path, new_config=None, new_vault=None):
             if "smtp" in new_config and "api" in new_config["smtp"]:
                 new_config["smtp"]["api"]["secret"] = old_secret
 
-        # 2. SMTP Auth Secret Hashing
+        # 2. Protect Global Pushover Aliases from Password Mask Polution
+        for field in ["token", "user"]:
+            new_val = new_config.get("pushover", {}).get(field, "")
+            # If the value comes back as masked dots or empty, retain the old string alias name
+            if new_val == "••••••••" or not new_val:
+                if "pushover" in old_config and field in old_config["pushover"]:
+                    if "pushover" in new_config:
+                        new_config["pushover"][field] = old_config["pushover"][field]
+
+        # 3. SMTP Auth Secret Hashing
         auth_block = new_config.get("smtp", {}).get("auth", {})
         meta_block = new_config.get("_smtp_meta", {})
         for user, pwd in list(auth_block.items()):
@@ -211,7 +221,7 @@ def save_unified_config(config_path, new_config=None, new_vault=None):
         if "_smtp_meta" in new_config:
             del new_config["_smtp_meta"]
 
-        # 3. Evaluate critical listener diffs for signal dispatch
+        # 4. Evaluate critical listener diffs for signal dispatch
         old_smtp = old_config.get("smtp", {})
         if "listeners" in old_smtp and "listeners" in new_config["smtp"]:
             if old_smtp["listeners"] != new_config["smtp"]["listeners"]:
@@ -231,20 +241,19 @@ def save_unified_config(config_path, new_config=None, new_vault=None):
 
         for vtype in ["app", "user"]:
             if isinstance(new_vault.get(vtype), list):
-                # UI Schema array mapping logic
                 for item in new_vault.get(vtype, []):
                     name = item.get("name")
                     tok = item.get("token")
                     epoch = item.get("epoch", int(time.time()))
-                    if not tok:
+                    # Avoid capturing dummy mask constraints into the secure database file
+                    if not tok or tok == "••••••••":
                         tok = vault_data.get(vtype, {}).get(name, {}).get("token", "")
                     normalized_vault[vtype][name] = {"token": tok, "epoch": epoch}
             else:
-                # Direct API Dictionary mapping fallback
                 normalized_vault[vtype] = new_vault.get(vtype, {})
 
         for alias, tok in new_vault.get("smarthost", {}).items():
-            if not tok:
+            if not tok or tok == "••••••••":
                 tok = vault_data.get("smarthost", {}).get(alias, {}).get("token", "")
             normalized_vault["smarthost"][alias] = {"token": tok, "epoch": int(time.time())}
 

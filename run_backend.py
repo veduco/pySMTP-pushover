@@ -17,6 +17,8 @@ from backend.delivery_worker import async_delivery_manager, load_queue_from_disk
 from backend.server import get_tls_context, get_file_hash
 from backend.control_api import start_control_api, stop_control_api
 from backend.events import broker
+
+# Added centralized primitive for string parsing
 from core.json_store import parse_bind_string
 
 def get_smtp_factory(handler, eff_hostname, tls_context, authenticator):
@@ -154,6 +156,7 @@ async def main():
                 reload_event.clear()
                 logging.info("Checking listeners for dynamic network or TLS modifications...")
 
+                # Force a disk-read to pull the updated listener array into active memory
                 fresh_state = load_config()
                 if fresh_state is not None:
                     app_state.smtp["listeners"] = fresh_state.smtp.get("listeners", [])
@@ -227,13 +230,26 @@ async def main():
                     new_state = load_config()
 
                     if new_state is not None:
+                        # Capture the old listeners for comparison before mutating the state
+                        old_listeners = app_state.smtp.get("listeners", [])
+
                         app_state.smtp.clear(); app_state.smtp.update(new_state.smtp)
                         app_state.pushover.clear(); app_state.pushover.update(new_state.pushover)
                         app_state.smarthost.clear(); app_state.smarthost.update(new_state.smarthost)
                         app_state.mappings.clear(); app_state.mappings.update(new_state.mappings)
                         app_state.regex_mappings.clear(); app_state.regex_mappings.update(new_state.regex_mappings)
                         app_state.vault.clear(); app_state.vault.update(new_state.vault)
+
+                        app_state.raw_config.clear(); app_state.raw_config.update(new_state.raw_config)
+                        app_state.raw_vault.clear(); app_state.raw_vault.update(new_state.raw_vault)
+
                         broker.publish("CONFIG_RELOADED")
+
+                        # If the listeners changed during the config reload, trigger the network rebind internally!
+                        new_listeners = app_state.smtp.get("listeners", [])
+                        if old_listeners != new_listeners:
+                            logging.info("Configuration reload detected listener modifications. Triggering network rebinding...")
+                            reload_event.set()
 
                         new_api_conf = app_state.smtp.get("api", {})
                         if old_api_conf != new_api_conf:

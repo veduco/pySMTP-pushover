@@ -3,6 +3,8 @@ import json
 import logging
 import os
 import time
+import copy
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Depends, HTTPException, Security
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -10,8 +12,16 @@ import uvicorn
 from backend.events import broker
 from core.json_store import generate_self_signed_certificate, parse_bind_string
 
-# Disable built-in docs to keep the attack surface microscopic
-app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Safely yields the app context and traps normal ASGI cancellation events on shutdown."""
+    yield
+    try:
+        await asyncio.sleep(0.01)
+    except asyncio.CancelledError:
+        pass
+
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 security = HTTPBearer()
 active_server = None
 
@@ -67,22 +77,17 @@ async def api_stream_queue(request: Request):
 
 @app.get("/api/config", dependencies=[Depends(verify_token)])
 async def api_get_config(request: Request):
-    """Serves entirely from the live in-memory AppState parameters."""
-    from core.config import load_clean_json, CONFIG_FILE
+    """Serves entirely from the live in-memory AppState parameters with zero disk I/O."""
     state = request.app.state.gateway_state
 
-    # Mirror runtime structure back to the schema format for UI ingestion
-    config = {
-        "smtp": state.smtp.copy(),
-        "pushover": state.pushover,
-        "smarthost": state.smarthost,
-        "routes": load_clean_json(CONFIG_FILE).get("routes", {})  # Baseline tracks raw keys for UI diffs
-    }
+    # Deep copy prevents ANY mutation leaks back into the live running state
+    config = copy.deepcopy(state.raw_config)
+    vault = copy.deepcopy(state.raw_vault)
 
-    if "secret" in config["smtp"].get("api", {}):
+    # Safely blank out the API secret so it is not exposed in the frontend DOM
+    if "smtp" in config and "api" in config["smtp"] and "secret" in config["smtp"]["api"]:
         config["smtp"]["api"]["secret"] = ""
 
-    vault = load_clean_json(state.vault_file)
     return JSONResponse({
         "config": config,
         "vault": vault,
