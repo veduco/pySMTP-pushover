@@ -92,40 +92,11 @@ async def api_get_config(request: Request):
 @app.post("/api/save", dependencies=[Depends(verify_token)])
 async def api_save_config(request: Request):
     try:
-        from core.config import save_json, CONFIG_FILE, load_clean_json
-        from core.json_store import load_vault_safe
+        from core.config import CONFIG_FILE, save_unified_config
         data = await request.json()
-        state = request.app.state.gateway_state
-        conf_dir = os.path.dirname(CONFIG_FILE) or "."
 
-        if "config" in data:
-            new_cfg = data["config"]
-            if not new_cfg.get("smtp", {}).get("api", {}).get("secret", ""):
-                old_cfg = load_clean_json(CONFIG_FILE)
-                if "smtp" in new_cfg and "api" in new_cfg["smtp"]:
-                    new_cfg["smtp"]["api"]["secret"] = old_cfg.get("smtp", {}).get("api", {}).get("secret", "")
-            save_json(CONFIG_FILE, new_cfg)
-
-        if "vault" in data:
-            v_path = state.vault_file
-            vault_parsed = data["vault"]
-            old_vault_data = load_vault_safe(v_path)
-            new_vault = {"app": {}, "user": {}, "smarthost": {}}
-
-            for vtype in ["app", "user"]:
-                if isinstance(vault_parsed.get(vtype), list):
-                    for item in vault_parsed.get(vtype, []):
-                        name = item["name"]; tok = item["token"]; epoch = item["epoch"]
-                        if not tok: tok = old_vault_data.get(vtype, {}).get(name, {}).get("token", "")
-                        new_vault[vtype][name] = {"token": tok, "epoch": epoch}
-                else:
-                    new_vault[vtype] = vault_parsed.get(vtype, {})
-
-            for alias, tok in vault_parsed.get("smarthost", {}).items():
-                if not tok: tok = old_vault_data.get("smarthost", {}).get(alias, {}).get("token", "")
-                new_vault["smarthost"][alias] = {"token": tok, "epoch": int(time.time())}
-
-            save_json(v_path, new_vault)
+        # Delegate all payload normalization, secret hashing, and diff evaluation to the core engine
+        save_unified_config(CONFIG_FILE, new_config=data.get("config"), new_vault=data.get("vault"))
 
         return JSONResponse({"status": "saved"})
     except Exception as e:

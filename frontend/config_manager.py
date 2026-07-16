@@ -1,7 +1,6 @@
 import httpx
 from frontend.utils import get_active_config_path, trigger_local_backend_reload
-from frontend.config_editor import save_normalized_config
-from core.config import load_clean_json, load_vault_safe, load_config
+from core.config import load_clean_json, load_vault_safe, load_config, save_unified_config
 
 class ConfigManager:
     def __init__(self, ui_config: dict):
@@ -67,6 +66,6 @@ class ConfigManager:
             return "Configuration successfully synchronized with the remote gateway daemon."
 
         else:
-            listeners_changed = save_normalized_config(parsed_config, vault_parsed)
+            listeners_changed = save_unified_config(get_active_config_path(), new_config=parsed_config, new_vault=vault_parsed)
             trigger_local_backend_reload(listeners_only=listeners_changed)
             return "Configuration successfully synchronized with the local gateway daemon."

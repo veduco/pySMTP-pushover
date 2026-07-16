@@ -3,6 +3,7 @@ import re
 import time
 import shutil
 import json
+import hashlib
 
 # Facade: Expose separated components to maintain legacy import contracts
 from core.constants import *
@@ -176,3 +177,77 @@ def load_config(ignore_missing=False):
     _execute_unified_snapshot(state)
 
     return state
+
+def save_unified_config(config_path, new_config=None, new_vault=None):
+    """
+    Safely normalizes JSON payloads, hashes secrets securely, preserves existing API keys,
+    and commits config/vault structures to disk.
+    Returns a boolean indicating if SMTP listeners were modified (useful for hot-reloads).
+    """
+    listeners_changed = False
+    old_config = load_clean_json(config_path)
+
+    if new_config:
+        # 1. API Secret Preservation
+        api_secret = new_config.get("smtp", {}).get("api", {}).get("secret", "")
+        if not api_secret:
+            old_secret = old_config.get("smtp", {}).get("api", {}).get("secret", "")
+            if "smtp" in new_config and "api" in new_config["smtp"]:
+                new_config["smtp"]["api"]["secret"] = old_secret
+
+        # 2. SMTP Auth Secret Hashing
+        auth_block = new_config.get("smtp", {}).get("auth", {})
+        meta_block = new_config.get("_smtp_meta", {})
+        for user, pwd in list(auth_block.items()):
+            if str(pwd).startswith("RAW:"):
+                auth_block[user] = hashlib.sha256(pwd[4:].encode('utf-8')).hexdigest()
+                if user not in meta_block:
+                    meta_block[user] = int(time.time())
+
+        if "smtp" not in new_config:
+            new_config["smtp"] = {}
+
+        new_config["smtp"]["_smtp_meta"] = meta_block
+        if "_smtp_meta" in new_config:
+            del new_config["_smtp_meta"]
+
+        # 3. Evaluate critical listener diffs for signal dispatch
+        old_smtp = old_config.get("smtp", {})
+        if "listeners" in old_smtp and "listeners" in new_config["smtp"]:
+            if old_smtp["listeners"] != new_config["smtp"]["listeners"]:
+                listeners_changed = True
+        else:
+            listeners_changed = True
+
+        save_json(config_path, new_config)
+
+    if new_vault:
+        # Resolve dynamic Vault Path boundary
+        v_path = old_config.get("smtp", {}).get("vault_file")
+        v_path = os.path.normpath(os.path.join(os.path.dirname(config_path) or ".", v_path)) if v_path else os.path.join(os.path.dirname(config_path) or ".", "vault.json")
+
+        vault_data = load_vault_safe(v_path)
+        normalized_vault = {"app": {}, "user": {}, "smarthost": {}}
+
+        for vtype in ["app", "user"]:
+            if isinstance(new_vault.get(vtype), list):
+                # UI Schema array mapping logic
+                for item in new_vault.get(vtype, []):
+                    name = item.get("name")
+                    tok = item.get("token")
+                    epoch = item.get("epoch", int(time.time()))
+                    if not tok:
+                        tok = vault_data.get(vtype, {}).get(name, {}).get("token", "")
+                    normalized_vault[vtype][name] = {"token": tok, "epoch": epoch}
+            else:
+                # Direct API Dictionary mapping fallback
+                normalized_vault[vtype] = new_vault.get(vtype, {})
+
+        for alias, tok in new_vault.get("smarthost", {}).items():
+            if not tok:
+                tok = vault_data.get("smarthost", {}).get(alias, {}).get("token", "")
+            normalized_vault["smarthost"][alias] = {"token": tok, "epoch": int(time.time())}
+
+        save_json(v_path, normalized_vault)
+
+    return listeners_changed
