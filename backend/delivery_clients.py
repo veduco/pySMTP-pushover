@@ -16,11 +16,32 @@ async def send_pushover(payload, client: httpx.AsyncClient, state=None):
     target_token = payload.get("token", "")
     target_user = payload.get("user", "")
 
+    # Resolve aliases or cascade to global fallbacks if an alias was deleted
     if state and hasattr(state, "vault"):
+        # Resolve Token
         if target_token in state.vault.get("app", {}):
             target_token = state.vault["app"][target_token]
+        elif not target_token or target_token not in state.vault.get("app", {}):
+            # Alias vanished or is invalid; fallback to global token
+            global_token = state.pushover.get("token", "")
+            if global_token in state.vault.get("app", {}):
+                global_token = state.vault["app"][global_token]
+            target_token = global_token
+
+        # Resolve User Key
         if target_user in state.vault.get("user", {}):
             target_user = state.vault["user"][target_user]
+        elif not target_user or target_user not in state.vault.get("user", {}):
+            # Alias vanished or is invalid; fallback to global user key
+            global_user = state.pushover.get("user", "")
+            if global_user in state.vault.get("user", {}):
+                global_user = state.vault["user"][global_user]
+            target_user = global_user
+
+    # Strict Safety Check: Drop the message if credentials cannot be recovered
+    if not target_token or not target_user:
+        logging.warning(f"Pushover alert {payload['id']} dropped: Assigned alias or global fallback parameters are completely missing.")
+        return False, "DROP_ALERT"
 
     # HTTPX explicitly requires string mappings when initiating multipart/form-data POSTs
     api_payload = {
@@ -64,10 +85,16 @@ async def send_smarthost(payload, state):
     alias = payload.get("smarthost_alias")
     sh_conf = state.smarthost.get("aliases", {}).get(alias)
 
+    # Alias check with dynamic fallback to global configuration settings
     if not sh_conf:
-        error_msg = f"Alias '{alias}' is not defined in the configuration."
-        logging.error(f"Smarthost relay failed. {error_msg}")
-        return success, error_msg
+        global_alias = state.smarthost.get("globals", {}).get("alias")
+        if global_alias and global_alias in state.smarthost.get("aliases", {}):
+            logging.info(f"Smarthost alias '{alias}' was removed between retries. Falling back to global default relay '{global_alias}'.")
+            alias = global_alias
+            sh_conf = state.smarthost["aliases"][alias]
+        else:
+            logging.warning(f"Smarthost alert {payload['id']} dropped: Assigned relay alias '{alias}' has been deleted and no valid global default relay is configured.")
+            return False, "DROP_ALERT"
 
     try:
         if payload.get("force_plaintext") or payload.get("disable_attachments"):

@@ -59,6 +59,17 @@ async def async_worker_task(worker_id, async_q, state, broker, pushover_client):
                     try: os.remove(filepath)
                     except OSError: pass
         else:
+            # Check for the strict un-routable sentinel drop flag
+            if error_msg == "DROP_ALERT":
+                if broker: broker.publish("delete", {"id": payload["id"]})
+                if not payload.get("disable_persistence"):
+                    filepath = os.path.join(state.smtp["queue_dir"], f"{payload['id']}.json")
+                    if os.path.exists(filepath):
+                        try: os.remove(filepath)
+                        except OSError: pass
+                async_q.task_done()
+                continue
+
             payload["retry_count"] = payload.get("retry_count", 0) + 1
             payload["last_error"] = error_msg or "Unknown error"
             payload["last_attempt"] = now
