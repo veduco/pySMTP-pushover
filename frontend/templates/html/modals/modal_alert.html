@@ -1,0 +1,10 @@
+<div x-show="alertModal.open" class="modal-overlay" style="display: none; z-index: 1000;" x-transition @keydown.escape.window="alertModal.open = false">
+    <div class="modal-content" @click.away="alertModal.open = false" style="width: 400px; max-width: 90%; text-align: center; padding: 2rem;">
+        <div style="margin-bottom: 1rem; color: var(--danger-color);">
+            <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+        </div>
+        <h3 style="margin-top: 0; border-bottom: none; padding-bottom: 0;" x-text="alertModal.title"></h3>
+        <p style="font-size: 0.95rem; opacity: 0.8; margin-bottom: 1.5rem;" x-text="alertModal.message"></p>
+        <button type="button" class="warning" @click="alertModal.open = false" style="width: 100%; justify-content: center;">Acknowledge</button>
+    </div>
+</div>

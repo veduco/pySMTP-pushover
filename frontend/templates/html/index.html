@@ -66,7 +66,15 @@
         <div x-show="tab === 'ui'">{% include "tab_ui.html" %}</div>
 
         <div id="status" class="success"></div>
-        {% include "modals.html" %}
+        {% include "modals/modal_link_edit.html" %}
+        {% include "modals/modal_edit.html" %}
+        {% include "modals/modal_vault.html" %}
+        {% include "modals/modal_smtp_user.html" %}
+        {% include "modals/modal_smarthost.html" %}
+        {% include "modals/modal_listener.html" %}
+        {% include "modals/modal_ui_listener.html" %}
+        {% include "modals/modal_diff.html" %}
+        {% include "modals/modal_alert.html" %}
     </div>
 
     <script>
