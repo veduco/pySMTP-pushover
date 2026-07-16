@@ -14,12 +14,6 @@ isValidIP(ip) {
     const ipv6 = /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:))$/;
     return ipv4.test(ip) || ipv6.test(ip);
 },
-reorderRoute(oldIdx, newIdx) {
-    if (oldIdx === newIdx || oldIdx === null) return;
-    const item = this.mappings.splice(oldIdx, 1)[0];
-    this.mappings.splice(newIdx, 0, item);
-    this.draggedRouteIdx = null;
-},
 changeDefaultRoute(e) {
     const val = e.target.value;
     if (val === 'smarthost') {
@@ -38,20 +32,6 @@ changeDefaultRoute(e) {
         }
     }
     this.smtp.default_route = val;
-},
-toggleAlias(obj, field) {
-    const flag = field === 'token' ? '_isTokenAlias' : '_isUserAlias';
-    const raw = field === 'token' ? '_tokenRaw' : '_userRaw';
-    const alias = field === 'token' ? '_tokenAliasVal' : '_userAliasVal';
-    if (obj[flag]) {
-        obj[alias] = obj[field] || '';
-        obj[field] = obj[raw] || '';
-        obj[flag] = false;
-    } else {
-        obj[raw] = obj[field] || '';
-        obj[field] = obj[alias] || '';
-        obj[flag] = true;
-    }
 },
 formatTime(epoch) {
     if(!epoch) return "Never";
@@ -74,24 +54,33 @@ formatTime(epoch) {
     }
     return this.executeAbsoluteFormat(d);
 },
-getFullTime(epoch) { if(!epoch) return ""; return this.executeAbsoluteFormat(new Date(epoch * 1000)); },
+getFullTime(epoch) {
+    if(!epoch) return "";
+    return this.executeAbsoluteFormat(new Date(epoch * 1000));
+},
 executeAbsoluteFormat(d) {
-    const pad = num => String(num).padStart(2, '0'); const t_str = d.toLocaleString("en-US", { timeZone: this.ui_tz }); const localD = new Date(t_str);
-    const yyyy = localD.getFullYear(); const mm = pad(localD.getMonth() + 1); const dd = pad(localD.getDate()); let hh = localD.getHours(); const min = pad(localD.getMinutes()); const ss = pad(localD.getSeconds()); const ampm = hh >= 12 ? 'PM' : 'AM';
-    if (this.ui_fmt.includes("hh")) { hh = hh % 12; hh = hh ? hh : 12; hh = pad(hh); return `${mm}/${dd}/${yyyy} ${hh}:${min}:${ss} ${ampm}`; }
-    if (this.ui_fmt.startsWith("DD")) { return `${dd}/${mm}/${yyyy} ${pad(hh)}:${min}:${ss}`; }
+    const pad = num => String(num).padStart(2, '0');
+    const t_str = d.toLocaleString("en-US", { timeZone: this.ui_tz });
+    const localD = new Date(t_str);
+    const yyyy = localD.getFullYear();
+    const mm = pad(localD.getMonth() + 1);
+    const dd = pad(localD.getDate());
+    let hh = localD.getHours();
+    const min = pad(localD.getMinutes());
+    const ss = pad(localD.getSeconds());
+    const ampm = hh >= 12 ? 'PM' : 'AM';
+
+    if (this.ui_fmt.includes("hh")) {
+        hh = hh % 12;
+        hh = hh ? hh : 12;
+        hh = pad(hh);
+        return `${mm}/${dd}/${yyyy} ${hh}:${min}:${ss} ${ampm}`;
+    }
+    if (this.ui_fmt.startsWith("DD")) {
+        return `${dd}/${mm}/${yyyy} ${pad(hh)}:${min}:${ss}`;
+    }
     return `${yyyy}-${mm}-${dd} ${pad(hh)}:${min}:${ss}`;
 },
-addMapping() {
-    this.mappings.push({
-        _uid: Date.now().toString(36) + Math.random().toString(36).substr(2),
-        _key: '', match: 'to', method: 'pushover', token: '', user: '', _isRegex: false,
-        _isTokenAlias: true, _isUserAlias: true,
-        _tokenAliasVal: '', _tokenRaw: '', _userAliasVal: '', _userRaw: '', smarthost_alias: '',
-        _showToken: false, _showUser: false, _showAdv: this.ui_expand_adv, disable_attachments: false, force_plaintext: false
-    });
-},
-
 checkTimezone() {
     if (this.ui_tz && !this.validTimezones.includes(this.ui_tz)) {
         this.tzError = 'Please select a valid timezone location from the list.';
@@ -99,16 +88,4 @@ checkTimezone() {
     }
     this.tzError = '';
     return true;
-},
-
-confirmSave() {
-    if (this.diffModal.targetForm === 'ui_form') {
-        if (!this.checkTimezone()) {
-            this.diffModal.open = false;
-            return;
-        }
-    }
-    this.diffModal.open = false;
-    const f = document.getElementById(this.diffModal.targetForm);
-    if (f) htmx.trigger(f, 'submit');
 },
