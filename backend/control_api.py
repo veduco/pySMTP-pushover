@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import uvicorn
 from backend.events import broker
-from core.json_store import generate_self_signed_certificate
+from core.json_store import generate_self_signed_certificate, parse_bind_string
 
 # Disable built-in docs to keep the attack surface microscopic
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
@@ -132,8 +132,7 @@ async def start_control_api(api_conf, reload_event, mappings_reload_event, gatew
     app.state.gateway_state = gateway_state
 
     bind = api_conf.get("bind", "0.0.0.0:6443")
-    host, port_str = bind.rsplit(":", 1) if ":" in bind else (bind, "6443")
-    port = int(port_str)
+    host, port = parse_bind_string(bind, 6443)
 
     cert = api_conf.get("tls_cert_file")
     key = api_conf.get("tls_key_file")

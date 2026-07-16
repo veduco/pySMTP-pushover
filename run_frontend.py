@@ -17,6 +17,7 @@ if SCRIPT_DIR not in sys.path:
 
 from core.config import load_clean_json, save_json, UI_CONFIG_FILE, clear_ui_config_cache, get_cached_ui_config
 from core.logger import SuppressUvicornNoiseFilter
+from core.json_store import parse_bind_string
 from frontend.api import app
 from frontend.utils import generate_ui_cert
 
@@ -88,8 +89,7 @@ if __name__ == "__main__":
         for l_conf in listeners:
             bind = l_conf.get("bind", "0.0.0.0:8443")
             use_https = l_conf.get("https", True)
-            host, port_str = bind.rsplit(":", 1) if ":" in bind else (bind, "8443")
-            port = int(port_str)
+            host, port = parse_bind_string(bind, 8443)
 
             protocol = "https" if use_https else "http"
 

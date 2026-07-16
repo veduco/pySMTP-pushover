@@ -38,12 +38,6 @@ def get_tls_context(listener_conf, fallback_hostname):
     tls_context.load_cert_chain(certfile=cert_file, keyfile=key_file)
     return tls_context
 
-def get_listen_params(listen_str):
-    if ":" in listen_str:
-        address, port = listen_str.rsplit(":", 1)
-        return address, int(port)
-    return listen_str, 25
-
 def get_file_hash(filepath):
     if not filepath or not os.path.exists(filepath):
         return ""

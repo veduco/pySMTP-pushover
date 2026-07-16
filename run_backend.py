@@ -14,9 +14,10 @@ from core.config import load_config, SMTP_PID_FILE, CONFIG_FILE
 from core.logger import apply_logging_level
 from backend.smtp_handler import PushoverSMTPHandler, GatewayAuthenticator, GatewaySMTP
 from backend.delivery_worker import async_delivery_manager, load_queue_from_disk
-from backend.server import get_tls_context, get_listen_params, get_file_hash
+from backend.server import get_tls_context, get_file_hash
 from backend.control_api import start_control_api, stop_control_api
 from backend.events import broker
+from core.json_store import parse_bind_string
 
 def get_smtp_factory(handler, eff_hostname, tls_context, authenticator):
     """
@@ -103,7 +104,7 @@ async def main():
 
     for l_conf in app_state.smtp["listeners"]:
         bind = l_conf["bind"]
-        listen_address, listen_port = get_listen_params(bind)
+        listen_address, listen_port = parse_bind_string(bind, 25)
         eff_hostname = l_conf.get("hostname", app_state.smtp.get("hostname"))
 
         try:
@@ -195,7 +196,7 @@ async def main():
                         needs_restart = True
 
                     if needs_restart:
-                        listen_address, listen_port = get_listen_params(bind)
+                        listen_address, listen_port = parse_bind_string(bind, 25)
                         try:
                             tls_context = get_tls_context(l_conf, eff_hostname)
                             starttls_status = "enabled" if tls_context else "disabled"

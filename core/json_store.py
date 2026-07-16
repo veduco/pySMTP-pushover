@@ -71,3 +71,12 @@ def generate_self_signed_certificate(hostname: str, prefix_name: str):
         f.write(cert.public_bytes(serialization.Encoding.PEM))
 
     return cert_path, key_path
+
+def parse_bind_string(bind_str: str, default_port: int = 25):
+    """Unified helper to safely separate bind interfaces from port numbers."""
+    if not bind_str:
+        return "0.0.0.0", default_port
+    if ":" in bind_str:
+        address, port = bind_str.rsplit(":", 1)
+        return address, int(port)
+    return bind_str, default_port
