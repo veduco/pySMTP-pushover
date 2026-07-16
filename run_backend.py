@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 import sys
 import os
-import threading
-import queue
 import signal
 import logging
 import asyncio
-import concurrent.futures
 
 # Fortified path injection to ensure the module root is always found
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -15,58 +12,63 @@ if SCRIPT_DIR not in sys.path:
 
 from core.config import load_config, SMTP_PID_FILE, CONFIG_FILE
 from core.logger import apply_logging_level
-from backend.smtp_handler import PushoverSMTPHandler, GatewayAuthenticator, GatewayController
-from backend.delivery_worker import delivery_worker, load_queue_from_disk
+from backend.smtp_handler import PushoverSMTPHandler, GatewayAuthenticator, GatewaySMTP
+from backend.delivery_worker import async_delivery_manager, load_queue_from_disk
 from backend.server import get_tls_context, get_listen_params, get_file_hash
 from backend.control_api import start_control_api, stop_control_api
 from backend.events import broker
 
-shutdown_event = threading.Event()
-reload_event = threading.Event()
-mappings_reload_event = threading.Event()
+def get_smtp_factory(handler, eff_hostname, tls_context, authenticator):
+    """
+    Safely constructs the aiosmtpd Protocol class.
+    Attributes that are not supported in the __init__ signature are bound post-instantiation.
+    """
+    def factory():
+        smtp_instance = GatewaySMTP(
+            handler,
+            ident=eff_hostname,
+            tls_context=tls_context,
+            authenticator=authenticator,
+            auth_require_tls=False
+        )
 
-api_loop = None
-api_thread = None
+        # Explicitly set the internal hostname used for EHLO responses
+        smtp_instance.hostname = eff_hostname
 
-def sig_handler(signum, frame):
-    if signum in (signal.SIGINT, signal.SIGTERM):
-        logging.info(f"Received signal {signum}. Initiating shutdown...")
-        shutdown_event.set()
-    elif hasattr(signal, 'SIGUSR1') and signum == signal.SIGUSR1:
-        logging.info("Received SIGUSR1. Scheduling TCP listener and TLS reload...")
-        reload_event.set()
-    elif hasattr(signal, 'SIGUSR2') and signum == signal.SIGUSR2:
-        logging.info("Received SIGUSR2. Scheduling full configuration reload...")
-        mappings_reload_event.set()
+        # Safely enforce size limits without triggering kwargs TypeErrors
+        if hasattr(smtp_instance, 'command_size_limit'):
+            smtp_instance.command_size_limit = 10485760
+        if hasattr(smtp_instance, 'data_line_length_limit'):
+            smtp_instance.data_line_length_limit = 10485760
 
-def run_api_server(api_conf):
-    global api_loop
-    api_loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(api_loop)
-    api_loop.run_until_complete(start_control_api(api_conf, reload_event, mappings_reload_event))
-    api_loop.run_forever()
+        return smtp_instance
+    return factory
 
-def stop_api_server():
-    global api_loop, api_thread
-    if api_loop and api_loop.is_running():
-        future = asyncio.run_coroutine_threadsafe(stop_control_api(), api_loop)
-        try:
-            future.result(timeout=2.0)
-        except concurrent.futures.TimeoutError:
-            logging.debug("Control API graceful teardown timed out. Forcing termination.")
-        except Exception as e:
-            logging.error(f"Error stopping Control API: {repr(e)}")
+async def main():
+    shutdown_event = asyncio.Event()
+    reload_event = asyncio.Event()
+    mappings_reload_event = asyncio.Event()
 
-        api_loop.call_soon_threadsafe(api_loop.stop)
+    loop = asyncio.get_running_loop()
 
-    if api_thread and api_thread.is_alive():
-        api_thread.join(timeout=2.0)
+    def _sig_handler(signum):
+        if signum in (signal.SIGINT, signal.SIGTERM):
+            logging.info(f"Received signal {signum}. Initiating graceful shutdown...")
+            shutdown_event.set()
+        elif signum == getattr(signal, 'SIGUSR1', None):
+            logging.info("Received SIGUSR1. Scheduling TCP listener and TLS reload...")
+            reload_event.set()
+        elif signum == getattr(signal, 'SIGUSR2', None):
+            logging.info("Received SIGUSR2. Scheduling full configuration reload...")
+            mappings_reload_event.set()
 
-if __name__ == "__main__":
-    signal.signal(signal.SIGINT, sig_handler)
-    signal.signal(signal.SIGTERM, sig_handler)
-    if hasattr(signal, 'SIGUSR1'): signal.signal(signal.SIGUSR1, sig_handler)
-    if hasattr(signal, 'SIGUSR2'): signal.signal(signal.SIGUSR2, sig_handler)
+    try:
+        loop.add_signal_handler(signal.SIGINT, _sig_handler, signal.SIGINT)
+        loop.add_signal_handler(signal.SIGTERM, _sig_handler, signal.SIGTERM)
+        if hasattr(signal, 'SIGUSR1'): loop.add_signal_handler(signal.SIGUSR1, _sig_handler, signal.SIGUSR1)
+        if hasattr(signal, 'SIGUSR2'): loop.add_signal_handler(signal.SIGUSR2, _sig_handler, signal.SIGUSR2)
+    except NotImplementedError:
+        pass # Windows development fallback (Docker environments guarantee POSIX signals)
 
     with open(SMTP_PID_FILE, 'w') as f:
         f.write(str(os.getpid()))
@@ -83,18 +85,18 @@ if __name__ == "__main__":
 
     api_conf = app_state.smtp.get("api", {})
     if api_conf.get("enabled"):
-        api_thread = threading.Thread(target=run_api_server, args=(api_conf,), daemon=True)
-        api_thread.start()
+        asyncio.create_task(start_control_api(api_conf, reload_event, mappings_reload_event))
 
-    msg_queue = queue.Queue()
+    msg_queue = asyncio.Queue()
     load_queue_from_disk(msg_queue, app_state)
 
-    worker_thread = threading.Thread(target=delivery_worker, args=(msg_queue, app_state, shutdown_event, broker), daemon=True)
-    worker_thread.start()
+    # Boot 5 concurrent delivery tasks in the background
+    num_workers = 5
+    worker_task = asyncio.create_task(async_delivery_manager(msg_queue, app_state, num_workers, broker))
 
     handler = PushoverSMTPHandler(app_state, msg_queue, broker)
     authenticator = GatewayAuthenticator(app_state)
-    active_controllers = {}
+    active_servers = {}
 
     startup_errors = False
 
@@ -109,14 +111,11 @@ if __name__ == "__main__":
 
             logging.debug(f"Starting SMTP listener on {listen_address}:{listen_port} (STARTTLS: {starttls_status}, Hostname: {eff_hostname})")
 
-            ctrl = GatewayController(
-                handler, hostname=listen_address, port=listen_port, server_hostname=eff_hostname,
-                tls_context=tls_context, authenticator=authenticator, auth_require_tls=False
-            )
-            ctrl.start()
+            factory = get_smtp_factory(handler, eff_hostname, tls_context, authenticator)
+            server = await loop.create_server(factory, host=listen_address, port=listen_port)
 
-            active_controllers[bind] = {
-                "controller": ctrl,
+            active_servers[bind] = {
+                "server": server,
                 "config": {
                     "hostname": eff_hostname,
                     "starttls": l_conf.get("starttls", False),
@@ -129,7 +128,7 @@ if __name__ == "__main__":
             logging.info(f"SMTP listener started on {listen_address}:{listen_port} (STARTTLS: {starttls_status}, Hostname: {eff_hostname})")
         except Exception as e:
             startup_errors = True
-            logging.critical(f"CRITICAL: Failed to bind SMTP listener to {bind}. Port may be occupied. Skipping. Error: {e}")
+            logging.critical(f"CRITICAL: Failed to bind SMTP listener to {bind}. Port may be occupied. Error: {e}")
 
     if startup_errors:
         logging.warning("Application startup completed with errors.")
@@ -138,19 +137,32 @@ if __name__ == "__main__":
 
     try:
         while not shutdown_event.is_set():
+            # Soft wait allows the loop to periodically catch signals gracefully
+            done, pending = await asyncio.wait(
+                [
+                    asyncio.create_task(shutdown_event.wait()),
+                    asyncio.create_task(reload_event.wait()),
+                    asyncio.create_task(mappings_reload_event.wait())
+                ],
+                return_when=asyncio.FIRST_COMPLETED,
+                timeout=1.0
+            )
+
             if reload_event.is_set():
                 reload_event.clear()
                 logging.info("Checking listeners for dynamic network or TLS modifications...")
 
-                current_binds = set(active_controllers.keys())
+                current_binds = set(active_servers.keys())
                 new_binds = set(l["bind"] for l in app_state.smtp["listeners"])
 
                 reload_errors = False
 
                 for bind in current_binds - new_binds:
                     logging.info(f"Removing deprecated listener on {bind}...")
-                    active_controllers[bind]["controller"].stop()
-                    del active_controllers[bind]
+                    srv = active_servers[bind]["server"]
+                    srv.close()
+                    await srv.wait_closed()
+                    del active_servers[bind]
 
                 for l_conf in app_state.smtp["listeners"]:
                     bind = l_conf["bind"]
@@ -167,12 +179,14 @@ if __name__ == "__main__":
                     }
 
                     needs_restart = False
-                    if bind not in active_controllers:
+                    if bind not in active_servers:
                         logging.info(f"New listener declaration discovered for {bind}.")
                         needs_restart = True
-                    elif active_controllers[bind]["config"] != eff_config:
+                    elif active_servers[bind]["config"] != eff_config:
                         logging.info(f"Configuration or TLS modification detected for {bind}. Restarting listener...")
-                        active_controllers[bind]["controller"].stop()
+                        srv = active_servers[bind]["server"]
+                        srv.close()
+                        await srv.wait_closed()
                         needs_restart = True
 
                     if needs_restart:
@@ -183,17 +197,14 @@ if __name__ == "__main__":
 
                             logging.debug(f"Starting SMTP listener on {listen_address}:{listen_port} (STARTTLS: {starttls_status}, Hostname: {eff_hostname})")
 
-                            ctrl = GatewayController(
-                                handler, hostname=listen_address, port=listen_port, server_hostname=eff_hostname,
-                                tls_context=tls_context, authenticator=authenticator, auth_require_tls=False
-                            )
-                            ctrl.start()
+                            factory = get_smtp_factory(handler, eff_hostname, tls_context, authenticator)
+                            server = await loop.create_server(factory, host=listen_address, port=listen_port)
 
-                            active_controllers[bind] = {"controller": ctrl, "config": eff_config}
+                            active_servers[bind] = {"server": server, "config": eff_config}
                             logging.info(f"SMTP listener started on {listen_address}:{listen_port} (STARTTLS: {starttls_status}, Hostname: {eff_hostname})")
                         except Exception as e:
                             reload_errors = True
-                            logging.critical(f"CRITICAL: Failed to start SMTP listener on {bind}. Port may be occupied. Skipping. Error: {e}")
+                            logging.critical(f"CRITICAL: Failed to start SMTP listener on {bind}. Port may be occupied. Error: {e}")
 
                 if reload_errors:
                     logging.warning("Listener hot-reload completed with errors.")
@@ -221,10 +232,9 @@ if __name__ == "__main__":
                         new_api_conf = app_state.smtp.get("api", {})
                         if old_api_conf != new_api_conf:
                             logging.info("Control API configuration change detected. Restarting API listener...")
-                            stop_api_server()
+                            await stop_control_api()
                             if new_api_conf.get("enabled"):
-                                api_thread = threading.Thread(target=run_api_server, args=(new_api_conf,), daemon=True)
-                                api_thread.start()
+                                asyncio.create_task(start_control_api(new_api_conf, reload_event, mappings_reload_event))
 
                         apply_logging_level(app_state.smtp["loglevel"])
                         os.makedirs(app_state.smtp["queue_dir"], exist_ok=True)
@@ -236,18 +246,29 @@ if __name__ == "__main__":
                     else:
                         logging.warning("Config reload failed. Retaining active rules matrix.")
 
-            shutdown_event.wait(1.0)
-
-    except KeyboardInterrupt:
-        logging.info("Keyboard interrupt received.")
     finally:
         logging.info("Shutting down... Flashing queues to disk safely...")
-        stop_api_server()
-        for data in active_controllers.values():
-            data["controller"].stop()
+        await stop_control_api()
 
-        msg_queue.put(None)
-        worker_thread.join()
+        # Close all SMTP sockets to forcefully stop new traffic
+        for data in active_servers.values():
+            srv = data["server"]
+            srv.close()
+            await srv.wait_closed()
+
+        # Push shutdown sentinels to tear down the 5 concurrent worker tasks gracefully
+        for _ in range(num_workers):
+            await msg_queue.put(None)
+
+        # Await execution completion
+        await worker_task
+
         if os.path.exists(SMTP_PID_FILE):
             os.remove(SMTP_PID_FILE)
         logging.info("Shutdown complete.")
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass

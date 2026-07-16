@@ -7,7 +7,9 @@ RUN apk update && \
         py3-uvicorn \
         py3-jinja2 \
         py3-multipart \
-        py3-cryptography
+        py3-cryptography \
+        py3-requests \
+        py3-httpx
 
 WORKDIR /app
 

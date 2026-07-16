@@ -6,7 +6,6 @@ import logging
 import base64
 import string
 import hashlib
-from aiosmtpd.controller import Controller
 from aiosmtpd.smtp import SMTP
 
 from core.config import MAX_URL_CHARS, MAX_URL_TITLE_CHARS
@@ -50,21 +49,6 @@ class GatewaySMTP(SMTP):
             arg = re.sub(r'(?i)\s+ORCPT=[^\s]*', '', arg)
             arg = re.sub(r'(?i)\s+NOTIFY=[^\s]*', '', arg)
         return await super().smtp_RCPT(arg)
-
-class GatewayController(Controller):
-    def __init__(self, handler, **kwargs):
-        self._smtp_kwargs = kwargs.copy()
-        super().__init__(handler, **kwargs)
-
-    def factory(self):
-        kwargs = self._smtp_kwargs.copy()
-        for k in ['hostname', 'port', 'server_hostname', 'ready_timeout']: kwargs.pop(k, None)
-        for attr in ['data_size_limit', 'enable_SMTPUTF8', 'ident', 'tls_context', 'tls_require_cert', 'authenticator', 'auth_require_tls', 'auth_exclude_mechanism', 'auth_callback_exceptions', 'timeout']:
-            if hasattr(self, attr) and attr not in kwargs: kwargs[attr] = getattr(self, attr)
-        smtp_instance = GatewaySMTP(self.handler, **kwargs)
-        if hasattr(smtp_instance, 'command_size_limit'): smtp_instance.command_size_limit = 10485760
-        if hasattr(smtp_instance, 'data_line_length_limit'): smtp_instance.data_line_length_limit = 10485760
-        return smtp_instance
 
 class GatewayAuthenticator:
     def __init__(self, state): self.state = state
@@ -203,12 +187,19 @@ class PushoverSMTPHandler:
                 }
 
                 if method == "pushover":
-                    payload["user"] = route["user"]
-                    payload["token"] = route["token"]
+                    # Properly cascade missing route parameters to global fallbacks
+                    payload["user"] = route.get("user") or self.state.pushover.get("user", "")
+                    payload["token"] = route.get("token") or self.state.pushover.get("token", "")
+
                     for param in ["device", "sound", "url", "url_title", "priority", "ttl", "tags", "retry", "expire"]:
-                        if param in route: payload[param] = route[param]
-                    if "url" in route and route["url"]: payload["url"] = route["url"][:MAX_URL_CHARS]
-                    if "url_title" in route and route["url_title"]: payload["url_title"] = route["url_title"][:MAX_URL_TITLE_CHARS]
+                        val = route.get(param)
+                        if val is None or val == "":
+                            val = self.state.pushover.get(param)
+                        if val is not None and val != "":
+                            payload[param] = val
+
+                    if "url" in payload and payload["url"]: payload["url"] = str(payload["url"])[:MAX_URL_CHARS]
+                    if "url_title" in payload and payload["url_title"]: payload["url_title"] = str(payload["url_title"])[:MAX_URL_TITLE_CHARS]
                 else:
                     payload["smarthost_alias"] = route.get("smarthost_alias")
                     payload["force_plaintext"] = force_pt
@@ -224,7 +215,7 @@ class PushoverSMTPHandler:
                     filepath = os.path.join(self.state.smtp["queue_dir"], f"{payload['id']}.json")
                     with open(filepath, 'w') as f: json.dump(payload, f)
 
-                self.msg_queue.put(payload)
+                await self.msg_queue.put(payload)
                 if self.broker:
                     self.broker.publish("add", payload)
 

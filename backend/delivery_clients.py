@@ -1,24 +1,25 @@
 import base64
 import logging
-import requests
-import smtplib
 import ssl
 import email.utils
 from email.message import EmailMessage
 from email import message_from_bytes, policy
 from core.config import PUSHOVER_API_URL
+import httpx
+import aiosmtplib
 
-def send_pushover(payload):
+async def send_pushover(payload, client: httpx.AsyncClient):
     success = False
     error_msg = None
 
+    # HTTPX explicitly requires string mappings when initiating multipart/form-data POSTs
     api_payload = {
-        "token": payload["token"], "user": payload["user"], "message": payload["message"],
-        "title": payload["title"], "timestamp": payload["timestamp"], "html": 1 if payload.get("is_html") else 0
+        "token": str(payload["token"]), "user": str(payload["user"]), "message": str(payload["message"]),
+        "title": str(payload["title"]), "timestamp": str(payload["timestamp"]), "html": "1" if payload.get("is_html") else "0"
     }
 
     for param in ["device", "sound", "url", "url_title", "priority", "ttl", "tags", "retry", "expire"]:
-        if param in payload: api_payload[param] = payload[param]
+        if param in payload: api_payload[param] = str(payload[param])
 
     try:
         post_kwargs = {}
@@ -29,7 +30,8 @@ def send_pushover(payload):
         else:
             post_kwargs = {"json": api_payload}
 
-        response = requests.post(PUSHOVER_API_URL, timeout=10, **post_kwargs)
+        # Pipelined through the shared globally-locked connection pool
+        response = await client.post(PUSHOVER_API_URL, **post_kwargs)
         if response.status_code == 200:
             logging.info(f"Successfully sent Pushover notification: '{payload['title']}'")
             success = True
@@ -42,7 +44,7 @@ def send_pushover(payload):
 
     return success, error_msg
 
-def send_smarthost(payload, state):
+async def send_smarthost(payload, state):
     success = False
     error_msg = None
 
@@ -101,18 +103,21 @@ def send_smarthost(payload, state):
         if not local_ehlo: local_ehlo = state.smtp.get("hostname")
         if not local_ehlo: local_ehlo = "localhost"
 
-        with smtplib.SMTP(host, port, timeout=15) as server:
-            server.ehlo(local_ehlo)
-            if sh_conf.get("starttls"):
-                if sh_conf.get("disable_tls_validation"):
-                    server.starttls(context=ssl._create_unverified_context())
-                else:
-                    server.starttls()
-                server.ehlo(local_ehlo)
-            if sh_conf.get("auth"):
-                sh_pass = state.vault.get("smarthost", {}).get(alias, "")
-                server.login(sh_conf.get("username", ""), sh_pass)
-            server.sendmail(payload.get("sender"), payload.get("recipients"), final_send_bytes)
+        smtp_client = aiosmtplib.SMTP(hostname=host, port=port, timeout=15)
+        await smtp_client.connect()
+        await smtp_client.ehlo(local_ehlo)
+
+        if sh_conf.get("starttls"):
+            tls_context = ssl._create_unverified_context() if sh_conf.get("disable_tls_validation") else ssl.create_default_context()
+            await smtp_client.starttls(server_hostname=host, tls_context=tls_context)
+            await smtp_client.ehlo(local_ehlo)
+
+        if sh_conf.get("auth"):
+            sh_pass = state.vault.get("smarthost", {}).get(alias, "")
+            await smtp_client.login(sh_conf.get("username", ""), sh_pass)
+
+        await smtp_client.sendmail(payload.get("sender"), payload.get("recipients"), final_send_bytes)
+        await smtp_client.quit()
 
         logging.info(f"Successfully relayed email '{payload['title']}' via Smarthost '{alias}'.")
         success = True

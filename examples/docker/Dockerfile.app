@@ -3,11 +3,12 @@ FROM alpine:3.24.1
 RUN apk update && \
     apk add --no-cache \
         python3 \
-        py3-requests \
         py3-cryptography \
         py3-aiosmtpd \
         py3-passlib \
-        py3-aiohttp
+        py3-aiohttp \
+        py3-httpx \
+        py3-aiosmtplib
 
 WORKDIR /app
 

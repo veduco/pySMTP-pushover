@@ -2,19 +2,15 @@ import os
 import time
 import json
 import logging
-import queue
+import asyncio
+import httpx
 from backend.delivery_clients import send_pushover, send_smarthost
 
-def delivery_worker(msg_queue, state, shutdown_event, broker=None):
-    logging.debug("Delivery worker thread started.")
-    while not shutdown_event.is_set():
-        try:
-            payload = msg_queue.get(timeout=1.0)
-        except queue.Empty:
-            continue
-
+async def async_worker_task(worker_id, async_q, state, broker, pushover_client):
+    while True:
+        payload = await async_q.get()
         if payload is None:
-            msg_queue.task_done()
+            async_q.task_done()
             break
 
         now = int(time.time())
@@ -24,7 +20,7 @@ def delivery_worker(msg_queue, state, shutdown_event, broker=None):
             filepath = os.path.join(state.smtp["queue_dir"], f"{payload['id']}.json")
             if payload.get("retry_count", 0) > 0:
                 if not os.path.exists(filepath):
-                    msg_queue.task_done()
+                    async_q.task_done()
                     continue
                 try:
                     file_mtime = os.path.getmtime(filepath)
@@ -38,18 +34,20 @@ def delivery_worker(msg_queue, state, shutdown_event, broker=None):
                     pass
 
         if now < next_retry:
-            msg_queue.put(payload)
-            msg_queue.task_done()
-            shutdown_event.wait(1.0)
+            # Spawning a non-blocking requeue task so this worker can immediately process the next item
+            async def delayed_requeue(p):
+                await asyncio.sleep(1.0)
+                await async_q.put(p)
+            asyncio.create_task(delayed_requeue(payload))
+            async_q.task_done()
             continue
 
         method = payload.get("method", "pushover")
 
-        # Execute the cleanly modularized delivery client block
         if method == "pushover":
-            success, error_msg = send_pushover(payload)
+            success, error_msg = await send_pushover(payload, pushover_client)
         elif method == "smarthost":
-            success, error_msg = send_smarthost(payload, state)
+            success, error_msg = await send_smarthost(payload, state)
         else:
             success, error_msg = False, "Unknown delivery method."
 
@@ -76,9 +74,19 @@ def delivery_worker(msg_queue, state, shutdown_event, broker=None):
                     try:
                         with open(filepath, 'w') as f: json.dump(payload, f)
                     except Exception: pass
-            msg_queue.put(payload)
+            await async_q.put(payload)
 
-        msg_queue.task_done()
+        async_q.task_done()
+
+async def async_delivery_manager(msg_queue, state, num_workers, broker):
+    # Enforce strict 1-connection maximum to comply precisely with Pushover API limits
+    limits = httpx.Limits(max_connections=1, max_keepalive_connections=1)
+    async with httpx.AsyncClient(limits=limits, timeout=15.0) as pushover_client:
+        workers = [
+            asyncio.create_task(async_worker_task(i, msg_queue, state, broker, pushover_client))
+            for i in range(num_workers)
+        ]
+        await asyncio.gather(*workers, return_exceptions=True)
 
 def load_queue_from_disk(msg_queue, state):
     if not os.path.exists(state.smtp["queue_dir"]): return
@@ -88,7 +96,7 @@ def load_queue_from_disk(msg_queue, state):
             filepath = os.path.join(state.smtp["queue_dir"], filename)
             try:
                 with open(filepath, 'r') as f:
-                    msg_queue.put(json.load(f))
+                    msg_queue.put_nowait(json.load(f))
                     count += 1
             except Exception: pass
     if count > 0: logging.info(f"Read {count} messages from persistent store")
