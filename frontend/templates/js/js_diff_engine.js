@@ -105,22 +105,23 @@ requestSave(formId) {
                     diffs.push(...getDiffs(val1, val2, currentPath));
                 } else {
                     let humanKey = currentPath;
+                    let m;
 
-                    // Clean human-readable label generation based on the normalized dictionary keys
-                    if (currentPath.startsWith('Gateway Config.routes.')) {
-                        humanKey = `Route Mapping Rule [${currentPath.split('.')[2] || 'New'}]`;
-                    } else if (currentPath.startsWith('Gateway Config.smtp.listeners.')) {
-                        humanKey = `SMTP Port Listener [${currentPath.split('.')[3]}]`;
-                    } else if (currentPath.startsWith('UI/Backend Context.listeners.')) {
-                        humanKey = `UI Port Listener [${currentPath.split('.')[2]}]`;
-                    } else if (currentPath.startsWith('Gateway Config.smarthost.aliases.')) {
-                        humanKey = `Smarthost Configuration [${currentPath.split('.')[3] || 'New'}]`;
-                    } else if (currentPath.startsWith('Token Vault.app.')) {
-                        humanKey = `App Token Vault [${currentPath.split('.')[2]}]`;
-                    } else if (currentPath.startsWith('Token Vault.user.')) {
-                        humanKey = `User Key Vault [${currentPath.split('.')[2]}]`;
-                    } else if (currentPath.startsWith('Token Vault.smarthost.')) {
-                        humanKey = `Smarthost Vault Password [${currentPath.split('.')[2] || 'New'}]`;
+                    // Clean human-readable label generation using Regex to safely extract keys that contain dots
+                    if ((m = currentPath.match(/^Gateway Config\.routes\.(.+?)(?:\.(?:match|method|disable_attachments|force_plaintext|token|user|device|sound|url|url_title|tags|priority|ttl|retry|expire|smarthost_alias))?$/))) {
+                        humanKey = `Route Mapping Rule [${m[1]}]`;
+                    } else if ((m = currentPath.match(/^Gateway Config\.smtp\.listeners\.(.+?)(?:\.(?:bind|hostname|starttls|tls_cert_file|tls_key_file))?$/))) {
+                        humanKey = `SMTP Port Listener [${m[1]}]`;
+                    } else if ((m = currentPath.match(/^UI\/Backend Context\.listeners\.(.+?)(?:\.(?:bind|https|tls_cert|tls_key))?$/))) {
+                        humanKey = `UI Port Listener [${m[1]}]`;
+                    } else if ((m = currentPath.match(/^Gateway Config\.smarthost\.aliases\.(.+?)(?:\.(?:hostname|advertised_hostname|port|starttls|disable_tls_validation|auth|username|disable_attachments|force_plaintext))?$/))) {
+                        humanKey = `Smarthost Configuration [${m[1]}]`;
+                    } else if ((m = currentPath.match(/^Token Vault\.app\.(.+?)(?:\.(?:token|epoch))?$/))) {
+                        humanKey = `App Token Vault [${m[1]}]`;
+                    } else if ((m = currentPath.match(/^Token Vault\.user\.(.+?)(?:\.(?:token|epoch))?$/))) {
+                        humanKey = `User Key Vault [${m[1]}]`;
+                    } else if ((m = currentPath.match(/^Token Vault\.smarthost\.(.+?)(?:\.(?:token|epoch))?$/))) {
+                        humanKey = `Smarthost Vault Password [${m[1]}]`;
                     } else if (currentPath.startsWith('UI/Backend Context.')) {
                         humanKey = `UI Parameter -> ${currentPath.split('.')[1] || 'Unknown'}`;
                     } else if (currentPath.startsWith('Gateway Config.')) {
