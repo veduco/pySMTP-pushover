@@ -136,7 +136,9 @@ requestSave(formId) {
                     if (displayOld === '[Active Configuration]' && displayNew === 'None') displayNew = '[Deleted]';
                     if (displayOld === 'None' && displayNew === '[Active Configuration]') displayOld = '[Not Configured]';
 
-                    const isSensitive = ['token', 'user', 'password', 'secret'].includes(key) || (currentPath.includes('.auth.') && key !== 'auth');
+                    const isSensitive = ['token', 'user', 'password', 'secret'].includes(key) ||
+                                        (currentPath.includes('.auth.') && key !== 'auth') ||
+                                        currentPath.startsWith('Token Vault.smarthost.');
 
                     if (isSensitive) {
                         const allAliases = [...(this.vaultAppAliases || []), ...(this.vaultUserAliases || [])];
