@@ -43,8 +43,11 @@ def process_legacy_config(config):
 def save_normalized_config(parsed, vault_parsed=None):
     old_config = load_clean_json(get_active_config_path())
 
-    if parsed.get("smtp", {}).get("api", {}).get("secret") == "__RETAIN__":
-        parsed["smtp"]["api"]["secret"] = old_config.get("smtp", {}).get("api", {}).get("secret", "")
+    api_secret = parsed.get("smtp", {}).get("api", {}).get("secret", "")
+    if not api_secret:
+        old_secret = old_config.get("smtp", {}).get("api", {}).get("secret", "")
+        if "smtp" in parsed and "api" in parsed["smtp"]:
+            parsed["smtp"]["api"]["secret"] = old_secret
 
     auth_block = parsed.get("smtp", {}).get("auth", {})
     meta_block = parsed.get("_smtp_meta", {})
@@ -64,10 +67,10 @@ def save_normalized_config(parsed, vault_parsed=None):
         for vtype in ["app", "user"]:
             for item in vault_parsed.get(vtype, []):
                 name = item["name"]; tok = item["token"]; epoch = item["epoch"]
-                if tok == "__RETAIN__": tok = vault_data[vtype].get(name, {}).get("token", "")
+                if not tok: tok = vault_data[vtype].get(name, {}).get("token", "")
                 new_vault[vtype][name] = {"token": tok, "epoch": epoch}
         for alias, tok in vault_parsed.get("smarthost", {}).items():
-            if tok == "__RETAIN__": tok = vault_data.get("smarthost", {}).get(alias, {}).get("token", "")
+            if not tok: tok = vault_data.get("smarthost", {}).get(alias, {}).get("token", "")
             new_vault["smarthost"][alias] = {"token": tok, "epoch": int(time.time())}
         save_json(v_path, new_vault)
 

@@ -72,9 +72,6 @@ async def api_get_config(request):
     conf_dir = os.path.dirname(CONFIG_FILE) or "."
     config = load_clean_json(CONFIG_FILE)
 
-    if config.get("smtp", {}).get("api", {}).get("secret"):
-        config["smtp"]["api"]["secret"] = "__RETAIN__"
-
     v_path = config.get("smtp", {}).get("vault_file")
     v_path = os.path.normpath(os.path.join(conf_dir, v_path)) if v_path else os.path.join(conf_dir, "vault.json")
     vault = load_clean_json(v_path)
@@ -94,9 +91,10 @@ async def api_save_config(request):
 
         if "config" in data:
             new_cfg = data["config"]
-            if new_cfg.get("smtp", {}).get("api", {}).get("secret") == "__RETAIN__":
+            if not new_cfg.get("smtp", {}).get("api", {}).get("secret", ""):
                 old_cfg = load_clean_json(CONFIG_FILE)
-                new_cfg["smtp"]["api"]["secret"] = old_cfg.get("smtp", {}).get("api", {}).get("secret", "")
+                if "smtp" in new_cfg and "api" in new_cfg["smtp"]:
+                    new_cfg["smtp"]["api"]["secret"] = old_cfg.get("smtp", {}).get("api", {}).get("secret", "")
             save_json(CONFIG_FILE, new_cfg)
 
         if "vault" in data:
@@ -108,17 +106,16 @@ async def api_save_config(request):
             new_vault = {"app": {}, "user": {}, "smarthost": {}}
 
             for vtype in ["app", "user"]:
-                # Intercept the list payload and unpack it to dictionary structures
                 if isinstance(vault_parsed.get(vtype), list):
                     for item in vault_parsed.get(vtype, []):
                         name = item["name"]; tok = item["token"]; epoch = item["epoch"]
-                        if tok == "__RETAIN__": tok = old_vault_data.get(vtype, {}).get(name, {}).get("token", "")
+                        if not tok: tok = old_vault_data.get(vtype, {}).get(name, {}).get("token", "")
                         new_vault[vtype][name] = {"token": tok, "epoch": epoch}
                 else:
                     new_vault[vtype] = vault_parsed.get(vtype, {})
 
             for alias, tok in vault_parsed.get("smarthost", {}).items():
-                if tok == "__RETAIN__": tok = old_vault_data.get("smarthost", {}).get(alias, {}).get("token", "")
+                if not tok: tok = old_vault_data.get("smarthost", {}).get(alias, {}).get("token", "")
                 new_vault["smarthost"][alias] = {"token": tok, "epoch": int(time.time())}
 
             save_json(v_path, new_vault)

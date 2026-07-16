@@ -30,7 +30,6 @@ document.addEventListener('alpine:init', () => {
 
             this.$watch('theme', val => { localStorage.setItem('theme', val); document.documentElement.setAttribute('data-theme', val); });
 
-            // Enforced tab-scoped data isolation by automatically resetting values on view navigation
             this.$watch('tab', (newVal, oldVal) => {
                 if (['routes', 'pushover', 'smarthost', 'server', 'ui', 'backend'].includes(oldVal)) {
                     this.resetTab(oldVal);
@@ -70,9 +69,9 @@ document.addEventListener('alpine:init', () => {
                 const shParts = this.ui_smarthost_sort.split('_');
                 this.smarthostSortCol = shParts[0]; this.smarthostSortDir = shParts[1] === 'desc' ? -1 : 1;
 
-                for(const [k, v] of Object.entries(this.vaultMeta.app || {})) { this.vaultApp.push({ name: k, epoch: v, token: '__RETAIN__' }); this.vaultAppAliases.push(k); }
-                for(const [k, v] of Object.entries(this.vaultMeta.user || {})) { this.vaultUser.push({ name: k, epoch: v, token: '__RETAIN__' }); this.vaultUserAliases.push(k); }
-                for(const [k, v] of Object.entries(this.vaultMeta.smarthost || {})) { this.vaultSmarthost[k] = { epoch: v, token: '__RETAIN__' }; }
+                for(const [k, v] of Object.entries(this.vaultMeta.app || {})) { this.vaultApp.push({ name: k, epoch: v, token: '' }); this.vaultAppAliases.push(k); }
+                for(const [k, v] of Object.entries(this.vaultMeta.user || {})) { this.vaultUser.push({ name: k, epoch: v, token: '' }); this.vaultUserAliases.push(k); }
+                for(const [k, v] of Object.entries(this.vaultMeta.smarthost || {})) { this.vaultSmarthost[k] = { epoch: v, token: '' }; }
 
                 const gKeys = ['user','token','device','sound','url','url_title','tags','priority','ttl','retry','expire','attachments','force_plaintext'];
                 const po = this.rawConfig.pushover || {};
