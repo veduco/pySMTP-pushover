@@ -303,14 +303,22 @@
                     <th style="width: 35%;">Setting Block</th>
                     <th style="width: 30%;">Previous State</th>
                     <th style="width: 30%;">New State</th>
+                    <th style="width: 5%; text-align: center;">Revert</th>
                 </tr>
             </thead>
             <tbody>
-                <template x-for="change in diffModal.changes" :key="change.key">
+                <template x-for="(change, index) in diffModal.changes" :key="change.key">
                     <tr>
                         <td style="word-wrap: break-word; word-break: break-all; white-space: normal;"><strong x-text="change.humanLabel"></strong></td>
                         <td style="color: var(--danger-color); text-decoration: line-through; word-wrap: break-word; word-break: break-all; white-space: normal;" x-text="change.old"></td>
                         <td style="color: #10b981; font-weight: bold; word-wrap: break-word; word-break: break-all; white-space: normal;" x-text="change.new"></td>
+                        <td style="text-align: center; vertical-align: middle;">
+                            <button type="button" class="outline danger icon-btn" style="border: none; padding: 4px;"
+                                    x-show="!(change.key.startsWith('Token Vault.smarthost.') && diffModal.changes.some(c => c.key === 'Gateway Config.smarthost.aliases.' + change.key.split('.').pop()))"
+                                    @click="revertChange(index)" title="Discard Change">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                            </button>
+                        </td>
                     </tr>
                 </template>
             </tbody>

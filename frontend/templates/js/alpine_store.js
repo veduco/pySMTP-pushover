@@ -14,6 +14,7 @@ document.addEventListener('alpine:init', () => {
         {% include "js_state.js" %}
         {% include "js_computed.js" %}
         {% include "js_utils.js" %}
+        {% include "js_diff_engine.js" %}
         {% include "js_api.js" %}
 
         {% include "js_modal_link.js" %}
