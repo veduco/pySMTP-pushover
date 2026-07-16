@@ -1,5 +1,5 @@
 import httpx
-from frontend.utils import get_active_config_path, trigger_backend_reload
+from frontend.utils import get_active_config_path, trigger_local_backend_reload
 from frontend.config_editor import save_normalized_config
 from core.config import load_clean_json, load_vault_safe, load_config
 
@@ -35,7 +35,7 @@ class ConfigManager:
                 pass
         else:
             try:
-                parsed = load_config(is_reload=True, ignore_missing=True)
+                parsed = load_config(ignore_missing=True)
                 if parsed:
                     config = load_clean_json(get_active_config_path())
                     vault_data = load_vault_safe(parsed.vault_file)
@@ -59,10 +59,14 @@ class ConfigManager:
                     json=payload,
                     headers={"Authorization": f"Bearer {self.sec}"}
                 )
-            trigger_backend_reload(self.ui_config, listeners_only=False)
+                await client.post(
+                    f"{self.url.rstrip('/')}/api/reload/config",
+                    headers={"Authorization": f"Bearer {self.sec}"}
+                )
+
             return "Configuration successfully synchronized with the remote gateway daemon."
 
         else:
             listeners_changed = save_normalized_config(parsed_config, vault_parsed)
-            trigger_backend_reload(self.ui_config, listeners_only=listeners_changed)
+            trigger_local_backend_reload(listeners_only=listeners_changed)
             return "Configuration successfully synchronized with the local gateway daemon."

@@ -1,7 +1,6 @@
 import os
 import uuid
 import datetime
-import requests
 import signal
 from cryptography import x509
 from cryptography.x509.oid import NameOID
@@ -25,31 +24,10 @@ def generate_ui_cert():
     with open(cert_path, "wb") as f: f.write(cert.public_bytes(serialization.Encoding.PEM))
     return cert_path, key_path
 
-def trigger_backend_reload(ui_config, listeners_only=False):
-    bmode = ui_config.get("backend_mode", "local")
-    if bmode == "remote":
-        url = ui_config.get("remote_url", "")
-        sec = ui_config.get("remote_secret", "")
-        verify_tls = ui_config.get("remote_verify_tls", False)
-        ep = "/api/reload/listeners" if listeners_only else "/api/reload/config"
-        try:
-            requests.post(f"{url.rstrip('/')}{ep}", headers={"Authorization": f"Bearer {sec}"}, verify=verify_tls, timeout=5)
-        except Exception: pass
-    else:
-        if not os.path.exists(SMTP_PID_FILE): return
-        with open(SMTP_PID_FILE, 'r') as f: pid = int(f.read().strip())
-        try:
-            if listeners_only: os.kill(pid, signal.SIGUSR1)
-            else: os.kill(pid, signal.SIGUSR2)
-        except ProcessLookupError: pass
-
-def resolve_vault_path(config_data=None):
-    active_path = get_active_config_path()
-    if config_data is None:
-        config_data = load_clean_json(active_path)
-
-    conf_dir = os.path.dirname(active_path) or "."
-    v_path = config_data.get("smtp", {}).get("vault_file")
-
-    if not v_path: return os.path.join(conf_dir, "vault.json")
-    return os.path.normpath(os.path.join(conf_dir, v_path))
+def trigger_local_backend_reload(listeners_only=False):
+    if not os.path.exists(SMTP_PID_FILE): return
+    with open(SMTP_PID_FILE, 'r') as f: pid = int(f.read().strip())
+    try:
+        if listeners_only: os.kill(pid, signal.SIGUSR1)
+        else: os.kill(pid, signal.SIGUSR2)
+    except ProcessLookupError: pass

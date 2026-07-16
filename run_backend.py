@@ -74,7 +74,7 @@ async def main():
         f.write(str(os.getpid()))
 
     logging.info(f"Loading config from file '{CONFIG_FILE}'.")
-    app_state = load_config(is_reload=False)
+    app_state = load_config()
     apply_logging_level(app_state.smtp["loglevel"])
     os.makedirs(app_state.smtp["queue_dir"], exist_ok=True)
 
@@ -219,7 +219,7 @@ async def main():
 
                 if app_state.config_file:
                     logging.info(f"Reloading gateway configurations from file '{app_state.config_file}'...")
-                    new_state = load_config(is_reload=True)
+                    new_state = load_config()
 
                     if new_state is not None:
                         app_state.smtp.clear(); app_state.smtp.update(new_state.smtp)

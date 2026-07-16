@@ -16,7 +16,7 @@ class AppState:
         self.vault = {"app": {}, "user": {}, "smarthost": {}}
         self.vault_file = None
 
-def load_config(is_reload=False, ignore_missing=False):
+def load_config(ignore_missing=False):
     if not os.path.exists(CONFIG_FILE) and not ignore_missing:
         return None
 
