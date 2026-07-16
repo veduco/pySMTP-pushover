@@ -1,5 +1,6 @@
 import logging
 import urllib3
+import httpx
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from frontend.state import app_state
@@ -12,7 +13,17 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app_state["shutdown"] = False
-    yield
+
+    # Read the baseline UI config to apply global TLS policies
+    ui_config = load_clean_json(UI_CONFIG_FILE)
+    verify_tls = ui_config.get("remote_verify_tls", False)
+
+    # Establish a highly concurrent socket pool
+    limits = httpx.Limits(max_connections=100, max_keepalive_connections=20)
+    async with httpx.AsyncClient(verify=verify_tls, limits=limits) as client:
+        app.state.http_client = client
+        yield
+
     app_state["shutdown"] = True
 
 app = FastAPI(lifespan=lifespan)

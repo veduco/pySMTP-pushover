@@ -17,7 +17,8 @@ templates = Jinja2Templates(directory=[HTML_DIR, JS_DIR])
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     ui_config = load_clean_json(UI_CONFIG_FILE)
-    manager = ConfigManager(ui_config)
+    # Feed the global HTTP client into the ConfigManager wrapper
+    manager = ConfigManager(ui_config, http_client=request.app.state.http_client)
 
     config, vault_data, smtp_meta, config_ok = await manager.get_config()
 
@@ -41,10 +42,11 @@ async def index(request: Request):
         "ui_trust_proxy": safe_ui_config.get("trust_proxy", True)
     })
 
+# Add the Request parameter injection here so we can hook the client state securely
 @router.post("/save/config")
-async def save_config(config_json: str = Form(...), vault_json: str = Form(None)):
+async def save_config(request: Request, config_json: str = Form(...), vault_json: str = Form(None)):
     ui_config = load_clean_json(UI_CONFIG_FILE)
-    manager = ConfigManager(ui_config)
+    manager = ConfigManager(ui_config, http_client=request.app.state.http_client)
 
     try:
         parsed = json.loads(config_json)
@@ -91,6 +93,5 @@ async def save_ui(
     os.kill(os.getpid(), signal.SIGUSR1)
 
     res = HTMLResponse("UI engine configuration and Backend modes altered successfully. Reconnecting...")
-    # Retains the reconnectLink trigger exclusively for worker restarts
     res.headers["HX-Trigger"] = "reconnectLink"
     return res

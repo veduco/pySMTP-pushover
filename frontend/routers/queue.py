@@ -1,7 +1,6 @@
 import os
 import json
 import asyncio
-import httpx
 import logging
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -20,22 +19,22 @@ async def queue_stream(request: Request):
     if bmode == "remote":
         url = ui_config.get("remote_url", "")
         sec = ui_config.get("remote_secret", "")
-        verify_tls = ui_config.get("remote_verify_tls", False)
+        client = request.app.state.http_client
 
         async def event_proxy():
             try:
-                async with httpx.AsyncClient(verify=verify_tls, timeout=None) as client:
-                    async with client.stream("GET", f"{url.rstrip('/')}/api/stream", headers={"Authorization": f"Bearer {sec}"}) as response:
-                        iterator = response.aiter_text().__aiter__()
-                        while not app_state["shutdown"]:
-                            if await request.is_disconnected(): break
-                            try:
-                                chunk = await asyncio.wait_for(iterator.__anext__(), timeout=2.0)
-                                yield chunk
-                            except asyncio.TimeoutError:
-                                yield ": keepalive\n\n"
-                            except StopAsyncIteration:
-                                break
+                # Explicitly override the default client timeout for the keepalive SSE connection stream
+                async with client.stream("GET", f"{url.rstrip('/')}/api/stream", headers={"Authorization": f"Bearer {sec}"}, timeout=None) as response:
+                    iterator = response.aiter_text().__aiter__()
+                    while not app_state["shutdown"]:
+                        if await request.is_disconnected(): break
+                        try:
+                            chunk = await asyncio.wait_for(iterator.__anext__(), timeout=2.0)
+                            yield chunk
+                        except asyncio.TimeoutError:
+                            yield ": keepalive\n\n"
+                        except StopAsyncIteration:
+                            break
             except asyncio.CancelledError: pass
             except Exception as e: logging.error(f"Remote queue stream proxy error: {e}")
 
@@ -51,20 +50,20 @@ async def queue_stream(request: Request):
         return StreamingResponse(fallback_stream(), media_type="text/event-stream")
 
 @router.get("")
-async def get_queue():
+async def get_queue(request: Request):
     ui_config = load_clean_json(UI_CONFIG_FILE)
     bmode = ui_config.get("backend_mode", "local")
 
     if bmode == "remote":
         url = ui_config.get("remote_url", "")
         sec = ui_config.get("remote_secret", "")
-        verify_tls = ui_config.get("remote_verify_tls", False)
+        client = request.app.state.http_client
         try:
-            async with httpx.AsyncClient(verify=verify_tls, timeout=5.0) as client:
-                r = await client.get(
-                    f"{url.rstrip('/')}/api/queue",
-                    headers={"Authorization": f"Bearer {sec}"}
-                )
+            r = await client.get(
+                f"{url.rstrip('/')}/api/queue",
+                headers={"Authorization": f"Bearer {sec}"},
+                timeout=5.0
+            )
             if r.status_code == 200:
                 return JSONResponse(r.json())
         except Exception: pass
@@ -76,20 +75,20 @@ async def get_queue():
         return JSONResponse(items)
 
 @router.post("/{item_id}/retry")
-async def proxy_retry_queue_item(item_id: str):
+async def proxy_retry_queue_item(request: Request, item_id: str):
     ui_config = load_clean_json(UI_CONFIG_FILE)
     bmode = ui_config.get("backend_mode", "local")
 
     if bmode == "remote":
         url = ui_config.get("remote_url", "")
         sec = ui_config.get("remote_secret", "")
-        verify_tls = ui_config.get("remote_verify_tls", False)
+        client = request.app.state.http_client
         try:
-            async with httpx.AsyncClient(verify=verify_tls, timeout=5.0) as client:
-                await client.post(
-                    f"{url.rstrip('/')}/api/queue/{item_id}/retry",
-                    headers={"Authorization": f"Bearer {sec}"}
-                )
+            await client.post(
+                f"{url.rstrip('/')}/api/queue/{item_id}/retry",
+                headers={"Authorization": f"Bearer {sec}"},
+                timeout=5.0
+            )
         except Exception: pass
         return JSONResponse({"status": "ok"})
     else:
@@ -99,20 +98,20 @@ async def proxy_retry_queue_item(item_id: str):
         return JSONResponse({"status": "ok"})
 
 @router.delete("/{item_id}")
-async def proxy_delete_queue_item(item_id: str):
+async def proxy_delete_queue_item(request: Request, item_id: str):
     ui_config = load_clean_json(UI_CONFIG_FILE)
     bmode = ui_config.get("backend_mode", "local")
 
     if bmode == "remote":
         url = ui_config.get("remote_url", "")
         sec = ui_config.get("remote_secret", "")
-        verify_tls = ui_config.get("remote_verify_tls", False)
+        client = request.app.state.http_client
         try:
-            async with httpx.AsyncClient(verify=verify_tls, timeout=5.0) as client:
-                await client.delete(
-                    f"{url.rstrip('/')}/api/queue/{item_id}",
-                    headers={"Authorization": f"Bearer {sec}"}
-                )
+            await client.delete(
+                f"{url.rstrip('/')}/api/queue/{item_id}",
+                headers={"Authorization": f"Bearer {sec}"},
+                timeout=5.0
+            )
         except Exception: pass
         return JSONResponse({"status": "ok"})
     else:
