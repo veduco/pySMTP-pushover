@@ -12,38 +12,44 @@ async def send_pushover(payload, client: httpx.AsyncClient, state=None):
     success = False
     error_msg = None
 
-    # Dynamically resolve alias names against the live RAM vault right before delivery
     target_token = payload.get("token", "")
     target_user = payload.get("user", "")
 
-    # Resolve aliases or cascade to global fallbacks if an alias was deleted
     if state and hasattr(state, "vault"):
-        # Resolve Token
-        if target_token in state.vault.get("app", {}):
-            target_token = state.vault["app"][target_token]
-        elif not target_token or target_token not in state.vault.get("app", {}):
-            # Alias vanished or is invalid; fallback to global token
+        app_vault = state.vault.get("app", {})
+        user_vault = state.vault.get("user", {})
+
+        # 1. Clear & Explicit Token Resolution
+        if target_token in app_vault:
+            # It's an alias name; resolve it dynamically to the live key
+            target_token = app_vault[target_token]
+        elif target_token:
+            # It's a raw key from a hardcoded route rule or pre-resolved matrix state.
+            # Leave it untouched!
+            pass
+        else:
+            # It's completely blank; fall back to the global default parameters
             global_token = state.pushover.get("token", "")
-            if global_token in state.vault.get("app", {}):
-                global_token = state.vault["app"][global_token]
-            target_token = global_token
+            target_token = app_vault.get(global_token, global_token)
 
-        # Resolve User Key
-        if target_user in state.vault.get("user", {}):
-            target_user = state.vault["user"][target_user]
-        elif not target_user or target_user not in state.vault.get("user", {}):
-            # Alias vanished or is invalid; fallback to global user key
+        # 2. Clear & Explicit User Key Resolution
+        if target_user in user_vault:
+            # It's an alias name; resolve it dynamically to the live key
+            target_user = user_vault[target_user]
+        elif target_user:
+            # It's a raw key from a hardcoded route rule or pre-resolved matrix state.
+            # Leave it untouched!
+            pass
+        else:
+            # It's completely blank; fall back to the global default parameters
             global_user = state.pushover.get("user", "")
-            if global_user in state.vault.get("user", {}):
-                global_user = state.vault["user"][global_user]
-            target_user = global_user
+            target_user = user_vault.get(global_user, global_user)
 
-    # Strict Safety Check: Drop the message if credentials cannot be recovered
+    # Final Guard: Drop the message only if both the route and global fallbacks are completely empty
     if not target_token or not target_user:
         logging.warning(f"Pushover alert {payload['id']} dropped: Assigned alias or global fallback parameters are completely missing.")
         return False, "DROP_ALERT"
 
-    # HTTPX explicitly requires string mappings when initiating multipart/form-data POSTs
     api_payload = {
         "token": str(target_token),
         "user": str(target_user),
