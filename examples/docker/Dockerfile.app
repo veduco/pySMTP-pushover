@@ -6,9 +6,11 @@ RUN apk update && \
         py3-cryptography \
         py3-aiosmtpd \
         py3-passlib \
-        py3-aiohttp \
         py3-httpx \
-        py3-aiosmtplib
+        py3-aiosmtplib \
+        py3-fastapi \
+        py3-uvicorn \
+        py3-multipart
 
 WORKDIR /app
 

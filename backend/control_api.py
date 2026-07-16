@@ -1,88 +1,90 @@
 import asyncio
 import json
 import logging
-import ssl
 import os
 import time
-from aiohttp import web
+from fastapi import FastAPI, Request, Depends, HTTPException, Security
+from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import uvicorn
 from backend.events import broker
 from backend.server import generate_secp384r1_cert
 
-active_runner = None
+# Disable built-in docs to keep the attack surface microscopic
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+security = HTTPBearer()
+active_server = None
 
-@web.middleware
-async def access_log_middleware(request, handler):
-    response = await handler(request)
-    path = request.path
+@app.middleware("http")
+async def access_log_middleware(request: Request, call_next):
+    response = await call_next(request)
+    path = request.url.path
     if path not in ["/healthcheck"]:
-        ip = request.remote
-        logging.info(f'{ip} - "{request.method} {path} HTTP/{request.version.major}.{request.version.minor}" {response.status}')
+        ip = request.client.host if request.client else "127.0.0.1"
+        http_version = request.scope.get("http_version", "1.1")
+        logging.info(f'{ip} - "{request.method} {path} HTTP/{http_version}" {response.status_code}')
     return response
 
-def require_auth(func):
-    async def wrapper(request):
-        secret = request.app.get('secret')
-        auth_header = request.headers.get('Authorization')
-        if not secret or auth_header != f"Bearer {secret}":
-            return web.json_response({"error": "Unauthorized"}, status=401)
-        return await func(request)
-    return wrapper
+async def verify_token(request: Request, creds: HTTPAuthorizationCredentials = Security(security)):
+    secret = getattr(request.app.state, "secret", "")
+    if not secret or creds.credentials != secret:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return creds.credentials
 
-@require_auth
-async def api_reload_config(request):
+@app.post("/api/reload/config", dependencies=[Depends(verify_token)])
+async def api_reload_config(request: Request):
     logging.info("Control API: Remote request received to reload full configuration.")
-    request.app['mappings_reload_event'].set()
+    request.app.state.mappings_reload_event.set()
     broker.publish("CONFIG_RELOADED", None)
-    return web.json_response({"status": "reload_scheduled"})
+    return JSONResponse({"status": "reload_scheduled"})
 
-@require_auth
-async def api_reload_listeners(request):
+@app.post("/api/reload/listeners", dependencies=[Depends(verify_token)])
+async def api_reload_listeners(request: Request):
     logging.info("Control API: Remote request received to hot-reload TCP listeners.")
-    request.app['reload_event'].set()
-    return web.json_response({"status": "listeners_reload_scheduled"})
+    request.app.state.reload_event.set()
+    return JSONResponse({"status": "listeners_reload_scheduled"})
 
-@require_auth
-async def api_stream_queue(request):
-    response = web.StreamResponse(headers={
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive'
-    })
-    await response.prepare(request)
+@app.get("/api/stream", dependencies=[Depends(verify_token)])
+async def api_stream_queue(request: Request):
+    async def sse_generator():
+        q = asyncio.Queue()
+        current_state = broker.add_sub(q)
+        try:
+            yield f"data: {json.dumps({'action': 'init', 'state': current_state})}\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                event = await q.get()
+                if event.get("action") == "shutdown":
+                    break
+                yield f"data: {json.dumps(event)}\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            broker.remove_sub(q)
 
-    q = asyncio.Queue()
-    current_state = broker.add_sub(q)
+    return StreamingResponse(sse_generator(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "Connection": "keep-alive"})
 
-    try:
-        await response.write(f"data: {json.dumps({'action': 'init', 'state': current_state})}\n\n".encode('utf-8'))
-        while True:
-            event = await q.get()
-            if event.get("action") == "shutdown":
-                break
-            await response.write(f"data: {json.dumps(event)}\n\n".encode('utf-8'))
-    except (ConnectionResetError, asyncio.CancelledError):
-        pass
-    finally:
-        broker.remove_sub(q)
-    return response
-
-@require_auth
-async def api_get_config(request):
+@app.get("/api/config", dependencies=[Depends(verify_token)])
+async def api_get_config(request: Request):
     from core.config import load_clean_json, CONFIG_FILE
     conf_dir = os.path.dirname(CONFIG_FILE) or "."
     config = load_clean_json(CONFIG_FILE)
 
+    if "api" in config.get("smtp", {}) and "secret" in config["smtp"]["api"]:
+        config["smtp"]["api"]["secret"] = ""
+
     v_path = config.get("smtp", {}).get("vault_file")
     v_path = os.path.normpath(os.path.join(conf_dir, v_path)) if v_path else os.path.join(conf_dir, "vault.json")
     vault = load_clean_json(v_path)
-    return web.json_response({
+    return JSONResponse({
         "config": config,
         "vault": vault,
         "smtp_meta": config.get("smtp", {}).get("_smtp_meta", {})
     })
 
-@require_auth
-async def api_save_config(request):
+@app.post("/api/save", dependencies=[Depends(verify_token)])
+async def api_save_config(request: Request):
     try:
         from core.config import save_json, CONFIG_FILE, load_clean_json
         from core.json_store import load_vault_safe
@@ -120,12 +122,12 @@ async def api_save_config(request):
 
             save_json(v_path, new_vault)
 
-        return web.json_response({"status": "saved"})
+        return JSONResponse({"status": "saved"})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=400)
+        return JSONResponse({"error": str(e)}, status_code=400)
 
-@require_auth
-async def api_get_queue(request):
+@app.get("/api/queue", dependencies=[Depends(verify_token)])
+async def api_get_queue(request: Request):
     from core.config import load_clean_json, CONFIG_FILE, SCRIPT_DIR
     config = load_clean_json(CONFIG_FILE)
     q_path = os.path.normpath(os.path.join(SCRIPT_DIR, config.get("smtp", {}).get("queue_dir", "queue")))
@@ -143,11 +145,10 @@ async def api_get_queue(request):
                         })
                 except Exception: pass
     items.sort(key=lambda x: x["last_attempt"] if x["last_attempt"] else x["timestamp"], reverse=True)
-    return web.json_response(items)
+    return JSONResponse(items)
 
-@require_auth
-async def api_retry_queue_item(request):
-    item_id = request.match_info['item_id']
+@app.post("/api/queue/{item_id}/retry", dependencies=[Depends(verify_token)])
+async def api_retry_queue_item(item_id: str):
     from core.config import load_clean_json, CONFIG_FILE, SCRIPT_DIR, save_json
     config = load_clean_json(CONFIG_FILE)
     q_path = os.path.normpath(os.path.join(SCRIPT_DIR, config.get("smtp", {}).get("queue_dir", "queue")))
@@ -158,11 +159,10 @@ async def api_retry_queue_item(request):
             data["next_retry"] = 0; data["retry_count"] = 0
             save_json(filepath, data)
         except Exception: pass
-    return web.json_response({"status": "ok"})
+    return JSONResponse({"status": "ok"})
 
-@require_auth
-async def api_delete_queue_item(request):
-    item_id = request.match_info['item_id']
+@app.delete("/api/queue/{item_id}", dependencies=[Depends(verify_token)])
+async def api_delete_queue_item(item_id: str):
     from core.config import load_clean_json, CONFIG_FILE, SCRIPT_DIR
     config = load_clean_json(CONFIG_FILE)
     q_path = os.path.normpath(os.path.join(SCRIPT_DIR, config.get("smtp", {}).get("queue_dir", "queue")))
@@ -170,32 +170,15 @@ async def api_delete_queue_item(request):
     if os.path.exists(filepath):
         try: os.remove(filepath)
         except OSError: pass
-    return web.json_response({"status": "ok"})
-
-async def on_shutdown_hook(app):
-    for q in broker.subs:
-        try:
-            q.put_nowait({"action": "shutdown"})
-        except Exception:
-            pass
+    return JSONResponse({"status": "ok"})
 
 async def start_control_api(api_conf, reload_event, mappings_reload_event):
-    global active_runner
-    app = web.Application(middlewares=[access_log_middleware])
-    app['secret'] = api_conf.get("secret", "")
-    app['reload_event'] = reload_event
-    app['mappings_reload_event'] = mappings_reload_event
+    global active_server
 
-    app.on_shutdown.append(on_shutdown_hook)
-
-    app.router.add_post('/api/reload/config', api_reload_config)
-    app.router.add_post('/api/reload/listeners', api_reload_listeners)
-    app.router.add_get('/api/stream', api_stream_queue)
-    app.router.add_get('/api/config', api_get_config)
-    app.router.add_post('/api/save', api_save_config)
-    app.router.add_get('/api/queue', api_get_queue)
-    app.router.add_post('/api/queue/{item_id}/retry', api_retry_queue_item)
-    app.router.add_delete('/api/queue/{item_id}', api_delete_queue_item)
+    # State binds replace aiohttp's app.get() mappings
+    app.state.secret = api_conf.get("secret", "")
+    app.state.reload_event = reload_event
+    app.state.mappings_reload_event = mappings_reload_event
 
     bind = api_conf.get("bind", "0.0.0.0:6443")
     host, port_str = bind.rsplit(":", 1) if ":" in bind else (bind, "6443")
@@ -204,31 +187,36 @@ async def start_control_api(api_conf, reload_event, mappings_reload_event):
     cert = api_conf.get("tls_cert_file")
     key = api_conf.get("tls_key_file")
 
-    ssl_ctx = None
     if not (cert and os.path.exists(cert) and key and os.path.exists(key)):
         logging.warning("No valid TLS certificate found for Control API. Generating a random memory-bound certificate.")
         cert, key = generate_secp384r1_cert(host, bind)
 
-    ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-    ssl_ctx.load_cert_chain(certfile=cert, keyfile=key)
-
     logging.debug(f"Attempting to start HTTPS Control API listener at https://{host}:{port}")
 
-    runner = web.AppRunner(app, access_log=None)
-    await runner.setup()
-    site = web.TCPSite(runner, host, port, ssl_context=ssl_ctx)
+    # Disable uvicorn's internal logging so our custom access_log_middleware handles everything uniformly
+    config = uvicorn.Config(
+        app=app, host=host, port=port, ssl_keyfile=key, ssl_certfile=cert,
+        log_config=None, access_log=False
+    )
+    server = uvicorn.Server(config)
+    active_server = server
+
     try:
-        await site.start()
-        active_runner = runner
         logging.info(f"HTTPS Control API listener started at https://{host}:{port}")
+        await server.serve()
+    except asyncio.CancelledError:
+        logging.debug("Control API listener task successfully cancelled during shutdown.")
     except Exception as e:
         logging.critical(f"CRITICAL: Failed to bind Control API to {bind}. Error: {e}")
 
 async def stop_control_api():
-    global active_runner
-    if active_runner:
+    global active_server
+    # Signal connected SSE clients to cleanly close
+    for q in broker.subs:
         try:
-            await active_runner.cleanup()
+            q.put_nowait({"action": "shutdown"})
         except Exception:
             pass
-        active_runner = None
+
+    if active_server:
+        active_server.should_exit = True

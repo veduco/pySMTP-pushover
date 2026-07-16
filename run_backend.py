@@ -83,9 +83,10 @@ async def main():
     cap_method = app_state.smtp['default_route'].capitalize()
     logging.info(f"Explicit rules: {total_mapped}. Global Routing Method: {cap_method}. SMTP Auth: {auth_status}")
 
+    api_task = None
     api_conf = app_state.smtp.get("api", {})
     if api_conf.get("enabled"):
-        asyncio.create_task(start_control_api(api_conf, reload_event, mappings_reload_event))
+        api_task = asyncio.create_task(start_control_api(api_conf, reload_event, mappings_reload_event))
 
     msg_queue = asyncio.Queue()
     load_queue_from_disk(msg_queue, app_state)
@@ -233,8 +234,15 @@ async def main():
                         if old_api_conf != new_api_conf:
                             logging.info("Control API configuration change detected. Restarting API listener...")
                             await stop_control_api()
+
+                            if api_task:
+                                try:
+                                    await asyncio.wait_for(api_task, timeout=2.0)
+                                except Exception:
+                                    pass
+
                             if new_api_conf.get("enabled"):
-                                asyncio.create_task(start_control_api(new_api_conf, reload_event, mappings_reload_event))
+                                api_task = asyncio.create_task(start_control_api(new_api_conf, reload_event, mappings_reload_event))
 
                         apply_logging_level(app_state.smtp["loglevel"])
                         os.makedirs(app_state.smtp["queue_dir"], exist_ok=True)
@@ -249,6 +257,13 @@ async def main():
     finally:
         logging.info("Shutting down... Flashing queues to disk safely...")
         await stop_control_api()
+
+        # Gracefully await the Uvicorn task teardown to prevent CancelledError traces
+        if api_task:
+            try:
+                await asyncio.wait_for(api_task, timeout=2.0)
+            except Exception:
+                pass
 
         # Close all SMTP sockets to forcefully stop new traffic
         for data in active_servers.values():
