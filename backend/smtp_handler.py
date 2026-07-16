@@ -73,151 +73,186 @@ class PushoverSMTPHandler:
         self.msg_queue = msg_queue
         self.broker = broker
 
-    async def handle_DATA(self, server, session, envelope):
-        try:
-            raw_content = envelope.content
-            parsed_data = parse_email_content(raw_content)
+    def _match_explicit_routes(self, sender, recipients):
+        routes_to_trigger = []
 
-            title = parsed_data["title"]
-            timestamp = parsed_data["timestamp"]
-            best_image = parsed_data["best_image"]
-            body_html_processed = parsed_data["body_html_processed"]
-            body_plain_processed = parsed_data["body_plain_processed"]
+        # Match Sender
+        if sender in self.state.mappings.get("from", {}):
+            logging.info(f"Matched sender address: {sender}")
+            routes_to_trigger.append(self.state.mappings["from"][sender])
 
-            routes_to_trigger = []
-            sender = envelope.mail_from.lower() if envelope.mail_from else ""
-            if sender in self.state.mappings.get("from", {}):
-                logging.info(f"Matched sender address: {sender}")
-                routes_to_trigger.append(self.state.mappings["from"][sender])
+        for pattern, route_config in self.state.regex_mappings.get("from", []):
+            if pattern.search(sender):
+                logging.info(f"Matched sender regex '{pattern.pattern}' to: {sender}")
+                routes_to_trigger.append(route_config)
 
-            for pattern, route_config in self.state.regex_mappings.get("from", []):
-                if pattern.search(sender):
-                    logging.info(f"Matched sender regex '{pattern.pattern}' to: {sender}")
+        # Match Recipients
+        for recipient in recipients:
+            if recipient in self.state.mappings.get("to", {}):
+                logging.info(f"Matched recipient address: {recipient}")
+                routes_to_trigger.append(self.state.mappings["to"][recipient])
+
+            for pattern, route_config in self.state.regex_mappings.get("to", []):
+                if pattern.search(recipient):
+                    logging.info(f"Matched recipient regex '{pattern.pattern}' to: {recipient}")
                     routes_to_trigger.append(route_config)
 
-            for recipient in envelope.rcpt_tos:
-                recipient = recipient.lower()
-                if recipient in self.state.mappings.get("to", {}):
-                    logging.info(f"Matched recipient address: {recipient}")
-                    routes_to_trigger.append(self.state.mappings["to"][recipient])
+        return routes_to_trigger
 
-                for pattern, route_config in self.state.regex_mappings.get("to", []):
-                    if pattern.search(recipient):
-                        logging.info(f"Matched recipient regex '{pattern.pattern}' to: {recipient}")
-                        routes_to_trigger.append(route_config)
+    def _apply_fallbacks(self, routes_to_trigger):
+        if not routes_to_trigger:
+            def_route = self.state.smtp.get("default_route", "pushover")
 
-            if not routes_to_trigger:
-                def_route = self.state.smtp.get("default_route", "pushover")
-                if def_route == "pushover":
-                    if self.state.pushover.get("user") and self.state.pushover.get("token"):
-                        logging.info("No explicit mappings matched. Falling back to global Pushover catch-all.")
-                        routes_to_trigger.append(self.state.pushover)
-                    else:
-                        logging.info("No explicit mappings matched and no global Pushover catch-all defined. Ignoring message.")
-                elif def_route == "smarthost":
-                    sh_alias = self.state.smarthost.get("globals", {}).get("alias")
-                    if sh_alias and sh_alias in self.state.smarthost.get("aliases", {}):
-                        logging.info("No explicit mappings matched. Falling back to global Smarthost catch-all.")
-                        g = self.state.smarthost.get("globals", {}).copy()
-                        g["method"] = "smarthost"
-                        g["smarthost_alias"] = sh_alias
-                        routes_to_trigger.append(g)
-                    else:
-                        logging.info("No explicit mappings matched and global Smarthost alias is invalid. Ignoring message.")
-
-            unique_routes = []
-            seen_combinations = set()
-            for route in routes_to_trigger:
-                method = route.get("method", "pushover")
-                if method == "pushover":
-                    combo_hash = f"push:{route.get('user')}:{route.get('token')}"
+            if def_route == "pushover":
+                if self.state.pushover.get("user") and self.state.pushover.get("token"):
+                    logging.info("No explicit mappings matched. Falling back to global Pushover catch-all.")
+                    routes_to_trigger.append(self.state.pushover)
                 else:
-                    combo_hash = f"smart:{route.get('smarthost_alias')}"
+                    logging.info("No explicit mappings matched and no global Pushover catch-all defined. Ignoring message.")
 
-                if combo_hash not in seen_combinations:
-                    seen_combinations.add(combo_hash)
-                    unique_routes.append(route)
-
-            for route in unique_routes:
-                method = route.get("method", "pushover")
-                if method == "pushover":
-                    force_pt = route.get("force_plaintext", self.state.pushover.get("force_plaintext", False))
-                    attachments_enabled = route.get("attachments", self.state.pushover.get("attachments", True))
+            elif def_route == "smarthost":
+                sh_alias = self.state.smarthost.get("globals", {}).get("alias")
+                if sh_alias and sh_alias in self.state.smarthost.get("aliases", {}):
+                    logging.info("No explicit mappings matched. Falling back to global Smarthost catch-all.")
+                    g = self.state.smarthost.get("globals", {}).copy()
+                    g["method"] = "smarthost"
+                    g["smarthost_alias"] = sh_alias
+                    routes_to_trigger.append(g)
                 else:
-                    g_smarthost = self.state.smarthost.get("globals", {})
-                    sh_alias = route.get("smarthost_alias")
-                    sh_conf = self.state.smarthost.get("aliases", {}).get(sh_alias, {})
-                    force_pt = route.get("force_plaintext")
-                    if force_pt is None: force_pt = sh_conf.get("force_plaintext")
-                    if force_pt is None: force_pt = g_smarthost.get("force_plaintext", False)
-                    route_disable_att = route.get("disable_attachments")
-                    if route_disable_att is not None:
-                        attachments_enabled = not route_disable_att
-                    else:
-                        sh_disable_att = sh_conf.get("disable_attachments")
-                        if sh_disable_att is not None: attachments_enabled = not sh_disable_att
-                        else: attachments_enabled = not g_smarthost.get("disable_attachments", False)
+                    logging.info("No explicit mappings matched and global Smarthost alias is invalid. Ignoring message.")
 
-                disable_persist = self.state.smtp.get("disable_persistence", False)
+        return routes_to_trigger
 
-                if not force_pt and body_html_processed is not None:
-                    final_body = body_html_processed
-                    is_html = True
-                elif body_plain_processed is not None:
-                    final_body = body_plain_processed
-                    is_html = False
-                elif body_html_processed is not None:
-                    final_body = body_html_processed
-                    is_html = True
-                else:
-                    final_body = "(No message body)"
-                    is_html = False
+    def _deduplicate_routes(self, routes_to_trigger):
+        unique_routes = []
+        seen_combinations = set()
 
-                payload = {
-                    "id": uuid.uuid4().hex,
-                    "method": method,
-                    "message": final_body,
-                    "title": title,
-                    "timestamp": timestamp,
-                    "is_html": is_html,
-                    "disable_persistence": disable_persist,
-                    "retry_count": 0,
-                    "sender": sender or "gateway@localhost",
-                    "recipients": envelope.rcpt_tos
-                }
+        for route in routes_to_trigger:
+            method = route.get("method", "pushover")
+            if method == "pushover":
+                combo_hash = f"push:{route.get('user')}:{route.get('token')}"
+            else:
+                combo_hash = f"smart:{route.get('smarthost_alias')}"
 
-                if method == "pushover":
-                    # Properly cascade missing route parameters to global fallbacks
-                    payload["user"] = route.get("user") or self.state.pushover.get("user", "")
-                    payload["token"] = route.get("token") or self.state.pushover.get("token", "")
+            if combo_hash not in seen_combinations:
+                seen_combinations.add(combo_hash)
+                unique_routes.append(route)
 
-                    for param in ["device", "sound", "url", "url_title", "priority", "ttl", "tags", "retry", "expire"]:
-                        val = route.get(param)
-                        if val is None or val == "":
-                            val = self.state.pushover.get(param)
-                        if val is not None and val != "":
-                            payload[param] = val
+        return unique_routes
 
-                    if "url" in payload and payload["url"]: payload["url"] = str(payload["url"])[:MAX_URL_CHARS]
-                    if "url_title" in payload and payload["url_title"]: payload["url_title"] = str(payload["url_title"])[:MAX_URL_TITLE_CHARS]
-                else:
-                    payload["smarthost_alias"] = route.get("smarthost_alias")
-                    payload["force_plaintext"] = force_pt
-                    payload["disable_attachments"] = not attachments_enabled
-                    payload["raw_eml_base64"] = base64.b64encode(raw_content).decode('ascii')
+    def _resolve_route_flags(self, route, method):
+        if method == "pushover":
+            force_pt = route.get("force_plaintext", self.state.pushover.get("force_plaintext", False))
+            attachments_enabled = route.get("attachments", self.state.pushover.get("attachments", True))
+        else:
+            g_smarthost = self.state.smarthost.get("globals", {})
+            sh_alias = route.get("smarthost_alias")
+            sh_conf = self.state.smarthost.get("aliases", {}).get(sh_alias, {})
 
-                if attachments_enabled and best_image:
-                    payload["attachment_base64"] = base64.b64encode(best_image[3]).decode('ascii')
-                    payload["attachment_name"] = best_image[1]
-                    payload["attachment_type"] = best_image[2]
+            force_pt = route.get("force_plaintext")
+            if force_pt is None: force_pt = sh_conf.get("force_plaintext")
+            if force_pt is None: force_pt = g_smarthost.get("force_plaintext", False)
 
-                if not disable_persist:
-                    filepath = os.path.join(self.state.smtp["queue_dir"], f"{payload['id']}.json")
-                    with open(filepath, 'w') as f: json.dump(payload, f)
+            route_disable_att = route.get("disable_attachments")
+            if route_disable_att is not None:
+                attachments_enabled = not route_disable_att
+            else:
+                sh_disable_att = sh_conf.get("disable_attachments")
+                if sh_disable_att is not None: attachments_enabled = not sh_disable_att
+                else: attachments_enabled = not g_smarthost.get("disable_attachments", False)
 
-                await self.msg_queue.put(payload)
-                if self.broker:
-                    self.broker.publish("add", payload)
+        return force_pt, attachments_enabled
+
+    async def _enqueue_payloads(self, unique_routes, parsed_data, envelope, sender, recipients):
+        raw_content = envelope.content
+        title = parsed_data["title"]
+        timestamp = parsed_data["timestamp"]
+        best_image = parsed_data["best_image"]
+        body_html_processed = parsed_data["body_html_processed"]
+        body_plain_processed = parsed_data["body_plain_processed"]
+        disable_persist = self.state.smtp.get("disable_persistence", False)
+
+        for route in unique_routes:
+            method = route.get("method", "pushover")
+            force_pt, attachments_enabled = self._resolve_route_flags(route, method)
+
+            if not force_pt and body_html_processed is not None:
+                final_body = body_html_processed
+                is_html = True
+            elif body_plain_processed is not None:
+                final_body = body_plain_processed
+                is_html = False
+            elif body_html_processed is not None:
+                final_body = body_html_processed
+                is_html = True
+            else:
+                final_body = "(No message body)"
+                is_html = False
+
+            payload = {
+                "id": uuid.uuid4().hex,
+                "method": method,
+                "message": final_body,
+                "title": title,
+                "timestamp": timestamp,
+                "is_html": is_html,
+                "disable_persistence": disable_persist,
+                "retry_count": 0,
+                "sender": sender or "gateway@localhost",
+                "recipients": recipients
+            }
+
+            if method == "pushover":
+                # Properly cascade missing route parameters to global fallbacks
+                payload["user"] = route.get("user") or self.state.pushover.get("user", "")
+                payload["token"] = route.get("token") or self.state.pushover.get("token", "")
+
+                for param in ["device", "sound", "url", "url_title", "priority", "ttl", "tags", "retry", "expire"]:
+                    val = route.get(param)
+                    if val is None or val == "":
+                        val = self.state.pushover.get(param)
+                    if val is not None and val != "":
+                        payload[param] = val
+
+                if "url" in payload and payload["url"]: payload["url"] = str(payload["url"])[:MAX_URL_CHARS]
+                if "url_title" in payload and payload["url_title"]: payload["url_title"] = str(payload["url_title"])[:MAX_URL_TITLE_CHARS]
+            else:
+                payload["smarthost_alias"] = route.get("smarthost_alias")
+                payload["force_plaintext"] = force_pt
+                payload["disable_attachments"] = not attachments_enabled
+                payload["raw_eml_base64"] = base64.b64encode(raw_content).decode('ascii')
+
+            if attachments_enabled and best_image:
+                payload["attachment_base64"] = base64.b64encode(best_image[3]).decode('ascii')
+                payload["attachment_name"] = best_image[1]
+                payload["attachment_type"] = best_image[2]
+
+            if not disable_persist:
+                filepath = os.path.join(self.state.smtp["queue_dir"], f"{payload['id']}.json")
+                with open(filepath, 'w') as f: json.dump(payload, f)
+
+            await self.msg_queue.put(payload)
+            if self.broker:
+                self.broker.publish("add", payload)
+
+    async def handle_DATA(self, server, session, envelope):
+        try:
+            # 1. Parse the raw email byte payload
+            parsed_data = parse_email_content(envelope.content)
+            sender = envelope.mail_from.lower() if envelope.mail_from else ""
+            recipients = [r.lower() for r in envelope.rcpt_tos]
+
+            # 2. Evaluate explicit routing rules
+            routes = self._match_explicit_routes(sender, recipients)
+
+            # 3. Apply global fallbacks if no explicit routes matched
+            routes = self._apply_fallbacks(routes)
+
+            # 4. Deduplicate identical destinations
+            unique_routes = self._deduplicate_routes(routes)
+
+            # 5. Compile final payloads and dispatch to workers
+            await self._enqueue_payloads(unique_routes, parsed_data, envelope, sender, recipients)
 
             return '250 Message accepted for delivery'
         except Exception as e:
