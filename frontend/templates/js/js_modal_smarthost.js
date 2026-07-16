@@ -37,7 +37,7 @@ openSmarthostModal(mode, alias = '') {
         this.smarthostModal.force_plaintext = sh.force_plaintext === true;
     }
 
-    this.smarthostModal.orig = JSON.parse(JSON.stringify(this.smarthostModal));
+    this.smarthostModal.orig = this.clone(this.smarthostModal);
     this.smarthostModal.open = true;
 },
 

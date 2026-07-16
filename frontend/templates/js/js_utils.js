@@ -89,3 +89,7 @@ checkTimezone() {
     this.tzError = '';
     return true;
 },
+clone(targetObj) {
+    if (!targetObj) return {};
+    return JSON.parse(JSON.stringify(targetObj));
+},
