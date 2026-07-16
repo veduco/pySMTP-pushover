@@ -15,7 +15,7 @@ SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 
-from core.config import load_clean_json, save_json, UI_CONFIG_FILE
+from core.config import load_clean_json, save_json, UI_CONFIG_FILE, clear_ui_config_cache, get_cached_ui_config
 from frontend.api import app
 from frontend.utils import generate_ui_cert
 
@@ -54,19 +54,23 @@ if __name__ == "__main__":
     if hasattr(signal, 'SIGUSR1'): signal.signal(signal.SIGUSR1, lambda s, f: ui_reload_listeners_event.set())
     if hasattr(signal, 'SIGUSR2'): signal.signal(signal.SIGUSR2, lambda s, f: ui_reload_configs_event.set())
 
-    ui_config = load_clean_json(UI_CONFIG_FILE)
+    # Initial priming of the RAM Cache at startup
+    ui_config = get_cached_ui_config(force_refresh=True)
     if "local_config_path" not in ui_config:
         env_config = os.environ.get("GATEWAY_CONFIG")
         ui_config["local_config_path"] = env_config if env_config else os.path.join(SCRIPT_DIR, "config.json")
         save_json(UI_CONFIG_FILE, ui_config)
+        clear_ui_config_cache()
         logging.info(f"Migrated local config path '{ui_config['local_config_path']}' to UI state.")
 
     while not ui_shutdown_event.is_set():
         if ui_reload_configs_event.is_set():
             ui_reload_configs_event.clear()
-            logging.info("Caught SIGUSR2 inside UI process space. Configuration cache cleared.")
+            logging.info("Caught SIGUSR2 inside UI process space. Configuration cache flushed.")
+            clear_ui_config_cache()
 
-        ui_config = load_clean_json(UI_CONFIG_FILE)
+        # Reads directly out of RAM cache
+        ui_config = get_cached_ui_config()
 
         os.environ["GATEWAY_CONFIG"] = ui_config.get("local_config_path", os.path.join(SCRIPT_DIR, "config.json"))
 
@@ -151,7 +155,8 @@ if __name__ == "__main__":
         while any(t.is_alive() for t in threads):
             if ui_reload_configs_event.is_set():
                 ui_reload_configs_event.clear()
-                logging.info("Caught SIGUSR2 inside UI process space. Configuration cache cleared.")
+                logging.info("Caught SIGUSR2 inside UI process space. Configuration cache flushed.")
+                clear_ui_config_cache()
 
             if ui_reload_listeners_event.is_set() or ui_shutdown_event.is_set():
                 for s in servers: s.should_exit = True

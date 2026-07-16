@@ -7,10 +7,10 @@ from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import serialization
-from core.config import SCRIPT_DIR, UI_CONFIG_FILE, SMTP_PID_FILE, load_clean_json
+from core.config import SCRIPT_DIR, SMTP_PID_FILE, get_cached_ui_config
 
 def get_active_config_path():
-    ui_cfg = load_clean_json(UI_CONFIG_FILE)
+    ui_cfg = get_cached_ui_config()
     return ui_cfg.get("local_config_path", os.path.join(SCRIPT_DIR, "config.json"))
 
 def generate_ui_cert():

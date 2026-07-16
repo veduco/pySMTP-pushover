@@ -67,20 +67,26 @@ async def api_stream_queue(request: Request):
 
 @app.get("/api/config", dependencies=[Depends(verify_token)])
 async def api_get_config(request: Request):
+    """Serves entirely from the live in-memory AppState parameters."""
     from core.config import load_clean_json, CONFIG_FILE
-    conf_dir = os.path.dirname(CONFIG_FILE) or "."
-    config = load_clean_json(CONFIG_FILE)
+    state = request.app.state.gateway_state
 
-    if "api" in config.get("smtp", {}) and "secret" in config["smtp"]["api"]:
+    # Mirror runtime structure back to the schema format for UI ingestion
+    config = {
+        "smtp": state.smtp.copy(),
+        "pushover": state.pushover,
+        "smarthost": state.smarthost,
+        "routes": load_clean_json(CONFIG_FILE).get("routes", {})  # Baseline tracks raw keys for UI diffs
+    }
+
+    if "secret" in config["smtp"].get("api", {}):
         config["smtp"]["api"]["secret"] = ""
 
-    v_path = config.get("smtp", {}).get("vault_file")
-    v_path = os.path.normpath(os.path.join(conf_dir, v_path)) if v_path else os.path.join(conf_dir, "vault.json")
-    vault = load_clean_json(v_path)
+    vault = load_clean_json(state.vault_file)
     return JSONResponse({
         "config": config,
         "vault": vault,
-        "smtp_meta": config.get("smtp", {}).get("_smtp_meta", {})
+        "smtp_meta": state.smtp.get("_smtp_meta", {})
     })
 
 @app.post("/api/save", dependencies=[Depends(verify_token)])
@@ -89,6 +95,7 @@ async def api_save_config(request: Request):
         from core.config import save_json, CONFIG_FILE, load_clean_json
         from core.json_store import load_vault_safe
         data = await request.json()
+        state = request.app.state.gateway_state
         conf_dir = os.path.dirname(CONFIG_FILE) or "."
 
         if "config" in data:
@@ -100,9 +107,7 @@ async def api_save_config(request: Request):
             save_json(CONFIG_FILE, new_cfg)
 
         if "vault" in data:
-            v_path = data.get("config", {}).get("smtp", {}).get("vault_file")
-            v_path = os.path.normpath(os.path.join(conf_dir, v_path)) if v_path else os.path.join(conf_dir, "vault.json")
-
+            v_path = state.vault_file
             vault_parsed = data["vault"]
             old_vault_data = load_vault_safe(v_path)
             new_vault = {"app": {}, "user": {}, "smarthost": {}}
@@ -128,9 +133,8 @@ async def api_save_config(request: Request):
 
 @app.get("/api/queue", dependencies=[Depends(verify_token)])
 async def api_get_queue(request: Request):
-    from core.config import load_clean_json, CONFIG_FILE, SCRIPT_DIR
-    config = load_clean_json(CONFIG_FILE)
-    q_path = os.path.normpath(os.path.join(SCRIPT_DIR, config.get("smtp", {}).get("queue_dir", "queue")))
+    state = request.app.state.gateway_state
+    q_path = state.smtp["queue_dir"]
     items = []
     if os.path.exists(q_path):
         for fname in os.listdir(q_path):
@@ -148,12 +152,12 @@ async def api_get_queue(request: Request):
     return JSONResponse(items)
 
 @app.post("/api/queue/{item_id}/retry", dependencies=[Depends(verify_token)])
-async def api_retry_queue_item(item_id: str):
-    from core.config import load_clean_json, CONFIG_FILE, SCRIPT_DIR, save_json
-    config = load_clean_json(CONFIG_FILE)
-    q_path = os.path.normpath(os.path.join(SCRIPT_DIR, config.get("smtp", {}).get("queue_dir", "queue")))
+async def api_retry_queue_item(request: Request, item_id: str):
+    state = request.app.state.gateway_state
+    q_path = state.smtp["queue_dir"]
     filepath = os.path.join(q_path, f"{item_id}.json")
     if os.path.exists(filepath):
+        from core.config import save_json
         try:
             with open(filepath, 'r') as f: data = json.load(f)
             data["next_retry"] = 0; data["retry_count"] = 0
@@ -162,23 +166,22 @@ async def api_retry_queue_item(item_id: str):
     return JSONResponse({"status": "ok"})
 
 @app.delete("/api/queue/{item_id}", dependencies=[Depends(verify_token)])
-async def api_delete_queue_item(item_id: str):
-    from core.config import load_clean_json, CONFIG_FILE, SCRIPT_DIR
-    config = load_clean_json(CONFIG_FILE)
-    q_path = os.path.normpath(os.path.join(SCRIPT_DIR, config.get("smtp", {}).get("queue_dir", "queue")))
+async def api_delete_queue_item(request: Request, item_id: str):
+    state = request.app.state.gateway_state
+    q_path = state.smtp["queue_dir"]
     filepath = os.path.join(q_path, f"{item_id}.json")
     if os.path.exists(filepath):
         try: os.remove(filepath)
         except OSError: pass
     return JSONResponse({"status": "ok"})
 
-async def start_control_api(api_conf, reload_event, mappings_reload_event):
+async def start_control_api(api_conf, reload_event, mappings_reload_event, gateway_state=None):
     global active_server
 
-    # State binds replace aiohttp's app.get() mappings
     app.state.secret = api_conf.get("secret", "")
     app.state.reload_event = reload_event
     app.state.mappings_reload_event = mappings_reload_event
+    app.state.gateway_state = gateway_state
 
     bind = api_conf.get("bind", "0.0.0.0:6443")
     host, port_str = bind.rsplit(":", 1) if ":" in bind else (bind, "6443")
@@ -213,10 +216,7 @@ async def stop_control_api():
     global active_server
     # Signal connected SSE clients to cleanly close
     for q in broker.subs:
-        try:
-            q.put_nowait({"action": "shutdown"})
-        except Exception:
-            pass
-
+        try: q.put_nowait({"action": "shutdown"})
+        except Exception: pass
     if active_server:
         active_server.should_exit = True

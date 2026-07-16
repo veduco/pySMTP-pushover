@@ -86,7 +86,7 @@ async def main():
     api_task = None
     api_conf = app_state.smtp.get("api", {})
     if api_conf.get("enabled"):
-        api_task = asyncio.create_task(start_control_api(api_conf, reload_event, mappings_reload_event))
+        api_task = asyncio.create_task(start_control_api(api_conf, reload_event, mappings_reload_event, gateway_state=app_state))
 
     msg_queue = asyncio.Queue()
     load_queue_from_disk(msg_queue, app_state)
@@ -242,7 +242,7 @@ async def main():
                                     pass
 
                             if new_api_conf.get("enabled"):
-                                api_task = asyncio.create_task(start_control_api(new_api_conf, reload_event, mappings_reload_event))
+                                api_task = asyncio.create_task(start_control_api(new_api_conf, reload_event, mappings_reload_event, gateway_state=app_state))
 
                         apply_logging_level(app_state.smtp["loglevel"])
                         os.makedirs(app_state.smtp["queue_dir"], exist_ok=True)
