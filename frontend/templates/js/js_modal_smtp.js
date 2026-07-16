@@ -41,3 +41,15 @@ get hasSmtpUserModalChanges() { return this.smtpUserModal.name !== this.smtpUser
 get canSaveSmtpUserModal() { return this.hasSmtpUserModalChanges && this.smtpUserModal.name.trim() !== '' && this.smtpUserModal.password.trim() !== ''; },
 get hasEditModalChanges() { return this.editModal.value !== this.editModal.orig.value; },
 get canSaveEditModal() { return this.hasEditModalChanges && this.editModal.value.trim() !== ''; },
+
+deleteSmtpUser(username) {
+    if (this.smtp.auth && this.smtp.auth[username] !== undefined) {
+        delete this.smtp.auth[username];
+        if (this.smtp_meta && this.smtp_meta[username] !== undefined) {
+            delete this.smtp_meta[username];
+        }
+        // Force Alpine to re-evaluate properties by re-assigning references
+        this.smtp.auth = { ...this.smtp.auth };
+        this.smtp_meta = { ...this.smtp_meta };
+    }
+},
