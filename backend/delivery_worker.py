@@ -6,6 +6,18 @@ import asyncio
 import httpx
 from backend.delivery_clients import send_pushover, send_smarthost
 
+def _purge_queue_item_record(payload_id, state, broker):
+    """Uniformly synchronization utility to clear completed or dropped alerts from RAM and disk states."""
+    if broker:
+        broker.publish("delete", {"id": payload_id})
+    if not state.smtp.get("disable_persistence", False):
+        filepath = os.path.join(state.smtp["queue_dir"], f"{payload_id}.json")
+        if os.path.exists(filepath):
+            try:
+                os.remove(filepath)
+            except OSError:
+                pass
+
 async def async_worker_task(worker_id, async_q, state, broker, pushover_client):
     while True:
         payload = await async_q.get()
@@ -34,7 +46,6 @@ async def async_worker_task(worker_id, async_q, state, broker, pushover_client):
                     pass
 
         if now < next_retry:
-            # Spawning a non-blocking requeue task so this worker can immediately process the next item
             async def delayed_requeue(p):
                 await asyncio.sleep(1.0)
                 await async_q.put(p)
@@ -52,21 +63,10 @@ async def async_worker_task(worker_id, async_q, state, broker, pushover_client):
             success, error_msg = False, "Unknown delivery method."
 
         if success:
-            if broker: broker.publish("delete", {"id": payload["id"]})
-            if not payload.get("disable_persistence"):
-                filepath = os.path.join(state.smtp["queue_dir"], f"{payload['id']}.json")
-                if os.path.exists(filepath):
-                    try: os.remove(filepath)
-                    except OSError: pass
+            _purge_queue_item_record(payload["id"], state, broker)
         else:
-            # Check for the strict un-routable sentinel drop flag
             if error_msg == "DROP_ALERT":
-                if broker: broker.publish("delete", {"id": payload["id"]})
-                if not payload.get("disable_persistence"):
-                    filepath = os.path.join(state.smtp["queue_dir"], f"{payload['id']}.json")
-                    if os.path.exists(filepath):
-                        try: os.remove(filepath)
-                        except OSError: pass
+                _purge_queue_item_record(payload["id"], state, broker)
                 async_q.task_done()
                 continue
 
@@ -90,7 +90,6 @@ async def async_worker_task(worker_id, async_q, state, broker, pushover_client):
         async_q.task_done()
 
 async def async_delivery_manager(msg_queue, state, num_workers, broker):
-    # Enforce strict 1-connection maximum to comply precisely with Pushover API limits
     limits = httpx.Limits(max_connections=1, max_keepalive_connections=1)
     async with httpx.AsyncClient(limits=limits, timeout=15.0) as pushover_client:
         workers = [
