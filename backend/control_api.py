@@ -62,8 +62,6 @@ async def api_stream_queue(request: Request):
         try:
             yield f"data: {json.dumps({'action': 'init', 'state': current_state})}\n\n"
             while True:
-                if await request.is_disconnected():
-                    break
                 event = await q.get()
                 if event.get("action") == "shutdown":
                     break

@@ -27,7 +27,6 @@ async def queue_stream(request: Request):
                 async with client.stream("GET", f"{url.rstrip('/')}/api/stream", headers={"Authorization": f"Bearer {sec}"}, timeout=None) as response:
                     iterator = response.aiter_text().__aiter__()
                     while not app_state["shutdown"]:
-                        if await request.is_disconnected(): break
                         try:
                             chunk = await asyncio.wait_for(iterator.__anext__(), timeout=2.0)
                             yield chunk
@@ -43,7 +42,6 @@ async def queue_stream(request: Request):
         async def fallback_stream():
             yield f"data: {json.dumps({'action': 'init', 'state': {}})}\n\n"
             while not app_state["shutdown"]:
-                if await request.is_disconnected(): break
                 yield ": keepalive\n\n"
                 await asyncio.sleep(2.0)
 

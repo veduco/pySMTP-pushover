@@ -19,6 +19,9 @@ class SuppressAiosmtpdNoiseFilter(logging.Filter):
 class SuppressUvicornNoiseFilter(logging.Filter):
     """Unified filter to strip transient framework process messages from console streams."""
     def filter(self, record):
+        if record.exc_info and record.exc_info[0] and "CancelledError" in str(record.exc_info[0]):
+            return False
+
         msg = record.getMessage()
         suppress_list = [
             "Started server process",
