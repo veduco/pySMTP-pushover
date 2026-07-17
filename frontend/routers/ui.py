@@ -31,6 +31,10 @@ async def index(request: Request):
 
     safe_ui_config = ui_config.copy()
 
+    # Extract the true physical socket port receiving this request behind any proxies
+    server_scope = request.scope.get("server")
+    active_ui_port = server_scope[1] if server_scope and len(server_scope) > 1 else 0
+
     return templates.TemplateResponse("index.html", {
         "request": request, "config_json": json.dumps(config), "smtp_meta_json": json.dumps(smtp_meta),
         "vault_meta_json": json.dumps(safe_vault_meta), "ui_config_json": json.dumps(safe_ui_config),
@@ -39,7 +43,8 @@ async def index(request: Request):
         "ui_smtp_sort": safe_ui_config.get("smtp_sort", "name_asc"), "ui_smarthost_sort": safe_ui_config.get("smarthost_sort", "alias_asc"),
         "ui_tz": safe_ui_config.get("timezone", "UTC"), "ui_fmt": safe_ui_config.get("date_format", "YYYY-MM-DD HH:mm:ss"),
         "ui_relative": safe_ui_config.get("relative_time", True), "ui_loglevel": safe_ui_config.get("ui_loglevel", "INFO"),
-        "ui_trust_proxy": safe_ui_config.get("trust_proxy", True)
+        "ui_trust_proxy": safe_ui_config.get("trust_proxy", True),
+        "active_ui_port": active_ui_port
     })
 
 # Add the Request parameter injection here so we can hook the client state securely

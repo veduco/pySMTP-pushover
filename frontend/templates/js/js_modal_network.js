@@ -89,3 +89,24 @@ get canSaveUiListenerModal() {
     const ip = m.ip.trim() || '0.0.0.0';
     return this.isValidIP(ip);
 },
+
+deleteUiListener(idx) {
+    if (this.uiListeners.length <= 1) {
+        this.alertModal.title = 'Cannot Remove Listener';
+        this.alertModal.message = 'You must have at least one UI listener configured to maintain access to the web panel.';
+        this.alertModal.open = true;
+        return;
+    }
+
+    const targetListener = this.uiListeners[idx];
+    const bindPort = targetListener.bind.includes(':') ? targetListener.bind.split(':')[1] : '8443';
+
+    if (parseInt(bindPort) === this.activeUiPort && this.activeUiPort > 0) {
+        this.alertModal.title = 'Active Listener';
+        this.alertModal.message = 'You cannot remove the specific network listener that your current session is actively routed through.';
+        this.alertModal.open = true;
+        return;
+    }
+
+    this.uiListeners.splice(idx, 1);
+},

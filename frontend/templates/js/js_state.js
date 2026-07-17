@@ -13,6 +13,7 @@ showRemoteSecret: false,
 sseSource: null,
 
 isReconnecting: false,
+activeUiPort: {{ active_ui_port | default(0) }},
 
 linkEditModal: {
     open: false, backend_remote: false, showSecret: false,
