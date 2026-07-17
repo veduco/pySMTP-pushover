@@ -4,6 +4,19 @@ from email import message_from_bytes, policy
 from email.utils import parsedate_to_datetime
 from core.config import MAX_TITLE_CHARS, MAX_ATTACHMENT_BYTES
 
+def _recover_defective_lines(part, base_text):
+    """Extracts and prepends text recovered from MIME structure defects."""
+    if not part.defects:
+        return base_text
+    recovered_lines = []
+    for defect in part.defects:
+        if getattr(defect, 'line', None):
+            line_str = defect.line.decode('utf-8', errors='replace').strip() if isinstance(defect.line, bytes) else defect.line.strip()
+            recovered_lines.append(line_str)
+    if recovered_lines:
+        return '\n'.join(recovered_lines) + '\n' + base_text
+    return base_text
+
 def parse_email_content(raw_content):
     """
     Extracts, decodes, and sanitizes MIME email parts into a clean Gateway payload format.
@@ -44,15 +57,8 @@ def parse_email_content(raw_content):
                 continue
 
             if content_type == "text/plain":
-                plain_body_raw = part.get_payload(decode=True).decode(part.get_content_charset() or 'utf-8', errors='replace')
-                if part.defects:
-                    recovered_lines = []
-                    for defect in part.defects:
-                        if hasattr(defect, 'line') and defect.line:
-                            line_str = defect.line.decode('utf-8', errors='replace').strip() if isinstance(defect.line, bytes) else defect.line.strip()
-                            recovered_lines.append(line_str)
-                    if recovered_lines:
-                        plain_body_raw = '\n'.join(recovered_lines) + '\n' + plain_body_raw
+                body_decoded = part.get_payload(decode=True).decode(part.get_content_charset() or 'utf-8', errors='replace')
+                plain_body_raw = _recover_defective_lines(part, body_decoded)
             elif content_type == "text/html":
                 html_body_raw = part.get_payload(decode=True).decode(part.get_content_charset() or 'utf-8', errors='replace')
     else:
@@ -68,15 +74,7 @@ def parse_email_content(raw_content):
             if content_type == "text/html":
                 html_body_raw = decoded_str
             else:
-                plain_body_raw = decoded_str
-                if msg.defects:
-                    recovered_lines = []
-                    for defect in msg.defects:
-                        if hasattr(defect, 'line') and defect.line:
-                            line_str = defect.line.decode('utf-8', errors='replace').strip() if isinstance(defect.line, bytes) else defect.line.strip()
-                            recovered_lines.append(line_str)
-                    if recovered_lines:
-                        plain_body_raw = '\n'.join(recovered_lines) + '\n' + plain_body_raw
+                plain_body_raw = _recover_defective_lines(msg, decoded_str)
 
     best_image = None
     if valid_images:
