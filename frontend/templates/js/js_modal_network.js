@@ -18,7 +18,15 @@ saveListenerModal() {
     if (!this.isValidIP(ip)) { this.listenerModal.error = 'Must be a valid IPv4, IPv6, or localhost.'; return; }
     const port = this.listenerModal.port;
     if(!port || port < 1 || port > 65535) { this.listenerModal.error = 'Port must be between 1 and 65535.'; return; }
-    const bind = ip + ':' + port; const obj = { bind: bind, starttls: this.listenerModal.starttls };
+    const bind = ip + ':' + port;
+
+    const existingIdx = this.smtp.listeners.findIndex(l => l.bind === bind);
+    if (existingIdx !== -1 && (this.listenerModal.mode === 'add' || existingIdx !== this.listenerModal.idx)) {
+        this.listenerModal.error = 'An SMTP listener is already bound to this address and port.';
+        return;
+    }
+
+    const obj = { bind: bind, starttls: this.listenerModal.starttls };
     if(this.listenerModal.hostname.trim()) obj.hostname = this.listenerModal.hostname.trim();
     if(this.listenerModal.starttls) {
         if(this.listenerModal.tls_cert_file.trim()) obj.tls_cert_file = this.listenerModal.tls_cert_file.trim();
@@ -53,7 +61,15 @@ saveUiListenerModal() {
     if (!this.isValidIP(ip)) { this.uiListenerModal.error = 'Must be a valid IPv4, IPv6, or localhost.'; return; }
     const port = this.uiListenerModal.port;
     if(!port || port < 1 || port > 65535) { this.uiListenerModal.error = 'Port must be between 1 and 65535.'; return; }
-    const bind = ip + ':' + port; const obj = { bind: bind, https: this.uiListenerModal.https };
+    const bind = ip + ':' + port;
+
+    const existingIdx = this.uiListeners.findIndex(l => l.bind === bind);
+    if (existingIdx !== -1 && (this.uiListenerModal.mode === 'add' || existingIdx !== this.uiListenerModal.idx)) {
+        this.uiListenerModal.error = 'A UI listener is already bound to this address and port.';
+        return;
+    }
+
+    const obj = { bind: bind, https: this.uiListenerModal.https };
     if(this.uiListenerModal.https) {
         if(this.uiListenerModal.tls_cert.trim()) obj.tls_cert = this.uiListenerModal.tls_cert.trim();
         if(this.uiListenerModal.tls_key.trim()) obj.tls_key = this.uiListenerModal.tls_key.trim();
