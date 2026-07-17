@@ -99,7 +99,7 @@ async def async_delivery_manager(msg_queue, state, num_workers, broker):
         ]
         await asyncio.gather(*workers, return_exceptions=True)
 
-def load_queue_from_disk(msg_queue, state):
+def load_queue_from_disk(msg_queue, state, broker=None):
     if not os.path.exists(state.smtp["queue_dir"]): return
     count = 0
     for filename in os.listdir(state.smtp["queue_dir"]):
@@ -107,7 +107,12 @@ def load_queue_from_disk(msg_queue, state):
             filepath = os.path.join(state.smtp["queue_dir"], filename)
             try:
                 with open(filepath, 'r') as f:
-                    msg_queue.put_nowait(json.load(f))
+                    data = json.load(f)
+                    msg_queue.put_nowait(data)
+
+                    if broker and "id" in data:
+                        broker.state[data["id"]] = data
+
                     count += 1
             except Exception: pass
     if count > 0: logging.info(f"Read {count} messages from persistent store")
