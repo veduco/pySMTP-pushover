@@ -121,7 +121,8 @@ get hasUiChanges() {
         ui_loglevel: this.ui_loglevel, ui_tz: this.ui_tz, ui_fmt: this.ui_fmt,
         ui_relative: this.ui_relative, ui_expand_adv: this.ui_expand_adv, ui_trust_proxy: this.ui_trust_proxy,
         ui_vault_sort: this.ui_vault_sort, ui_smtp_sort: this.ui_smtp_sort, ui_smarthost_sort: this.ui_smarthost_sort,
-        uiListeners: this.uiListeners
+        uiListeners: this.uiListeners,
+        ui_allowed_cidrs: this.ui_allowed_cidrs
     });
     return this.snapshots.ui !== currentUi;
 },
@@ -148,13 +149,14 @@ get canSaveActiveTab() {
             }
         }
     } else if (this.tab === 'server') {
+        if (this.smtpCidrError) return false;
         if (this.smtp.default_route === 'pushover') {
             if (!this.pushGlobals.token || !this.pushGlobals.user) return false;
         } else if (this.smtp.default_route === 'smarthost') {
             if (!this.smartGlobals.alias) return false;
         }
     } else if (this.tab === 'ui') {
-        if (this.tzError) return false;
+        if (this.tzError || this.uiCidrError) return false;
     }
     return true;
 },

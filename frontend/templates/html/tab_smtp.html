@@ -41,6 +41,13 @@
     <div class="flex-row" style="margin-top: 1.5rem; margin-bottom: 0.5rem;">
         <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="smtp.disable_persistence"><span class="slider"></span></div> Disable Disk Persistence</label>
     </div>
+
+    <div style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+        <label style="font-weight: bold; margin-bottom: 0.35rem; display: block;">Inbound SMTP IP Whitelist ACL</label>
+        <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; opacity: 0.7;">Restrict connection rules on the email receiving sockets by entering one IP address or CIDR mask per line. Leave completely blank to allow permissive incoming traffic streams.</p>
+        <textarea rows="4" x-model="smtp_cidrs_text" @keydown.enter.stop @input="smtp.allowed_cidrs = smtp_cidrs_text.split('\n').map(l => l.trim()).filter(l => l); validateSmtpCidrs();" :class="smtpCidrError ? 'input-invalid' : ''" placeholder="e.g.&#10;127.0.0.1&#10;192.168.1.0/24" style="font-family: monospace; font-size: 0.9rem; resize: vertical;"></textarea>
+        <span class="validation-error" x-show="smtpCidrError" x-text="smtpCidrError" style="display: none;"></span>
+    </div>
 </div>
 
 <div class="card" style="margin-bottom: 1.5rem;">

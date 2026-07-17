@@ -39,6 +39,21 @@ prepareVaultPayload() {
     });
 },
 
+formatDiffValue(val) {
+    if (val === null || val === undefined) return '-';
+    if (typeof val === 'boolean') return val ? 'True' : 'False';
+    if (Array.isArray(val)) {
+        return val.join('<br>');
+    }
+
+    let strVal = String(val);
+    // Replace both literal newlines and escaped JSON newline characters with line breaks
+    if (strVal.includes('\n') || strVal.includes('\\n')) {
+        return strVal.replace(/\\n/g, '<br>').replace(/\n/g, '<br>');
+    }
+    return strVal;
+},
+
 takeSnapshot() {
     this.rawConfig = JSON.parse(this.preparePayload());
     this.rawVault = JSON.parse(this.prepareVaultPayload());
@@ -49,7 +64,8 @@ takeSnapshot() {
         ui_loglevel: this.ui_loglevel, listeners: JSON.parse(JSON.stringify(this.uiListeners)),
         backend_mode: this.ui_backend_remote ? 'remote' : 'local',
         local_config_path: this.ui_local_config_path, remote_url: this.ui_remote_url,
-        remote_secret: this.ui_remote_secret, remote_verify_tls: this.ui_remote_verify_tls
+        remote_secret: this.ui_remote_secret, remote_verify_tls: this.ui_remote_verify_tls,
+        allowed_cidrs: JSON.parse(JSON.stringify(this.ui_allowed_cidrs))
     };
 
     this.snapshots = {
@@ -65,7 +81,8 @@ takeSnapshot() {
             ui_loglevel: this.ui_loglevel, ui_tz: this.ui_tz, ui_fmt: this.ui_fmt,
             ui_relative: this.ui_relative, ui_expand_adv: this.ui_expand_adv, ui_trust_proxy: this.ui_trust_proxy,
             ui_vault_sort: this.ui_vault_sort, ui_smtp_sort: this.ui_smtp_sort, ui_smarthost_sort: this.ui_smarthost_sort,
-            uiListeners: this.uiListeners
+            uiListeners: this.uiListeners,
+            ui_allowed_cidrs: this.ui_allowed_cidrs
         })
     };
     this.initialState = JSON.parse(JSON.stringify({
@@ -91,7 +108,8 @@ requestSave(formId) {
         ui_loglevel: this.ui_loglevel, listeners: JSON.parse(JSON.stringify(this.uiListeners)),
         backend_mode: this.ui_backend_remote ? 'remote' : 'local',
         local_config_path: this.ui_local_config_path, remote_url: this.ui_remote_url,
-        remote_secret: this.ui_remote_secret, remote_verify_tls: this.ui_remote_verify_tls
+        remote_secret: this.ui_remote_secret, remote_verify_tls: this.ui_remote_verify_tls,
+        allowed_cidrs: this.ui_allowed_cidrs
     };
 
     const getDiffs = (obj1, obj2, path = '') => {
@@ -101,7 +119,8 @@ requestSave(formId) {
             const val1 = obj1?.[key]; const val2 = obj2?.[key];
             const currentPath = path ? `${path}.${key}` : key;
             if (JSON.stringify(val1) !== JSON.stringify(val2)) {
-                if (typeof val1 === 'object' && val1 !== null && typeof val2 === 'object' && val2 !== null) {
+                if (typeof val1 === 'object' && val1 !== null && !Array.isArray(val1) &&
+                    typeof val2 === 'object' && val2 !== null && !Array.isArray(val2)) {
                     diffs.push(...getDiffs(val1, val2, currentPath));
                 } else {
                     let humanKey = currentPath;
@@ -137,8 +156,13 @@ requestSave(formId) {
                     let displayOld = (val1 !== undefined && val1 !== '') ? val1 : 'None';
                     let displayNew = (val2 !== undefined && val2 !== '') ? val2 : 'None';
 
-                    if (typeof displayOld === 'object' && displayOld !== null) displayOld = '[Configured]';
-                    if (typeof displayNew === 'object' && displayNew !== null) displayNew = '[Configured]';
+                    if (Array.isArray(displayOld) && displayOld.length === 0) displayOld = 'None';
+                    if (Array.isArray(displayNew) && displayNew.length === 0) displayNew = 'None';
+
+                    // Mask dictionary objects, but leave Arrays alone to be formatted
+                    if (typeof displayOld === 'object' && displayOld !== null && !Array.isArray(displayOld)) displayOld = '[Configured]';
+                    if (typeof displayNew === 'object' && displayNew !== null && !Array.isArray(displayNew)) displayNew = '[Configured]';
+
                     if (displayOld === '[Configured]' && displayNew === 'None') displayNew = '[Deleted]';
                     if (displayOld === 'None' && displayNew === '[Configured]') displayOld = '[Not Configured]';
 
@@ -171,10 +195,19 @@ requestSave(formId) {
                             else if (key === 'relative_time') this.ui_relative = (val1 === true);
                             else if (key === 'expand_adv') this.ui_expand_adv = (val1 === true);
                             else if (key === 'trust_proxy') this.ui_trust_proxy = (val1 === true);
+                            else if (key === 'allowed_cidrs') {
+                                this.ui_allowed_cidrs = Array.isArray(val1) ? JSON.parse(JSON.stringify(val1)) : [];
+                                this.ui_allowed_cidrs_text = this.ui_allowed_cidrs.join('\n');
+                            }
                         };
                     } else if (currentPath.startsWith('Gateway Config.smtp.')) {
                         if (!currentPath.includes('listeners') && !currentPath.includes('auth')) {
-                            revertClosure = () => { this.smtp[key] = val1; };
+                            revertClosure = () => {
+                                this.smtp[key] = (typeof val1 === 'object') ? JSON.parse(JSON.stringify(val1)) : val1;
+                                if (key === 'allowed_cidrs') {
+                                    this.smtp_cidrs_text = Array.isArray(val1) ? val1.join('\n') : '';
+                                }
+                            };
                         }
                     } else if (currentPath.startsWith('Gateway Config.pushover.')) {
                         let prop = currentPath.split('.').pop();
@@ -343,6 +376,8 @@ resetTab(tabContext) {
         this.ui_smarthost_sort = uiObj.smarthost_sort || 'alias_asc';
         this.uiListeners = JSON.parse(JSON.stringify(uiObj.listeners || []));
         this.tzError = false;
+        this.ui_allowed_cidrs = JSON.parse(JSON.stringify(uiObj.allowed_cidrs || []));
+        this.ui_allowed_cidrs_text = this.ui_allowed_cidrs.join('\n');
     }
 
     if (tabContext === 'pushover') {
@@ -366,6 +401,7 @@ resetTab(tabContext) {
     if (tabContext === 'server') {
         this.smtp = JSON.parse(JSON.stringify(backup.server.smtp));
         this.smtp_meta = JSON.parse(JSON.stringify(backup.server.smtp_meta));
+        this.smtp_cidrs_text = (this.smtp.allowed_cidrs || []).join('\n');
     }
 },
 

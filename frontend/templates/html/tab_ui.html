@@ -35,6 +35,8 @@
     <input type="hidden" name="local_config_path" :value="ui_local_config_path">
     <input type="hidden" name="remote_verify_tls" :value="ui_remote_verify_tls">
 
+    <input type="hidden" name="ui_allowed_cidrs_text" :value="ui_allowed_cidrs.join('\n')">
+
     <div class="card">
         <h3>Web UI Display Settings</h3>
         <div class="flex-row" style="margin-bottom: 1rem; align-items: flex-end;">
@@ -98,6 +100,13 @@
             <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="ui_relative"><span class="slider"></span></div> Render Coerced Relative Human Times (e.g. '3 days ago')</label>
             <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="ui_expand_adv"><span class="slider"></span></div> Always Expand Route Settings by Default</label>
             <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="ui_trust_proxy"><span class="slider"></span></div> Trust Forwarded/X-Forwarded-For Headers (Client IPs)</label>
+        </div>
+
+        <div style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+            <label style="font-weight: bold; margin-bottom: 0.35rem; display: block;">Web UI Access IP Whitelist ACL</label>
+            <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; opacity: 0.7;">Restrict access to the control panel by entering one IP address or CIDR mask per line (e.g., 192.168.1.5 or 10.0.0.0/24). Leave completely blank to allow permissive access from any location.</p>
+            <textarea rows="4" x-model="ui_allowed_cidrs_text" @keydown.enter.stop @input="ui_allowed_cidrs = ui_allowed_cidrs_text.split('\n').map(l => l.trim()).filter(l => l); validateUiCidrs();" :class="uiCidrError ? 'input-invalid' : ''"placeholder="e.g.&#10;127.0.0.1&#10;192.168.1.50" style="font-family: monospace; font-size: 0.9rem; resize: vertical;"></textarea>
+            <span class="validation-error" x-show="uiCidrError" x-text="uiCidrError" style="display: none;"></span>
         </div>
     </div>
 

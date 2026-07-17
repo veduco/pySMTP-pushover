@@ -17,8 +17,8 @@
                 <template x-for="(change, index) in diffModal.changes" :key="change.key">
                     <tr>
                         <td style="word-wrap: break-word; word-break: break-all; white-space: normal;"><strong x-text="change.humanLabel"></strong></td>
-                        <td style="color: var(--danger-color); text-decoration: line-through; word-wrap: break-word; word-break: break-all; white-space: normal;" x-text="change.old"></td>
-                        <td style="color: #10b981; font-weight: bold; word-wrap: break-word; word-break: break-all; white-space: normal;" x-text="change.new"></td>
+                        <td style="color: var(--danger-color); text-decoration: line-through; word-wrap: break-word; word-break: break-all; white-space: normal;" x-html="formatDiffValue(change.old)"></td>
+                        <td style="color: #10b981; font-weight: bold; word-wrap: break-word; word-break: break-all; white-space: normal;" x-html="formatDiffValue(change.new)"></td>
                         <td style="text-align: center; vertical-align: middle;">
                             <button type="button" class="outline danger icon-btn" style="border: none; padding: 4px;"
                                     x-show="!(change.key.startsWith('Token Vault.smarthost.') && diffModal.changes.some(c => c.key === 'Gateway Config.smarthost.aliases.' + change.key.split('.').pop()))"

@@ -10,6 +10,7 @@ from aiosmtpd.smtp import SMTP
 
 from core.config import MAX_URL_CHARS, MAX_URL_TITLE_CHARS
 from backend.mail_parser import parse_email_content
+from core.json_store import is_ip_allowed
 
 try:
     from passlib.hash import sha256_crypt, sha512_crypt, md5_crypt
@@ -38,12 +39,23 @@ def verify_password(plain_password, stored_value):
     return plain_password == stored_value
 
 class GatewaySMTP(SMTP):
+    async def smtp_CONNECT(self, server, session, envelope):
+        session.allowed_cidrs = getattr(self.event_handler, "allowed_cidrs", [])
+        client_ip = session.peer[0] if session.peer else "127.0.0.1"
+
+        if session.allowed_cidrs and not is_ip_allowed(client_ip, session.allowed_cidrs):
+            logging.warning(f"Inbound SMTP connection dropped: Remote IP {client_ip} violated whitelist boundaries.")
+            return "554 Transaction rejected: Client IP access denied by gateway security ACL policy restrictions."
+
+        return await super().smtp_CONNECT(server, session, envelope)
+
     async def smtp_MAIL(self, arg):
         if arg:
             arg = re.sub(r'(?i)\s+AUTH=[^\s]*', '', arg)
             arg = re.sub(r'(?i)\s+RET=[^\s]*', '', arg)
             arg = re.sub(r'(?i)\s+ENVID=[^\s]*', '', arg)
         return await super().smtp_MAIL(arg)
+
     async def smtp_RCPT(self, arg):
         if arg:
             arg = re.sub(r'(?i)\s+ORCPT=[^\s]*', '', arg)
@@ -72,6 +84,7 @@ class PushoverSMTPHandler:
         self.state = state
         self.msg_queue = msg_queue
         self.broker = broker
+        self.allowed_cidrs = state.smtp.get("allowed_cidrs", [])
 
     def _match_explicit_routes(self, sender, recipients):
         routes_to_trigger = []

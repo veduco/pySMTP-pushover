@@ -32,6 +32,8 @@ linkEditModal: {
 
 validTimezones: [],
 tzError: false,
+uiCidrError: '',
+smtpCidrError: '',
 
 rawConfig: {{ config_json | safe }},
 rawVault: {},
@@ -39,7 +41,7 @@ rawUiConfig: {{ ui_config_json | safe }},
 
 queueItems: [],
 
-smtp: { listeners: [], default_route: 'pushover', loglevel: 'INFO', hostname: '', queue_dir: '', tls_cert_file: '', tls_key_file: '', disable_persistence: false, auth: {} },
+smtp: { listeners: [], default_route: 'pushover', loglevel: 'INFO', hostname: '', queue_dir: '', tls_cert_file: '', tls_key_file: '', disable_persistence: false, auth: {}, allowed_cidrs: [] },
 smtp_meta: {{ smtp_meta_json | safe }},
 
 vaultMeta: {{ vault_meta_json | safe }},
@@ -53,6 +55,10 @@ showGlobalAdv: false,
 smarthosts: {},
 smartGlobals: {},
 uiListeners: [],
+
+ui_allowed_cidrs: {{ ui_config_json | safe }}.allowed_cidrs || [],
+ui_allowed_cidrs_text: ({{ ui_config_json | safe }}.allowed_cidrs || []).join('\n'),
+smtp_cidrs_text: ({{ config_json | safe }}.smtp?.allowed_cidrs || []).join('\n'),
 
 ui_tz: '{{ ui_tz }}', ui_fmt: '{{ ui_fmt }}',
 ui_relative: {{ 'true' if ui_relative else 'false' }},

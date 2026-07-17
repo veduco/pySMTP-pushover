@@ -3,10 +3,12 @@ import urllib3
 import httpx
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from frontend.state import app_state
 from frontend.routers import queue, ui
 from core.config import UI_CONFIG_FILE, load_clean_json
+from core.json_store import is_ip_allowed
 
 # Silence urllib3 warnings against backend self-signed proxy certs
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -67,6 +69,12 @@ async def access_log_middleware(request: Request, call_next):
     ui_config = load_clean_json(UI_CONFIG_FILE)
     trust_proxy = ui_config.get("trust_proxy", False)
     real_ip = get_real_ip(request, trust_proxy)
+
+    allowed_cidrs = ui_config.get("allowed_cidrs", [])
+    if allowed_cidrs and not is_ip_allowed(real_ip, allowed_cidrs):
+        logging.warning(f"Web UI access connection rejected: Client IP {real_ip} is not whitelisted.")
+        return HTMLResponse("<h1>403 Forbidden</h1><p>Access denied by CIDR policy configuration rules.</p>", status_code=403)
+
     response = await call_next(request)
     path = request.url.path
     if path not in ["/healthcheck", "/api/queue", "/api/queue/stream"]:

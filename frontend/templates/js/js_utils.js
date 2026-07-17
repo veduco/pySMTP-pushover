@@ -93,3 +93,35 @@ clone(targetObj) {
     if (!targetObj) return {};
     return JSON.parse(JSON.stringify(targetObj));
 },
+isValidIPOrCIDR(val) {
+    if (val === 'localhost') return true;
+    // Validates standard IPv4 and IPv4 CIDR blocks
+    const ipv4 = /^(25[0-5]|2[0-4]\d|[01]?\d\d?)\.(25[0-5]|2[0-4]\d|[01]?\d\d?)\.(25[0-5]|2[0-4]\d|[01]?\d\d?)\.(25[0-5]|2[0-4]\d|[01]?\d\d?)(\/([0-9]|[1-2][0-9]|3[0-2]))?$/;
+    // Validates standard IPv6 and IPv6 CIDR blocks
+    const ipv6 = /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:))(\/([0-9]|[1-9][0-9]|1[0-1][0-9]|12[0-8]))?$/;
+
+    return ipv4.test(val) || ipv6.test(val);
+},
+
+validateSmtpCidrs() {
+    const lines = this.smtp_cidrs_text.split('\n').map(l => l.trim()).filter(l => l);
+    for (let line of lines) {
+        if (!this.isValidIPOrCIDR(line)) {
+            this.smtpCidrError = `Invalid IP or CIDR Subnet: ${line}`;
+            return false;
+        }
+    }
+    this.smtpCidrError = '';
+    return true;
+},
+validateUiCidrs() {
+    const lines = this.ui_allowed_cidrs_text.split('\n').map(l => l.trim()).filter(l => l);
+    for (let line of lines) {
+        if (!this.isValidIPOrCIDR(line)) {
+            this.uiCidrError = `Invalid IP or CIDR Subnet: ${line}`;
+            return false;
+        }
+    }
+    this.uiCidrError = '';
+    return true;
+},

@@ -101,10 +101,13 @@ async def save_ui(
     vault_sort: str = Form("name_asc"), smtp_sort: str = Form("name_asc"), smarthost_sort: str = Form("alias_asc"),
     ui_loglevel: str = Form("INFO"), ui_listeners_json: str = Form("[]"),
     backend_mode: str = Form("local"), remote_url: str = Form(""), remote_secret: str = Form(""),
-    local_config_path: str = Form(""), remote_verify_tls: bool = Form(False)
+    local_config_path: str = Form(""), remote_verify_tls: bool = Form(False),
+    ui_allowed_cidrs_text: str = Form("")
 ):
     try: listeners = json.loads(ui_listeners_json)
     except Exception: listeners = [{"bind": "0.0.0.0:8443", "https": True}]
+
+    ui_cidrs = [line.strip() for line in ui_allowed_cidrs_text.splitlines() if line.strip()]
 
     save_json(UI_CONFIG_FILE, {
         "listeners": listeners, "timezone": timezone, "date_format": date_format,
@@ -112,7 +115,8 @@ async def save_ui(
         "vault_sort": vault_sort, "smtp_sort": smtp_sort, "smarthost_sort": smarthost_sort,
         "ui_loglevel": ui_loglevel, "backend_mode": backend_mode,
         "remote_url": remote_url, "remote_secret": remote_secret,
-        "local_config_path": local_config_path, "remote_verify_tls": remote_verify_tls
+        "local_config_path": local_config_path, "remote_verify_tls": remote_verify_tls,
+        "allowed_cidrs": ui_cidrs
     })
 
     if backend_mode == "local" and local_config_path:

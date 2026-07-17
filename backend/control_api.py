@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import uvicorn
 from backend.events import broker
-from core.json_store import generate_self_signed_certificate, parse_bind_string
+from core.json_store import generate_self_signed_certificate, parse_bind_string, is_ip_allowed
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -27,10 +27,18 @@ active_server = None
 
 @app.middleware("http")
 async def access_log_middleware(request: Request, call_next):
+    state_ref = getattr(request.app.state, "gateway_state", None)
+    allowed_cidrs = state_ref.smtp.get("allowed_cidrs", []) if state_ref else []
+
+    ip = request.client.host if request.client else "127.0.0.1"
+
+    if allowed_cidrs and not is_ip_allowed(ip, allowed_cidrs):
+        logging.warning(f"Control API endpoint connection dropped: Client IP {ip} is unauthorized.")
+        return JSONResponse({"error": "Forbidden: Access denied by network policy rules."}, status_code=403)
+
     response = await call_next(request)
     path = request.url.path
     if path not in ["/healthcheck"]:
-        ip = request.client.host if request.client else "127.0.0.1"
         http_version = request.scope.get("http_version", "1.1")
         logging.info(f'{ip} - "{request.method} {path} HTTP/{http_version}" {response.status_code}')
     return response
