@@ -45,6 +45,35 @@ clearTestPayload() {
     this.testPayload.isError = false;
 },
 
+async handleTestAttachment(event) {
+    const files = event.target.files;
+    if (!files.length) return;
+
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const reader = new FileReader();
+
+        reader.onload = (e) => {
+            // Strip the data:image/png;base64, prefix to send raw base64 to Python
+            const base64Data = e.target.result.split(',')[1];
+            this.testPayload.attachments.push({
+                name: file.name,
+                type: file.type || 'application/octet-stream',
+                size: file.size,
+                data: base64Data
+            });
+        };
+
+        reader.readAsDataURL(file);
+    }
+    // Reset the input so the user can upload the same file again if they deleted it
+    event.target.value = '';
+},
+
+removeTestAttachment(index) {
+    this.testPayload.attachments.splice(index, 1);
+},
+
 async sendTestPayload() {
     this.testPayload.loading = true;
     this.testPayload.status = '';
@@ -59,7 +88,8 @@ async sendTestPayload() {
                 to: this.testPayload.to,
                 type: this.testPayload.type,
                 message_plain: this.testPayload.message_plain,
-                message_html: this.testPayload.message_html
+                message_html: this.testPayload.message_html,
+                attachments: this.testPayload.attachments
             })
         });
 

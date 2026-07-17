@@ -17,7 +17,8 @@ activeUiPort: {{ active_ui_port | default(0) }},
 defaultTestPayload: {
     from: '', to: '', type: 'multipart',
     message_plain: 'Test message from SMTP Gateway',
-    message_html: '<html><body><p>Test message from SMTP Gateway</p></body></html>'
+    message_html: '<html><body><p>Test message from SMTP Gateway</p></body></html>',
+    attachments: []
 },
 testPayload: {
     status: '', isError: false, loading: false

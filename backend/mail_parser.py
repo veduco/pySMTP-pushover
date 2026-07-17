@@ -1,5 +1,6 @@
 import re
 import time
+import base64
 from email import message_from_bytes, policy
 from email.message import EmailMessage
 from email.utils import parsedate_to_datetime
@@ -114,6 +115,8 @@ def parse_email_content(raw_content):
 
 def build_test_email(data):
     """Centralized constructor for UI test payload injections with native defaults."""
+    from email.message import EmailMessage
+
     msg = EmailMessage()
     msg['Subject'] = "Test Payload"
     msg['From'] = data.get("from") or "user@example.com"
@@ -126,10 +129,30 @@ def build_test_email(data):
     if payload_type == "plaintext":
         msg.set_content(plain_msg)
     elif payload_type == "html":
-        # Natively establishes text/html without throwing wrapping tags around it
         msg.set_content(html_msg, subtype="html")
     else:  # multipart fallback
         msg.set_content(plain_msg)
         msg.add_alternative(html_msg, subtype="html")
+
+    attachments = data.get("attachments", [])
+    for att in attachments:
+        try:
+            file_data = base64.b64decode(att.get("data", ""))
+            mime_type = att.get("type", "application/octet-stream")
+
+            # Safely split mime type into maintype and subtype for the email constructor
+            if "/" in mime_type:
+                maintype, subtype = mime_type.split("/", 1)
+            else:
+                maintype, subtype = "application", "octet-stream"
+
+            msg.add_attachment(
+                file_data,
+                maintype=maintype,
+                subtype=subtype,
+                filename=att.get("name", "test_attachment.bin")
+            )
+        except Exception as e:
+            print(f"Failed to process test attachment {att.get('name')}: {e}")
 
     return msg
