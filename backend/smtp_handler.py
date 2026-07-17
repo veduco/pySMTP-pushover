@@ -79,23 +79,31 @@ class PushoverSMTPHandler:
         # Match Sender
         if sender in self.state.mappings.get("from", {}):
             logging.info(f"Matched sender address: {sender}")
-            routes_to_trigger.append(self.state.mappings["from"][sender])
+            r = self.state.mappings["from"][sender].copy()
+            r["_match_reason"] = f"Sender: {sender}"
+            routes_to_trigger.append(r)
 
         for pattern, route_config in self.state.regex_mappings.get("from", []):
             if pattern.search(sender):
                 logging.info(f"Matched sender regex '{pattern.pattern}' to: {sender}")
-                routes_to_trigger.append(route_config)
+                r = route_config.copy()
+                r["_match_reason"] = f"Sender Regex: {pattern.pattern}"
+                routes_to_trigger.append(r)
 
         # Match Recipients
         for recipient in recipients:
             if recipient in self.state.mappings.get("to", {}):
                 logging.info(f"Matched recipient address: {recipient}")
-                routes_to_trigger.append(self.state.mappings["to"][recipient])
+                r = self.state.mappings["to"][recipient].copy()
+                r["_match_reason"] = f"Recipient: {recipient}"
+                routes_to_trigger.append(r)
 
             for pattern, route_config in self.state.regex_mappings.get("to", []):
                 if pattern.search(recipient):
                     logging.info(f"Matched recipient regex '{pattern.pattern}' to: {recipient}")
-                    routes_to_trigger.append(route_config)
+                    r = route_config.copy()
+                    r["_match_reason"] = f"Recipient Regex: {pattern.pattern}"
+                    routes_to_trigger.append(r)
 
         return routes_to_trigger
 
@@ -106,7 +114,9 @@ class PushoverSMTPHandler:
             if def_route == "pushover":
                 if self.state.pushover.get("user") and self.state.pushover.get("token"):
                     logging.info("No explicit mappings matched. Falling back to global Pushover catch-all.")
-                    routes_to_trigger.append(self.state.pushover)
+                    r = self.state.pushover.copy()
+                    r["_match_reason"] = "Global Default Route"
+                    routes_to_trigger.append(r)
                 else:
                     logging.info("No explicit mappings matched and no global Pushover catch-all defined. Ignoring message.")
 
@@ -117,6 +127,7 @@ class PushoverSMTPHandler:
                     g = self.state.smarthost.get("globals", {}).copy()
                     g["method"] = "smarthost"
                     g["smarthost_alias"] = sh_alias
+                    g["_match_reason"] = "Global Default Route"
                     routes_to_trigger.append(g)
                 else:
                     logging.info("No explicit mappings matched and global Smarthost alias is invalid. Ignoring message.")
@@ -192,6 +203,7 @@ class PushoverSMTPHandler:
             payload = {
                 "id": uuid.uuid4().hex,
                 "method": method,
+                "match_reason": route.get("_match_reason", "Test / Direct Injection"),
                 "message": final_body,
                 "title": title,
                 "timestamp": timestamp,

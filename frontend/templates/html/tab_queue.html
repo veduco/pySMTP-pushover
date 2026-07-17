@@ -23,7 +23,15 @@
             <template x-for="item in queueItems" :key="item.id">
                 <tr>
                     <td class="table-col-min"><span class="time-display" x-text="formatTime(item.timestamp)" :title="getFullTime(item.timestamp)"></span></td>
-                    <td class="table-col-min" style="text-transform: capitalize;" x-text="item.method"></td>
+
+                    <td class="table-col-min">
+                        <div style="text-transform: capitalize; font-weight: bold; margin-bottom: 0.25rem;" x-text="item.method"></div>
+                        <div style="font-size: 0.75rem; opacity: 0.8; white-space: nowrap; display: flex; align-items: center; gap: 4px; padding: 2px 6px; background: var(--secondary-bg); border: 1px solid var(--border-color); border-radius: 4px; width: max-content;">
+                            <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 16 16 12 12 8"></polyline><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                            <span x-text="item.match_reason"></span>
+                        </div>
+                    </td>
+
                     <td x-text="item.sender"></td>
                     <td x-text="item.title"></td>
                     <td class="table-col-min" style="text-align: center;" x-text="item.retry_count"></td>

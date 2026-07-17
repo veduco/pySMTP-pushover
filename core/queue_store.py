@@ -15,6 +15,7 @@ def get_queue_items(queue_dir: str):
                             "id": data.get("id"),
                             "title": data.get("title", "No Subject"),
                             "method": data.get("method", "pushover"),
+                            "match_reason": data.get("match_reason", "Unknown Route"),
                             "retry_count": data.get("retry_count", 0),
                             "last_attempt": data.get("last_attempt", 0),
                             "next_retry": data.get("next_retry", 0),
