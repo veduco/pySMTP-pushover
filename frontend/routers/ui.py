@@ -51,7 +51,7 @@ async def index(request: Request):
 @router.post("/save/config")
 async def save_config(request: Request, config_json: str = Form(...), vault_json: str = Form(None)):
     ui_config = load_clean_json(UI_CONFIG_FILE)
-    manager = ConfigManager(ui_config, http_client=request.app.state.http_client)
+    manager = ConfigManager(ui_config, http_client=request.state.http_client)
 
     try:
         parsed = json.loads(config_json)

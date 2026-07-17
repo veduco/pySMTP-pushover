@@ -1,6 +1,7 @@
 import logging
 import urllib3
 import httpx
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from frontend.state import app_state
@@ -10,21 +11,33 @@ from core.config import UI_CONFIG_FILE, load_clean_json
 # Silence urllib3 warnings against backend self-signed proxy certs
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# Thread-safe / Loop-aware HTTP client registry
+_http_clients = {}
+
+def get_http_client():
+    loop = asyncio.get_running_loop()
+    if loop not in _http_clients:
+        ui_config = load_clean_json(UI_CONFIG_FILE)
+        verify_tls = ui_config.get("remote_verify_tls", False)
+        limits = httpx.Limits(max_connections=100, max_keepalive_connections=20)
+        _http_clients[loop] = httpx.AsyncClient(verify=verify_tls, limits=limits)
+    return _http_clients[loop]
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    app_state["active_servers"] = app_state.get("active_servers", 0) + 1
     app_state["shutdown"] = False
-
-    # Read the baseline UI config to apply global TLS policies
-    ui_config = load_clean_json(UI_CONFIG_FILE)
-    verify_tls = ui_config.get("remote_verify_tls", False)
-
-    # Establish a highly concurrent socket pool
-    limits = httpx.Limits(max_connections=100, max_keepalive_connections=20)
-    async with httpx.AsyncClient(verify=verify_tls, limits=limits) as client:
-        app.state.http_client = client
+    try:
         yield
-
-    app_state["shutdown"] = True
+    finally:
+        app_state["active_servers"] -= 1
+        # Only tear down the global stream state if ALL server threads have exited/crashed
+        if app_state["active_servers"] <= 0:
+            app_state["shutdown"] = True
+            for loop, client in list(_http_clients.items()):
+                try: await client.aclose()
+                except Exception: pass
+            _http_clients.clear()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -48,6 +61,9 @@ def get_real_ip(request: Request, trust_proxy: bool):
 
 @app.middleware("http")
 async def access_log_middleware(request: Request, call_next):
+    # Bind the specific event loop's client to the transient request state
+    request.state.http_client = get_http_client()
+
     ui_config = load_clean_json(UI_CONFIG_FILE)
     trust_proxy = ui_config.get("trust_proxy", False)
     real_ip = get_real_ip(request, trust_proxy)

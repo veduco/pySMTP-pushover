@@ -19,7 +19,7 @@ async def queue_stream(request: Request):
     if bmode == "remote":
         url = ui_config.get("remote_url", "")
         sec = ui_config.get("remote_secret", "")
-        client = request.app.state.http_client
+        client = request.state.http_client
 
         async def event_proxy():
             try:
@@ -55,7 +55,7 @@ async def get_queue(request: Request):
     if bmode == "remote":
         url = ui_config.get("remote_url", "")
         sec = ui_config.get("remote_secret", "")
-        client = request.app.state.http_client
+        client = request.state.http_client
         try:
             r = await client.get(
                 f"{url.rstrip('/')}/api/queue",
@@ -80,7 +80,7 @@ async def proxy_retry_queue_item(request: Request, item_id: str):
     if bmode == "remote":
         url = ui_config.get("remote_url", "")
         sec = ui_config.get("remote_secret", "")
-        client = request.app.state.http_client
+        client = request.state.http_client
         try:
             await client.post(
                 f"{url.rstrip('/')}/api/queue/{item_id}/retry",
@@ -103,7 +103,7 @@ async def proxy_delete_queue_item(request: Request, item_id: str):
     if bmode == "remote":
         url = ui_config.get("remote_url", "")
         sec = ui_config.get("remote_secret", "")
-        client = request.app.state.http_client
+        client = request.state.http_client
         try:
             await client.delete(
                 f"{url.rstrip('/')}/api/queue/{item_id}",
