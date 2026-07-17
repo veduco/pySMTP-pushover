@@ -241,7 +241,11 @@ class PushoverSMTPHandler:
 
             if not disable_persist:
                 filepath = os.path.join(self.state.smtp["queue_dir"], f"{payload['id']}.json")
-                with open(filepath, 'w') as f: json.dump(payload, f)
+                try:
+                    with open(filepath, 'w') as f:
+                        json.dump(payload, f)
+                except Exception as e:
+                    logging.warning(f"Disk persistence failed for {payload['id']}, falling back to pure in-memory queueing. Error: {e}")
 
             await self.msg_queue.put(payload)
             if self.broker:
