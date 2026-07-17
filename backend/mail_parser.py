@@ -1,6 +1,7 @@
 import re
 import time
 from email import message_from_bytes, policy
+from email.message import EmailMessage
 from email.utils import parsedate_to_datetime
 from core.config import MAX_TITLE_CHARS, MAX_ATTACHMENT_BYTES
 
@@ -110,3 +111,25 @@ def parse_email_content(raw_content):
         "body_html_processed": body_html_processed,
         "body_plain_processed": body_plain_processed
     }
+
+def build_test_email(data):
+    """Centralized constructor for UI test payload injections with native defaults."""
+    msg = EmailMessage()
+    msg['Subject'] = "Test Payload"
+    msg['From'] = data.get("from") or "user@example.com"
+    msg['To'] = data.get("to") or "user@example.com"
+
+    payload_type = data.get("type") or "multipart"
+    plain_msg = data.get("message_plain") or "Test message from SMTP Gateway"
+    html_msg = data.get("message_html") or "<html><body><p>Test message from SMTP Gateway</p></body></html>"
+
+    if payload_type == "plaintext":
+        msg.set_content(plain_msg)
+    elif payload_type == "html":
+        # Natively establishes text/html without throwing wrapping tags around it
+        msg.set_content(html_msg, subtype="html")
+    else:  # multipart fallback
+        msg.set_content(plain_msg)
+        msg.add_alternative(html_msg, subtype="html")
+
+    return msg

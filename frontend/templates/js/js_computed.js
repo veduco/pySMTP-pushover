@@ -158,3 +158,11 @@ get canSaveActiveTab() {
     }
     return true;
 },
+
+get hasTestPayloadChanges() {
+    return this.testPayload.from !== this.defaultTestPayload.from ||
+           this.testPayload.to !== this.defaultTestPayload.to ||
+           this.testPayload.type !== this.defaultTestPayload.type ||
+           this.testPayload.message_plain !== this.defaultTestPayload.message_plain ||
+           this.testPayload.message_html !== this.defaultTestPayload.message_html;
+},

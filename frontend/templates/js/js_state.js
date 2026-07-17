@@ -14,6 +14,14 @@ sseSource: null,
 
 isReconnecting: false,
 activeUiPort: {{ active_ui_port | default(0) }},
+defaultTestPayload: {
+    from: '', to: '', type: 'multipart',
+    message_plain: 'Test message from SMTP Gateway',
+    message_html: '<html><body><p>Test message from SMTP Gateway</p></body></html>'
+},
+testPayload: {
+    status: '', isError: false, loading: false
+},
 
 linkEditModal: {
     open: false, backend_remote: false, showSecret: false,

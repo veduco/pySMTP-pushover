@@ -1,0 +1,50 @@
+<div class="card">
+    <h3>Inject Test Payload</h3>
+    <p>Simulate an incoming email alert. The payload will be routed directly into the backend processing stack exactly as if it were received across an active SMTP socket.</p>
+
+    <div class="flex-row" style="margin-bottom: 1.5rem;">
+        <div class="flex-col" style="flex: 1; min-width: 200px;">
+            <label>From (Sender)</label>
+            <input type="text" x-model="testPayload.from" placeholder="user@example.com" style="width: 100%;">
+        </div>
+        <div class="flex-col" style="flex: 1; min-width: 200px;">
+            <label>To (Recipient)</label>
+            <input type="text" x-model="testPayload.to" placeholder="user@example.com" style="width: 100%;">
+        </div>
+    </div>
+
+    <div class="form-group" style="margin-bottom: 1.5rem;">
+        <label style="margin-bottom: 0.25rem;">MIME Payload Format</label>
+        <div class="segment-track" style="width: 100%; display: flex; max-width: 400px;">
+            <div class="segment-thumb" :style="'width: calc(33.333% - 2px); transform: translateX(' + (['plaintext','html','multipart'].indexOf(testPayload.type) * 100) + '%);'"></div>
+            <label class="segment-label" :style="testPayload.type === 'plaintext' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="testPayload.type" value="plaintext"> Plaintext</label>
+            <label class="segment-label" :style="testPayload.type === 'html' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="testPayload.type" value="html"> HTML</label>
+            <label class="segment-label" :style="testPayload.type === 'multipart' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="testPayload.type" value="multipart"> Multipart</label>
+        </div>
+    </div>
+
+    <div class="flex-row" style="margin-bottom: 1.5rem; gap: 1rem; align-items: stretch;">
+        <div class="flex-col" x-show="testPayload.type === 'plaintext' || testPayload.type === 'multipart'" style="flex: 1; min-width: 200px;">
+            <label>Plaintext Body</label>
+            <textarea x-model="testPayload.message_plain" rows="6" placeholder="Test message from SMTP Gateway" style="width: 100%; resize: vertical; padding: 0.75rem; background: var(--input-bg); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 6px;"></textarea>
+        </div>
+
+        <div class="flex-col" x-show="testPayload.type === 'html' || testPayload.type === 'multipart'" style="flex: 1; min-width: 200px;">
+            <label>HTML Body</label>
+            <textarea x-model="testPayload.message_html" rows="6" placeholder="<html><body><p>Test message from SMTP Gateway</p></body></html>" style="width: 100%; resize: vertical; padding: 0.75rem; background: var(--input-bg); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 6px; font-family: monospace;"></textarea>
+        </div>
+    </div>
+
+    <div style="display: flex; gap: 1rem; align-items: center;">
+        <button type="button" @click="sendTestPayload()" :disabled="testPayload.loading">
+            <span x-show="!testPayload.loading">Send Payload</span>
+            <span x-show="testPayload.loading">Injecting...</span>
+        </button>
+        <button type="button" class="outline warning icon-btn" @click="clearTestPayload()" :disabled="!hasTestPayloadChanges" title="Restore Defaults">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"></path><path d="M22 21H7"></path><path d="m5 11 9 9"></path></svg>
+        </button>
+    </div>
+
+    <div x-show="testPayload.status" :style="testPayload.isError ? 'color: var(--danger-color); font-weight: bold;' : 'color: var(--success-color); font-weight: bold;'" style="margin-bottom: 1rem;" x-text="testPayload.status"></div>
+
+</div>

@@ -39,6 +39,7 @@
                     <div class="tab" :class="{ 'active': tab === 'pushover' }" @click="tab = 'pushover'">Pushover</div>
                     <div class="tab" :class="{ 'active': tab === 'smarthost' }" @click="tab = 'smarthost'">Smarthosts</div>
                     <div class="tab" :class="{ 'active': tab === 'server' }" @click="tab = 'server'">SMTP Server</div>
+                    <div class="tab" :class="{ 'active': tab === 'test' }" @click="tab = 'test'">Test Payload</div>
                 </div>
             </template>
             <div class="tab" :class="{ 'active': tab === 'backend' }" @click="tab = 'backend'">Backend Config</div>
@@ -53,6 +54,7 @@
                     <div x-show="tab === 'pushover'">{% include "tab_pushover.html" %}</div>
                     <div x-show="tab === 'smarthost'">{% include "tab_smarthost.html" %}</div>
                     <div x-show="tab === 'server'">{% include "tab_smtp.html" %}</div>
+                    <div x-show="tab === 'test'">{% include "tab_test.html" %}</div>
                 </div>
             </template>
 

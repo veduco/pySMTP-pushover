@@ -126,13 +126,39 @@ async def api_delete_queue_item(request: Request, item_id: str):
     delete_queue_item(state.smtp["queue_dir"], item_id)
     return JSONResponse({"status": "ok"})
 
-async def start_control_api(api_conf, reload_event, mappings_reload_event, gateway_state=None):
+@app.post("/api/test", dependencies=[Depends(verify_token)])
+async def api_test_payload(request: Request):
+    from backend.smtp_handler import PushoverSMTPHandler
+    from backend.events import broker
+    from backend.mail_parser import build_test_email
+
+    data = await request.json()
+    msg_queue = getattr(request.app.state, "msg_queue", None)
+    if not msg_queue:
+        return JSONResponse({"error": "Message queue not bound to API state"}, status_code=500)
+
+    handler = PushoverSMTPHandler(request.app.state.gateway_state, msg_queue, broker)
+
+    msg = build_test_email(data)
+
+    class MockEnvelope:
+        def __init__(self):
+            self.mail_from = msg['From']
+            self.rcpt_tos = [msg['To']]
+            self.content = bytes(msg)
+
+    # Bypass the network socket completely and invoke the SMTP parsing execution chain
+    await handler.handle_DATA(None, None, MockEnvelope())
+    return JSONResponse({"status": "ok"})
+
+async def start_control_api(api_conf, reload_event, mappings_reload_event, gateway_state=None, msg_queue=None):
     global active_server
 
     app.state.secret = api_conf.get("secret", "")
     app.state.reload_event = reload_event
     app.state.mappings_reload_event = mappings_reload_event
     app.state.gateway_state = gateway_state
+    app.state.msg_queue = msg_queue
 
     bind = api_conf.get("bind", "0.0.0.0:6443")
     host, port = parse_bind_string(bind, 6443)

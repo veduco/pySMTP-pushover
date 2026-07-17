@@ -117,3 +117,76 @@ async def proxy_delete_queue_item(request: Request, item_id: str):
         q_path = os.path.normpath(os.path.join(SCRIPT_DIR, config.get("smtp", {}).get("queue_dir", "queue")))
         delete_queue_item(q_path, item_id)
         return JSONResponse({"status": "ok"})
+
+@router.post("/test")
+async def proxy_test_payload(request: Request):
+    data = await request.json()
+    ui_config = load_clean_json(UI_CONFIG_FILE)
+    bmode = ui_config.get("backend_mode", "local")
+
+    if bmode == "remote":
+        url = ui_config.get("remote_url", "")
+        sec = ui_config.get("remote_secret", "")
+        client = request.state.http_client
+        try:
+            r = await client.post(
+                f"{url.rstrip('/')}/api/test",
+                json=data,
+                headers={"Authorization": f"Bearer {sec}"},
+                timeout=5.0
+            )
+            if r.status_code != 200:
+                return JSONResponse({"error": f"Backend returned {r.status_code}"}, status_code=400)
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"status": "ok"})
+    else:
+        import random
+        import ssl
+        import aiosmtplib
+        from backend.mail_parser import build_test_email
+
+        # 1. Parse your locally running gateway configuration parameters
+        config = load_clean_json(get_active_config_path())
+        listeners = config.get("smtp", {}).get("listeners", [])
+
+        if not listeners:
+            return JSONResponse({"error": "No SMTP listeners configured on the gateway core to route through."}, status_code=400)
+
+        # 2. Filter listeners and apply sorting preferences (STARTTLS prioritized)
+        tls_listeners = [l for l in listeners if l.get("starttls")]
+        plain_listeners = [l for l in listeners if not l.get("starttls")]
+
+        # 3. Randomly select an operational listener based on preference tiers
+        selected_listener = random.choice(tls_listeners) if tls_listeners else random.choice(plain_listeners)
+
+        # Safely extract loopback address targets and ports
+        bind_str = selected_listener.get("bind", "127.0.0.1:25")
+        _, port_str = bind_str.rsplit(":", 1) if ":" in bind_str else ("127.0.0.1", "25")
+        target_port = int(port_str)
+        use_starttls = selected_listener.get("starttls", False)
+
+        # 4. Generate our standardized test email object mapping seamlessly
+        msg = build_test_email(data)
+
+        # 5. Connect and relay directly through the active loopback socket
+        try:
+            # Enforce unverified context relaxation rule so self-signed certs never drop connections
+            tls_ctx = ssl._create_unverified_context()
+
+            smtp_client = aiosmtplib.SMTP(
+                hostname="127.0.0.1",
+                port=target_port,
+                use_tls=False,
+                start_tls=use_starttls,
+                tls_context=tls_ctx if use_starttls else None,
+                timeout=5
+            )
+
+            await smtp_client.connect()
+            await smtp_client.send_message(msg)
+            await smtp_client.quit()
+
+            return JSONResponse({"status": "ok"})
+        except Exception as e:
+            return JSONResponse({"error": f"Failed to relay payload through local listener 127.0.0.1:{target_port}: {e}"}, status_code=500)

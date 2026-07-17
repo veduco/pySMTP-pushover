@@ -86,21 +86,20 @@ async def main():
     cap_method = app_state.smtp['default_route'].capitalize()
     logging.info(f"Explicit rules: {total_mapped}. Global Routing Method: {cap_method}. SMTP Auth: {auth_status}")
 
-    api_task = None
-    api_conf = app_state.smtp.get("api", {})
-    if api_conf.get("enabled"):
-        api_task = asyncio.create_task(start_control_api(api_conf, reload_event, mappings_reload_event, gateway_state=app_state))
-
     msg_queue = asyncio.Queue()
     load_queue_from_disk(msg_queue, app_state, broker)
-
-    # Boot 5 concurrent delivery tasks in the background
-    num_workers = 5
-    worker_task = asyncio.create_task(async_delivery_manager(msg_queue, app_state, num_workers, broker))
 
     handler = PushoverSMTPHandler(app_state, msg_queue, broker)
     authenticator = GatewayAuthenticator(app_state)
     active_servers = {}
+
+    num_workers = 5
+    worker_task = asyncio.create_task(async_delivery_manager(msg_queue, app_state, num_workers, broker))
+
+    api_task = None
+    api_conf = app_state.smtp.get("api", {})
+    if api_conf.get("enabled"):
+        api_task = asyncio.create_task(start_control_api(api_conf, reload_event, mappings_reload_event, gateway_state=app_state, msg_queue=msg_queue))
 
     startup_errors = False
 

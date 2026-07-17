@@ -1,8 +1,10 @@
+const ALERT_TIMEOUT_MS = 5000;
+
 let statusTimer;
 document.addEventListener('htmx:afterSwap', (e) => {
     if(e.detail.target.id === 'status' && e.detail.target.innerHTML) {
         clearTimeout(statusTimer);
-        statusTimer = setTimeout(() => { e.detail.target.innerHTML = ''; }, 5000);
+        statusTimer = setTimeout(() => { e.detail.target.innerHTML = ''; }, ALERT_TIMEOUT_MS);
         const component = Alpine.$data(document.querySelector('[x-data]'));
         if (component && component.takeSnapshot) component.takeSnapshot();
     }
@@ -24,6 +26,7 @@ document.addEventListener('alpine:init', () => {
         {% include "js_modal_network.js" %}
 
         init() {
+            this.testPayload = { ...this.defaultTestPayload, ...this.testPayload };
             this.ui_local_config_path = this.rawUiConfig.local_config_path || 'config.json';
             this.ui_remote_url = this.rawUiConfig.remote_url || '';
             this.ui_remote_secret = this.rawUiConfig.remote_secret || '';
