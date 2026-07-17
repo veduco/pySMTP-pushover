@@ -149,15 +149,30 @@ async def send_smarthost(payload, state):
         if not local_ehlo: local_ehlo = state.smtp.get("hostname")
         if not local_ehlo: local_ehlo = "localhost"
 
-        smtp_client = aiosmtplib.SMTP(hostname=host, port=port, local_hostname=local_ehlo, timeout=15)
-
-        await smtp_client.connect()
-        await smtp_client.ehlo()
+        use_tls = False
+        start_tls = False
+        tls_context = None
 
         if sh_conf.get("starttls"):
             tls_context = ssl._create_unverified_context() if sh_conf.get("disable_tls_validation") else ssl.create_default_context()
-            await smtp_client.starttls(server_hostname=host, tls_context=tls_context)
-            await smtp_client.ehlo()
+            if port == 465:
+                use_tls = True
+            else:
+                start_tls = True
+
+        # Inject parameters directly into constructor to leverage aiosmtplib's native negotiation state machine
+        smtp_client = aiosmtplib.SMTP(
+            hostname=host,
+            port=port,
+            local_hostname=local_ehlo,
+            use_tls=use_tls,
+            start_tls=start_tls,
+            tls_context=tls_context,
+            timeout=15
+        )
+
+        # Single call manages socket binding, initial EHLO, TLS handshaking, and secondary EHLO safely
+        await smtp_client.connect()
 
         if sh_conf.get("auth"):
             sh_pass = state.vault.get("smarthost", {}).get(alias, "")
