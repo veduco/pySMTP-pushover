@@ -66,13 +66,13 @@ clearUiListenerModal() {
     this.uiListenerModal.tls_cert = this.uiListenerModal.orig.tls_cert; this.uiListenerModal.tls_key = this.uiListenerModal.orig.tls_key;
     this.uiListenerModal.error = '';
 },
-
 get hasListenerModalChanges() {
     const m = this.listenerModal; const o = m.orig;
     return m.ip !== o.ip || String(m.port) !== String(o.port) || m.hostname !== o.hostname || m.starttls !== o.starttls || m.tls_cert_file !== o.tls_cert_file || m.tls_key_file !== o.tls_key_file;
 },
 get canSaveListenerModal() {
-    if (!this.hasListenerModalChanges) return false;
+    if (!this.hasListenerModalChanges && this.listenerModal.mode === 'edit') return false;
+
     const m = this.listenerModal;
     if (!m.port || m.port < 1 || m.port > 65535) return false;
     const ip = m.ip.trim() || '0.0.0.0';
@@ -83,13 +83,13 @@ get hasUiListenerModalChanges() {
     return m.ip !== o.ip || String(m.port) !== String(o.port) || m.https !== o.https || m.tls_cert !== o.tls_cert || m.tls_key !== o.tls_key;
 },
 get canSaveUiListenerModal() {
-    if (!this.hasUiListenerModalChanges) return false;
+    if (!this.hasUiListenerModalChanges && this.uiListenerModal.mode === 'edit') return false;
+
     const m = this.uiListenerModal;
     if (!m.port || m.port < 1 || m.port > 65535) return false;
     const ip = m.ip.trim() || '0.0.0.0';
     return this.isValidIP(ip);
 },
-
 deleteUiListener(idx) {
     if (this.uiListeners.length <= 1) {
         this.alertModal.title = 'Cannot Remove Listener';
