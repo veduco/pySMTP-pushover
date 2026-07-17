@@ -114,13 +114,15 @@ if __name__ == "__main__":
                 "thread": t,
                 "protocol": protocol,
                 "host": host,
-                "port": port
+                "port": port,
+                "bind": bind
             })
 
             logging.debug(f"Starting UI listener at {protocol}://{host}:{port}")
             t.start()
 
         startup_errors = False
+        ui_bind_errors = []
         for tracker in startup_tracking:
             server = tracker["server"]
             t = tracker["thread"]
@@ -132,6 +134,10 @@ if __name__ == "__main__":
                 logging.info(f"UI listener started at {tracker['protocol']}://{tracker['host']}:{tracker['port']}")
             else:
                 startup_errors = True
+                ui_bind_errors.append(tracker["bind"])
+
+        # Inject the active failures directly into the FastAPI application state
+        app.state.ui_bind_errors = ui_bind_errors
 
         if startup_errors:
             logging.warning("Application startup completed with errors.")

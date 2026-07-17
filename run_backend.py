@@ -132,7 +132,10 @@ async def main():
             logging.info(f"SMTP listener started on {listen_address}:{listen_port} (STARTTLS: {starttls_status}, Hostname: {eff_hostname})")
         except Exception as e:
             startup_errors = True
-            logging.critical(f"CRITICAL: Failed to bind SMTP listener to {bind}. Port may be occupied. Error: {e}")
+            if "_bind_errors" not in app_state.smtp.get("_smtp_meta", {}):
+                app_state.smtp["_smtp_meta"]["_bind_errors"] = []
+            app_state.smtp["_smtp_meta"]["_bind_errors"].append(bind)
+            logging.critical(f"CRITICAL: Failed to bind SMTP listener to {bind}. Error: {e}")
 
     if startup_errors:
         logging.warning("Application startup completed with errors.")

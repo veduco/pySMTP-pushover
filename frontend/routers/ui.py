@@ -18,9 +18,16 @@ templates = Jinja2Templates(directory=[HTML_DIR, JS_DIR])
 async def index(request: Request):
     ui_config = load_clean_json(UI_CONFIG_FILE)
     # Feed the global HTTP client into the ConfigManager wrapper
-    manager = ConfigManager(ui_config, http_client=request.app.state.http_client)
+    manager = ConfigManager(ui_config, http_client=request.state.http_client)
 
     config, vault_data, smtp_meta, config_ok = await manager.get_config()
+
+    # Safely guarantee the dictionary exists
+    if not smtp_meta:
+        smtp_meta = {}
+
+    # Inject runtime UI bind errors into the metadata payload dynamically
+    smtp_meta["_ui_bind_errors"] = getattr(request.app.state, "ui_bind_errors", [])
 
     safe_vault_meta = {"app": {}, "user": {}, "smarthost": {}}
     if config_ok:
