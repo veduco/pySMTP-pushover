@@ -30,7 +30,8 @@ class SuppressUvicornNoiseFilter(logging.Filter):
             "Uvicorn running on",
             "Shutting down",
             "Waiting for connections to close",
-            "Finished server process"
+            "Finished server process",
+            "CancelledError"
         ]
         return not any(s in msg for s in suppress_list)
 
