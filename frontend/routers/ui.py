@@ -54,7 +54,6 @@ async def index(request: Request):
         "active_ui_port": active_ui_port
     })
 
-# Add the Request parameter injection here so we can hook the client state securely
 @router.post("/save/config")
 async def save_config(request: Request, config_json: str = Form(...), vault_json: str = Form(None)):
     ui_config = load_clean_json(UI_CONFIG_FILE)
@@ -73,10 +72,27 @@ async def save_config(request: Request, config_json: str = Form(...), vault_json
 
         success_message = await manager.save_config(parsed, vault_parsed)
 
-        # Returns simple HTML without triggering the UI process overlay
-        return HTMLResponse(success_message)
+        html_alert = f"""
+        <div style="background: var(--secondary-bg); border-left: 4px solid var(--success-color); padding: 1rem; border-radius: 4px; color: var(--text-color); margin-top: 1.5rem; display: flex; align-items: center; gap: 0.75rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="var(--success-color)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            <div>
+                <strong style="display: block; margin-bottom: 0.25rem;">Success</strong>
+                <span style="font-size: 0.9rem; opacity: 0.9;">{success_message}</span>
+            </div>
+        </div>
+        """
+        return HTMLResponse(html_alert)
     except Exception as e:
-        return HTMLResponse(f"Error compiling config structure: {e}", status_code=500)
+        html_error = f"""
+        <div style="background: var(--secondary-bg); border-left: 4px solid var(--danger-color); padding: 1rem; border-radius: 4px; color: var(--text-color); margin-top: 1.5rem; display: flex; align-items: center; gap: 0.75rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="var(--danger-color)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <div>
+                <strong style="display: block; margin-bottom: 0.25rem;">Error Saving Configuration</strong>
+                <span style="font-size: 0.9rem; opacity: 0.9;">{e}</span>
+            </div>
+        </div>
+        """
+        return HTMLResponse(html_error, status_code=500)
 
 @router.post("/save/ui")
 async def save_ui(
@@ -104,6 +120,15 @@ async def save_ui(
 
     os.kill(os.getpid(), signal.SIGUSR1)
 
-    res = HTMLResponse("UI engine configuration and Backend modes altered successfully. Reconnecting...")
+    html_alert = """
+    <div style="background: var(--secondary-bg); border-left: 4px solid var(--warning-color); padding: 1rem; border-radius: 4px; color: var(--text-color); margin-top: 1.5rem; display: flex; align-items: center; gap: 0.75rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="var(--warning-color)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M21.5 2v6h-6M2.13 15.57a9 9 0 1 0 1.63-10.45l-3.23 2.9"></path></svg>
+        <div>
+            <strong style="display: block; margin-bottom: 0.25rem;">Applying Context</strong>
+            <span style="font-size: 0.9rem; opacity: 0.9;">UI engine configuration and Backend modes altered successfully. Reconnecting...</span>
+        </div>
+    </div>
+    """
+    res = HTMLResponse(html_alert)
     res.headers["HX-Trigger"] = "reconnectLink"
     return res

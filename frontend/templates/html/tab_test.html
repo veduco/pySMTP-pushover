@@ -45,6 +45,24 @@
         </button>
     </div>
 
-    <div x-show="testPayload.status" :style="testPayload.isError ? 'color: var(--danger-color); font-weight: bold;' : 'color: var(--success-color); font-weight: bold;'" style="margin-bottom: 1rem;" x-text="testPayload.status"></div>
+    <div x-show="testPayload.status && !testPayload.isError" x-transition style="margin-top: 1.5rem;">
+        <div style="background: var(--secondary-bg); border-left: 4px solid var(--success-color); padding: 1rem; border-radius: 4px; color: var(--text-color); display: flex; align-items: center; gap: 0.75rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="var(--success-color)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            <div>
+                <strong style="display: block; margin-bottom: 0.25rem;">Success</strong>
+                <span style="font-size: 0.9rem; opacity: 0.9;" x-text="testPayload.status"></span>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="testPayload.status && testPayload.isError" x-transition style="margin-top: 1.5rem;">
+        <div style="background: var(--secondary-bg); border-left: 4px solid var(--danger-color); padding: 1rem; border-radius: 4px; color: var(--text-color); display: flex; align-items: center; gap: 0.75rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="var(--danger-color)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <div>
+                <strong style="display: block; margin-bottom: 0.25rem;">Injection Failed</strong>
+                <span style="font-size: 0.9rem; opacity: 0.9;" x-text="testPayload.status"></span>
+            </div>
+        </div>
+    </div>
 
 </div>
