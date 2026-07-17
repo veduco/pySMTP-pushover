@@ -107,34 +107,40 @@ requestSave(formId) {
                     let humanKey = currentPath;
                     let m;
 
-                    // Clean human-readable label generation using Regex to safely extract keys that contain dots
-                    if ((m = currentPath.match(/^Gateway Config\.routes\.(.+?)(?:\.(?:match|method|disable_attachments|force_plaintext|token|user|device|sound|url|url_title|tags|priority|ttl|retry|expire|smarthost_alias))?$/))) {
-                        humanKey = `Route Mapping Rule [${m[1]}]`;
-                    } else if ((m = currentPath.match(/^Gateway Config\.smtp\.listeners\.(.+?)(?:\.(?:bind|hostname|starttls|tls_cert_file|tls_key_file))?$/))) {
-                        humanKey = `SMTP Port Listener [${m[1]}]`;
-                    } else if ((m = currentPath.match(/^UI\/Backend Context\.listeners\.(.+?)(?:\.(?:bind|https|tls_cert|tls_key))?$/))) {
-                        humanKey = `UI Port Listener [${m[1]}]`;
-                    } else if ((m = currentPath.match(/^Gateway Config\.smarthost\.aliases\.(.+?)(?:\.(?:hostname|advertised_hostname|port|starttls|disable_tls_validation|auth|username|disable_attachments|force_plaintext))?$/))) {
-                        humanKey = `Smarthost Configuration [${m[1]}]`;
-                    } else if ((m = currentPath.match(/^Token Vault\.app\.(.+?)(?:\.(?:token|epoch))?$/))) {
-                        humanKey = `App Token Vault [${m[1]}]`;
-                    } else if ((m = currentPath.match(/^Token Vault\.user\.(.+?)(?:\.(?:token|epoch))?$/))) {
-                        humanKey = `User Key Vault [${m[1]}]`;
-                    } else if ((m = currentPath.match(/^Token Vault\.smarthost\.(.+?)(?:\.(?:token|epoch))?$/))) {
-                        humanKey = `Smarthost Vault Password [${m[1]}]`;
-                    } else if (currentPath.startsWith('UI/Backend Context.')) {
-                        humanKey = `UI Parameter -> ${currentPath.split('.')[1] || 'Unknown'}`;
-                    } else if (currentPath.startsWith('Gateway Config.')) {
-                        humanKey = `Gateway Parameter -> ${currentPath.split('.').pop()}`;
+                    const patternMap = [
+                        { regex: /^Gateway Config\.routes\.(.+?)(?:\..+)?$/, label: m => `Route Mapping Rule [${m[1]}]` },
+                        { regex: /^Gateway Config\.smtp\.listeners\.(.+?:\d+)(?:\.(?:bind|hostname|starttls|tls_cert_file|tls_key_file))?$/, label: m => `SMTP Port Listener [${m[1]}]` },
+                        { regex: /^UI\/Backend Context\.listeners\.(.+?:\d+)(?:\.(?:bind|https|tls_cert|tls_key))?$/, label: m => `UI Port Listener [${m[1]}]` },
+                        { regex: /^Gateway Config\.smarthost\.aliases\.(.+?)(?:\..+)?$/, label: m => `Smarthost Configuration [${m[1]}]` },
+                        { regex: /^Token Vault\.app\.(.+?)(?:\..+)?$/, label: m => `App Token Vault [${m[1]}]` },
+                        { regex: /^Token Vault\.user\.(.+?)(?:\..+)?$/, label: m => `User Key Vault [${m[1]}]` },
+                        { regex: /^Token Vault\.smarthost\.(.+?)(?:\..+)?$/, label: m => `Smarthost Vault Password [${m[1]}]` }
+                    ];
+
+                    let matchedPattern = false;
+                    for (const entry of patternMap) {
+                        if ((m = currentPath.match(entry.regex))) {
+                            humanKey = entry.label(m);
+                            matchedPattern = true;
+                            break;
+                        }
+                    }
+
+                    if (!matchedPattern) {
+                        if (currentPath.startsWith('UI/Backend Context.')) {
+                            humanKey = `UI Parameter -> ${currentPath.split('.')[1] || 'Unknown'}`;
+                        } else if (currentPath.startsWith('Gateway Config.')) {
+                            humanKey = `Gateway Parameter -> ${currentPath.split('.').pop()}`;
+                        }
                     }
 
                     let displayOld = (val1 !== undefined && val1 !== '') ? val1 : 'None';
                     let displayNew = (val2 !== undefined && val2 !== '') ? val2 : 'None';
 
-                    if (typeof displayOld === 'object' && displayOld !== null) displayOld = '[Active Configuration]';
-                    if (typeof displayNew === 'object' && displayNew !== null) displayNew = '[Active Configuration]';
-                    if (displayOld === '[Active Configuration]' && displayNew === 'None') displayNew = '[Deleted]';
-                    if (displayOld === 'None' && displayNew === '[Active Configuration]') displayOld = '[Not Configured]';
+                    if (typeof displayOld === 'object' && displayOld !== null) displayOld = '[Configured]';
+                    if (typeof displayNew === 'object' && displayNew !== null) displayNew = '[Configured]';
+                    if (displayOld === '[Configured]' && displayNew === 'None') displayNew = '[Deleted]';
+                    if (displayOld === 'None' && displayNew === '[Configured]') displayOld = '[Not Configured]';
 
                     const isSensitive = ['token', 'user', 'password', 'secret'].includes(key) ||
                                         (currentPath.includes('.auth.') && key !== 'auth') ||
@@ -289,7 +295,6 @@ revertChange(idx) {
         this.diffModal.changes = this.diffModal.changes.filter(c => !c.key.includes('routes'));
         complexResetTriggered = true;
     } else if (item.key.includes('UI/Backend Context.listeners')) {
-        // Safe reversion hook for the newly mapped UI listeners
         this.uiListeners = JSON.parse(JSON.stringify(JSON.parse(this.snapshots.ui).uiListeners || []));
         this.diffModal.changes = this.diffModal.changes.filter(c => !c.key.includes('UI/Backend Context.listeners'));
         complexResetTriggered = true;
