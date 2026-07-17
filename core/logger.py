@@ -40,9 +40,17 @@ uvicorn_core = logging.getLogger("uvicorn")
 uvicorn_error.addFilter(SuppressUvicornNoiseFilter())
 uvicorn_core.addFilter(SuppressUvicornNoiseFilter())
 
+# Capture httpx logger to suppress its verbose INFO chatter
+httpx_logger = logging.getLogger("httpx")
+
 def apply_logging_level(loglevel_str):
     log_level = getattr(logging, loglevel_str, logging.INFO)
     logging.getLogger().setLevel(log_level)
     for handler in logging.getLogger().handlers: handler.setLevel(log_level)
-    if log_level > logging.DEBUG: aiosmtpd_logger.setLevel(logging.WARNING)
-    else: aiosmtpd_logger.setLevel(logging.DEBUG)
+
+    if log_level > logging.DEBUG:
+        aiosmtpd_logger.setLevel(logging.WARNING)
+        httpx_logger.setLevel(logging.WARNING)
+    else:
+        aiosmtpd_logger.setLevel(logging.DEBUG)
+        httpx_logger.setLevel(logging.DEBUG)

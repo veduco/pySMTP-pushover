@@ -16,7 +16,7 @@ if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 
 from core.config import load_clean_json, save_json, UI_CONFIG_FILE, clear_ui_config_cache, get_cached_ui_config
-from core.logger import SuppressUvicornNoiseFilter
+from core.logger import SuppressUvicornNoiseFilter, apply_logging_level
 from core.json_store import parse_bind_string
 from frontend.api import app
 from frontend.utils import generate_ui_cert
@@ -63,11 +63,9 @@ if __name__ == "__main__":
 
         os.environ["GATEWAY_CONFIG"] = ui_config.get("local_config_path", os.path.join(SCRIPT_DIR, "config.json"))
 
+        # Replaced manual handler loops with our centralized controller
         ui_loglevel_str = ui_config.get("ui_loglevel", "INFO")
-        log_level = getattr(logging, ui_loglevel_str.upper(), logging.INFO)
-        logging.getLogger().setLevel(log_level)
-        for handler in logging.getLogger().handlers:
-            handler.setLevel(log_level)
+        apply_logging_level(ui_loglevel_str)
 
         logging.info(f"Loading config from file '{UI_CONFIG_FILE}'.")
 
