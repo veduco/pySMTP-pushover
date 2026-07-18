@@ -1,0 +1,31 @@
+{% macro toggle(model='', label='', checked='', change='') %}
+<label class="toggle-label">
+    <div class="toggle-switch">
+        <input type="checkbox" {% if model %}x-model="{{ model }}"{% endif %} {% if checked %}:checked="{{ checked }}"{% endif %} {% if change %}@change="{{ change }}"{% endif %}>
+        <span class="slider"></span>
+    </div>
+    {{ label }}
+</label>
+{% endmacro %}
+
+{% macro cidr_input(list_model, input_model, error_model, ref_name, placeholder, add_fn, remove_fn) %}
+<div style="display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.5rem; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 6px; cursor: text; align-items: center;" :class="{{ error_model }} ? 'input-invalid' : ''" @click="$refs.{{ ref_name }}.focus()">
+    <template x-for="(cidr, idx) in ({{ list_model }} || [])" :key="idx">
+        <span style="display: inline-flex; align-items: center; gap: 0.3rem; background: var(--primary-color); color: white; padding: 0.2rem 0.5rem; border-radius: 12px; font-size: 0.85rem;">
+            <span x-text="cidr"></span>
+            <svg @click.stop="{{ remove_fn }}(idx)" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; opacity: 0.8;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </span>
+    </template>
+    <input type="text" x-ref="{{ ref_name }}" x-model="{{ input_model }}" @keydown.enter.prevent="{{ add_fn }}()" @keydown.backspace="if({{ input_model }} === '' && {{ list_model }} && {{ list_model }}.length > 0) {{ remove_fn }}({{ list_model }}.length - 1)" placeholder="{{ placeholder }}" style="border: none; background: transparent; outline: none; flex: 1; min-width: 120px; font-size: 0.9rem; color: var(--text-color);">
+</div>
+<span class="validation-error" x-show="{{ error_model }}" x-text="{{ error_model }}" style="display: none;"></span>
+{% endmacro %}
+
+{% macro segment_track(model, options, thumb_style='', track_style='width: 100%; display: flex;', change='') %}
+<div class="segment-track" style="{{ track_style }}">
+    <div class="segment-thumb" :style="{{ thumb_style | safe }}"></div>
+    {% for opt in options %}
+    <label class="segment-label {% if opt.compact %}compact{% endif %}" :style="{{ model }} === '{{ opt.value }}' ? '{{ opt.active_style | default("color: white;") }}' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="{{ model }}" value="{{ opt.value }}" {% if change %}@change="{{ change }}"{% endif %}> {{ opt.label }}</label>
+    {% endfor %}
+</div>
+{% endmacro %}

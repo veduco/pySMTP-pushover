@@ -1,3 +1,4 @@
+{% from "components.html" import toggle, cidr_input, segment_track %}
 <style>
     .segment-label.compact {
         padding: 0.3rem 0;
@@ -11,23 +12,31 @@
     <div class="flex-row" style="margin-bottom: 1rem; align-items: flex-end;">
         <div style="flex: 0 0 auto;">
             <label style="margin-bottom: 0.25rem;">Default Catch-All Route</label>
-            <div class="segment-track">
-                <div class="segment-thumb" :style="smtp.default_route === 'pushover' ? 'transform: translateX(0);' : 'transform: translateX(100%);'"></div>
-                <label class="segment-label" :style="smtp.default_route === 'pushover' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="smtp.default_route" value="pushover" @change="changeDefaultRoute($event)"> Pushover</label>
-                <label class="segment-label" :style="smtp.default_route === 'smarthost' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="smtp.default_route" value="smarthost" @change="changeDefaultRoute($event)"> Smarthost</label>
-            </div>
+            {{ segment_track(
+                model="smtp.default_route",
+                options=[
+                    {"value": "pushover", "label": "Pushover"},
+                    {"value": "smarthost", "label": "Smarthost"}
+                ],
+                thumb_style="smtp.default_route === 'pushover' ? 'transform: translateX(0);' : 'transform: translateX(100%);'",
+                change="changeDefaultRoute($event)",
+                track_style=""
+            ) }}
         </div>
 
         <div style="flex: 0 1 450px; min-width: 250px;">
             <label style="margin-bottom: 0.25rem;">Log Level Severity</label>
-            <div class="segment-track" style="width: 100%; display: flex;">
-                <div class="segment-thumb" :style="'width: calc(20% - 1.2px); background-color: ' + getLogLevelColor(smtp.loglevel) + '; transform: translateX(' + (Math.max(0, ['DEBUG','INFO','WARNING','ERROR','CRITICAL'].indexOf(smtp.loglevel)) * 100) + '%);'"></div>
-                <label class="segment-label compact" :style="smtp.loglevel === 'DEBUG' ? 'color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.4);' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="smtp.loglevel" value="DEBUG"> DEBUG</label>
-                <label class="segment-label compact" :style="smtp.loglevel === 'INFO' ? 'color: #121212;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="smtp.loglevel" value="INFO"> INFO</label>
-                <label class="segment-label compact" :style="smtp.loglevel === 'WARNING' ? 'color: #121212;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="smtp.loglevel" value="WARNING"> WARN</label>
-                <label class="segment-label compact" :style="smtp.loglevel === 'ERROR' ? 'color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.4);' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="smtp.loglevel" value="ERROR"> ERROR</label>
-                <label class="segment-label compact" :style="smtp.loglevel === 'CRITICAL' ? 'color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.4);' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="smtp.loglevel" value="CRITICAL"> CRIT</label>
-            </div>
+            {{ segment_track(
+                model="smtp.loglevel",
+                options=[
+                    {"value": "DEBUG", "label": "DEBUG", "compact": true, "active_style": "color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.4);"},
+                    {"value": "INFO", "label": "INFO", "compact": true, "active_style": "color: #121212;"},
+                    {"value": "WARNING", "label": "WARN", "compact": true, "active_style": "color: #121212;"},
+                    {"value": "ERROR", "label": "ERROR", "compact": true, "active_style": "color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.4);"},
+                    {"value": "CRITICAL", "label": "CRIT", "compact": true, "active_style": "color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.4);"}
+                ],
+                thumb_style="'width: calc(20% - 1.2px); background-color: ' + getLogLevelColor(smtp.loglevel) + '; transform: translateX(' + (Math.max(0, ['DEBUG','INFO','WARNING','ERROR','CRITICAL'].indexOf(smtp.loglevel)) * 100) + '%);'"
+            ) }}
         </div>
     </div>
     <div class="flex-row" style="margin-bottom: 1rem;">
@@ -39,23 +48,21 @@
         <div class="flex-col" style="flex: 1; min-width: 200px;"><label>Global TLS Key File (Fallback)</label><input type="text" x-model="smtp.tls_key_file" placeholder="Leave blank to use auto-generated key" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div>
     </div>
     <div class="flex-row" style="margin-top: 1.5rem; margin-bottom: 0.5rem;">
-        <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="smtp.disable_persistence"><span class="slider"></span></div> Disable Disk Persistence</label>
+        {{ toggle(model="smtp.disable_persistence", label="Disable Disk Persistence") }}
     </div>
 
     <div style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
         <label style="font-weight: bold; margin-bottom: 0.35rem; display: block;">Inbound SMTP IP Whitelist ACL</label>
         <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; opacity: 0.7;">Restrict connection rules on the email receiving sockets by entering allowed IP addresses or CIDR masks. Leave completely blank to allow permissive incoming traffic streams. Press <strong>Enter</strong> to add a tag.</p>
-
-        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.5rem; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 6px; cursor: text; align-items: center;" :class="smtpCidrError ? 'input-invalid' : ''" @click="$refs.smtpCidrInput.focus()">
-            <template x-for="(cidr, idx) in (smtp.allowed_cidrs || [])" :key="idx">
-                <span style="display: inline-flex; align-items: center; gap: 0.3rem; background: var(--primary-color); color: white; padding: 0.2rem 0.5rem; border-radius: 12px; font-size: 0.85rem;">
-                    <span x-text="cidr"></span>
-                    <svg @click.stop="removeSmtpCidr(idx)" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; opacity: 0.8;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                </span>
-            </template>
-            <input type="text" x-ref="smtpCidrInput" x-model="smtpCidrInput" @keydown.enter.prevent="addSmtpCidr()" @keydown.backspace="if(smtpCidrInput === '' && smtp.allowed_cidrs && smtp.allowed_cidrs.length > 0) removeSmtpCidr(smtp.allowed_cidrs.length - 1)" placeholder="e.g. 192.168.1.0/24" style="border: none; background: transparent; outline: none; flex: 1; min-width: 120px; font-size: 0.9rem; color: var(--text-color);">
-        </div>
-        <span class="validation-error" x-show="smtpCidrError" x-text="smtpCidrError" style="display: none;"></span>
+        {{ cidr_input(
+            list_model="smtp.allowed_cidrs",
+            input_model="smtpCidrInput",
+            error_model="smtpCidrError",
+            ref_name="smtpCidrInput",
+            placeholder="e.g. 192.168.1.0/24",
+            add_fn="addSmtpCidr",
+            remove_fn="removeSmtpCidr"
+        ) }}
     </div>
 </div>
 

@@ -1,3 +1,4 @@
+{% from "components.html" import toggle, cidr_input, segment_track %}
 <style>
     .segment-label.compact {
         padding: 0.3rem 0;
@@ -44,14 +45,17 @@
         <div class="flex-row" style="margin-bottom: 1rem; align-items: flex-end;">
             <div class="flex-col" style="flex: 1; min-width: 250px; max-width: 100%;">
                 <label style="margin-bottom: 0.25rem;">UI Log Level Severity</label>
-                <div class="segment-track" style="width: 100%; display: flex;">
-                    <div class="segment-thumb" :style="'width: calc(20% - 1.2px); background-color: ' + getLogLevelColor(ui_loglevel) + '; transform: translateX(' + (Math.max(0, ['DEBUG','INFO','WARNING','ERROR','CRITICAL'].indexOf(ui_loglevel)) * 100) + '%);'"></div>
-                    <label class="segment-label compact" :style="ui_loglevel === 'DEBUG' ? 'color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.4);' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="ui_loglevel" value="DEBUG"> DEBUG</label>
-                    <label class="segment-label compact" :style="ui_loglevel === 'INFO' ? 'color: #121212;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="ui_loglevel" value="INFO"> INFO</label>
-                    <label class="segment-label compact" :style="ui_loglevel === 'WARNING' ? 'color: #121212;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="ui_loglevel" value="WARNING"> WARN</label>
-                    <label class="segment-label compact" :style="ui_loglevel === 'ERROR' ? 'color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.4);' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="ui_loglevel" value="ERROR"> ERROR</label>
-                    <label class="segment-label compact" :style="ui_loglevel === 'CRITICAL' ? 'color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.4);' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="ui_loglevel" value="CRITICAL"> CRIT</label>
-                </div>
+                {{ segment_track(
+                    model="ui_loglevel",
+                    options=[
+                        {"value": "DEBUG", "label": "DEBUG", "compact": true, "active_style": "color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.4);"},
+                        {"value": "INFO", "label": "INFO", "compact": true, "active_style": "color: #121212;"},
+                        {"value": "WARNING", "label": "WARN", "compact": true, "active_style": "color: #121212;"},
+                        {"value": "ERROR", "label": "ERROR", "compact": true, "active_style": "color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.4);"},
+                        {"value": "CRITICAL", "label": "CRIT", "compact": true, "active_style": "color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.4);"}
+                    ],
+                    thumb_style="'width: calc(20% - 1.2px); background-color: ' + getLogLevelColor(ui_loglevel) + '; transform: translateX(' + (Math.max(0, ['DEBUG','INFO','WARNING','ERROR','CRITICAL'].indexOf(ui_loglevel)) * 100) + '%);'"
+                ) }}
             </div>
 
             <div class="flex-col" style="flex: 1; min-width: 200px; padding-bottom: 2px;">
@@ -65,12 +69,15 @@
 
             <div class="flex-col" style="flex: 1; min-width: 200px;">
                 <label style="margin-bottom: 0.25rem;">Date Format Syntax</label>
-                <div class="segment-track" style="width: 100%; display: flex;">
-                    <div class="segment-thumb" :style="'width: calc(33.333% - 2px); transform: translateX(' + (Math.max(0, ['YYYY-MM-DD HH:mm:ss','MM/DD/YYYY hh:mm:ss A','DD/MM/YYYY HH:mm:ss'].indexOf(ui_fmt)) * 100) + '%);'"></div>
-                    <label class="segment-label compact" :style="ui_fmt === 'YYYY-MM-DD HH:mm:ss' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="ui_fmt" value="YYYY-MM-DD HH:mm:ss"> ISO</label>
-                    <label class="segment-label compact" :style="ui_fmt === 'MM/DD/YYYY hh:mm:ss A' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="ui_fmt" value="MM/DD/YYYY hh:mm:ss A"> US</label>
-                    <label class="segment-label compact" :style="ui_fmt === 'DD/MM/YYYY HH:mm:ss' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="ui_fmt" value="DD/MM/YYYY HH:mm:ss"> UK/EU</label>
-                </div>
+                {{ segment_track(
+                    model="ui_fmt",
+                    options=[
+                        {"value": "YYYY-MM-DD HH:mm:ss", "label": "ISO", "compact": true},
+                        {"value": "MM/DD/YYYY hh:mm:ss A", "label": "US", "compact": true},
+                        {"value": "DD/MM/YYYY HH:mm:ss", "label": "UK/EU", "compact": true}
+                    ],
+                    thumb_style="'width: calc(33.333% - 2px); transform: translateX(' + (Math.max(0, ['YYYY-MM-DD HH:mm:ss','MM/DD/YYYY hh:mm:ss A','DD/MM/YYYY HH:mm:ss'].indexOf(ui_fmt)) * 100) + '%);'"
+                ) }}
             </div>
         </div>
 
@@ -98,40 +105,37 @@
         </div>
 
         <div class="flex-row" style="gap: 1.5rem; margin-bottom: 0.5rem;">
-            <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="ui_relative"><span class="slider"></span></div> Render Coerced Relative Human Times (e.g. '3 days ago')</label>
-            <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="ui_expand_adv"><span class="slider"></span></div> Always Expand Route Settings by Default</label>
-            <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="ui_trust_proxy"><span class="slider"></span></div> Trust Forwarded/X-Forwarded-For Headers</label>
+            {{ toggle(model="ui_relative", label="Render Coerced Relative Human Times (e.g. '3 days ago')") }}
+            {{ toggle(model="ui_expand_adv", label="Always Expand Route Settings by Default") }}
+            {{ toggle(model="ui_trust_proxy", label="Trust Forwarded/X-Forwarded-For Headers") }}
         </div>
 
         <div x-show="ui_trust_proxy" x-transition style="margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed var(--border-color);">
             <label style="font-weight: bold; margin-bottom: 0.35rem; display: block;">Trusted Proxy IP / CIDR Whitelist</label>
             <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; opacity: 0.7;">Specify the IP addresses of the internal load balancers authorized to forward client IPs. Press <strong>Enter</strong> to add a tag.</p>
-            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.5rem; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 6px; cursor: text; align-items: center;" :class="uiTrustProxyCidrError ? 'input-invalid' : ''" @click="$refs.trustProxyInput.focus()">
-                <template x-for="(cidr, idx) in ui_trust_proxy_cidrs" :key="idx">
-                    <span style="display: inline-flex; align-items: center; gap: 0.3rem; background: var(--primary-color); color: white; padding: 0.2rem 0.5rem; border-radius: 12px; font-size: 0.85rem;">
-                        <span x-text="cidr"></span>
-                        <svg @click.stop="removeTrustProxyCidr(idx)" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; opacity: 0.8;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                    </span>
-                </template>
-                <input type="text" x-ref="trustProxyInput" x-model="uiTrustProxyCidrInput" @keydown.enter.prevent="addTrustProxyCidr()" @keydown.backspace="if(uiTrustProxyCidrInput === '' && ui_trust_proxy_cidrs.length > 0) removeTrustProxyCidr(ui_trust_proxy_cidrs.length - 1)" placeholder="e.g. 10.0.0.0/8" style="border: none; background: transparent; outline: none; flex: 1; min-width: 120px; font-size: 0.9rem; color: var(--text-color);">
-            </div>
-            <span class="validation-error" x-show="uiTrustProxyCidrError" x-text="uiTrustProxyCidrError" style="display: none;"></span>
+            {{ cidr_input(
+                list_model="ui_trust_proxy_cidrs",
+                input_model="uiTrustProxyCidrInput",
+                error_model="uiTrustProxyCidrError",
+                ref_name="trustProxyInput",
+                placeholder="e.g. 10.0.0.0/8",
+                add_fn="addTrustProxyCidr",
+                remove_fn="removeTrustProxyCidr"
+            ) }}
         </div>
 
         <div style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
             <label style="font-weight: bold; margin-bottom: 0.35rem; display: block;">Web UI Access IP Whitelist ACL</label>
             <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; opacity: 0.7;">Restrict access to the web interface by specifying allowed IP addresses or CIDR masks. Leave blank to allow permissive incoming traffic. Press <strong>Enter</strong> to add a tag.</p>
-
-            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.5rem; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 6px; cursor: text; align-items: center;" :class="uiCidrError ? 'input-invalid' : ''" @click="$refs.uiCidrInput.focus()">
-                <template x-for="(cidr, idx) in ui_allowed_cidrs" :key="idx">
-                    <span style="display: inline-flex; align-items: center; gap: 0.3rem; background: var(--primary-color); color: white; padding: 0.2rem 0.5rem; border-radius: 12px; font-size: 0.85rem;">
-                        <span x-text="cidr"></span>
-                        <svg @click.stop="removeUiCidr(idx)" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; opacity: 0.8;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                    </span>
-                </template>
-                <input type="text" x-ref="uiCidrInput" x-model="uiCidrInput" @keydown.enter.prevent="addUiCidr()" @keydown.backspace="if(uiCidrInput === '' && ui_allowed_cidrs.length > 0) removeUiCidr(ui_allowed_cidrs.length - 1)" placeholder="e.g. 192.168.1.0/24" style="border: none; background: transparent; outline: none; flex: 1; min-width: 120px; font-size: 0.9rem; color: var(--text-color);">
-            </div>
-            <span class="validation-error" x-show="uiCidrError" x-text="uiCidrError" style="display: none;"></span>
+            {{ cidr_input(
+                list_model="ui_allowed_cidrs",
+                input_model="uiCidrInput",
+                error_model="uiCidrError",
+                ref_name="uiCidrInput",
+                placeholder="e.g. 192.168.1.0/24",
+                add_fn="addUiCidr",
+                remove_fn="removeUiCidr"
+            ) }}
         </div>
     </div>
 

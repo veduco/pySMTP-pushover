@@ -1,3 +1,4 @@
+{% from "components.html" import toggle, cidr_input, segment_track %}
 <style>
     .route-card {
         position: relative;
@@ -40,24 +41,28 @@
                     <div style="flex: 1; min-width: 200px;">
                         <div style="display: flex; align-items: center; justify-content: flex-start; gap: 1.5rem; margin-bottom: 0.25rem;">
                             <label style="margin: 0;">Email Address</label>
-                            <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="map._isRegex"><span class="slider"></span></div> Use Regex</label>
+                            {{ toggle(model="map._isRegex", label="Use Regex") }}
                         </div>
                         <input type="text" x-model="map._key" placeholder="user@domain.com or ^.*@domain\\.com$" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
                     </div>
                     <div style="flex: 0 0 auto;">
                         <label style="margin-bottom: 0.25rem;">Routing Method</label>
-                        <div class="segment-track">
-                            <div class="segment-thumb" :style="map.method === 'pushover' ? 'transform: translateX(0);' : 'transform: translateX(100%);'"></div>
-                            <label class="segment-label" :style="map.method === 'pushover' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="map.method" value="pushover"> Pushover</label>
-                            <label class="segment-label" :style="map.method === 'smarthost' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="map.method" value="smarthost"> Smarthost</label>
-                        </div>
+                        {{ segment_track(
+                            model="map.method",
+                            options=[
+                                {"value": "pushover", "label": "Pushover"},
+                                {"value": "smarthost", "label": "Smarthost"}
+                            ],
+                            thumb_style="map.method === 'pushover' ? 'transform: translateX(0);' : 'transform: translateX(100%);'",
+                            track_style=""
+                        ) }}
                     </div>
 
                     <template x-if="map.method === 'pushover'">
                         <div style="width: max-content; max-width: 100%;">
                             <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.25rem; flex-wrap: wrap;">
                                 <label style="margin: 0;">App Token</label>
-                                <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" :checked="map._isTokenAlias" @change="toggleAlias(map, 'token')"><span class="slider"></span></div> Use Alias</label>
+                                {{ toggle(checked="map._isTokenAlias", change="toggleAlias(map, 'token')", label="Use Alias") }}
                             </div>
                             <template x-if="!map._isTokenAlias">
                                 <div class="token-input" style="position: relative; display: block; max-width: 100%;">
@@ -105,7 +110,7 @@
                                 <div style="width: max-content; max-width: 100%;">
                                     <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.25rem; flex-wrap: wrap;">
                                         <label style="margin: 0;">User Key Override</label>
-                                        <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" :checked="map._isUserAlias" @change="toggleAlias(map, 'user')"><span class="slider"></span></div> Use Alias</label>
+                                        {{ toggle(checked="map._isUserAlias", change="toggleAlias(map, 'user')", label="Use Alias") }}
                                     </div>
                                     <template x-if="!map._isUserAlias">
                                         <div class="token-input" style="position: relative; display: block; max-width: 100%;">
@@ -138,8 +143,8 @@
                     </template>
 
                     <div class="flex-row" style="gap: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem;">
-                        <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="map.disable_attachments"><span class="slider"></span></div> Disable Attachments</label>
-                        <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="map.force_plaintext"><span class="slider"></span></div> Force Plaintext Formatting</label>
+                        {{ toggle(model="map.disable_attachments", label="Disable Attachments") }}
+                        {{ toggle(model="map.force_plaintext", label="Force Plaintext Formatting") }}
                     </div>
                 </div>
             </div>
