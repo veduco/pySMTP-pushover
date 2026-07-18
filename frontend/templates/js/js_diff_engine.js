@@ -25,85 +25,98 @@ _buildUiStatePayload() {
     };
 },
 
-_getDiffs(obj1, obj2, path = '') {
-    const diffs = [];
+_generatePatches(obj1, obj2, path = '') {
+    const patches = [];
     const allKeys = new Set([...Object.keys(obj1 || {}), ...Object.keys(obj2 || {})]);
+
     for (const key of allKeys) {
-        const val1 = obj1?.[key]; const val2 = obj2?.[key];
-        const currentPath = path ? `${path}.${key}` : key;
+        const val1 = obj1?.[key];
+        const val2 = obj2?.[key];
+        const escapedKey = key.replace(/\//g, '~1'); // JSON Pointer escaping
+        const currentPath = path === '' ? `/${escapedKey}` : `${path}/${escapedKey}`;
+
         if (JSON.stringify(val1) !== JSON.stringify(val2)) {
+            // Mask dictionary objects to recursively drill, but leave Arrays intact as distinct blocks
             if (typeof val1 === 'object' && val1 !== null && !Array.isArray(val1) &&
                 typeof val2 === 'object' && val2 !== null && !Array.isArray(val2)) {
-                diffs.push(...this._getDiffs(val1, val2, currentPath));
+                patches.push(...this._generatePatches(val1, val2, currentPath));
             } else {
-                let humanKey = currentPath;
-                let m;
-
-                const patternMap = [
-                    { regex: /^Gateway Config\.routes\.(.+?)(?:\..+)?$/, label: m => `Route Mapping Rule [${m[1]}]` },
-                    { regex: /^Gateway Config\.smtp\.listeners\.(.+?:\d+)(?:\.(?:bind|hostname|starttls|proxy_protocol|tls_cert_file|tls_key_file))?$/, label: m => `SMTP Port Listener [${m[1]}]` },
-                    { regex: /^UI\/Backend Context\.listeners\.(.+?:\d+)(?:\.(?:bind|https|tls_cert|tls_key))?$/, label: m => `UI Port Listener [${m[1]}]` },
-                    { regex: /^Gateway Config\.smarthost\.aliases\.(.+?)(?:\..+)?$/, label: m => `Smarthost Configuration [${m[1]}]` },
-                    { regex: /^Token Vault\.app\.(.+?)(?:\..+)?$/, label: m => `App Token Vault [${m[1]}]` },
-                    { regex: /^Token Vault\.user\.(.+?)(?:\..+)?$/, label: m => `User Key Vault [${m[1]}]` },
-                    { regex: /^Token Vault\.smarthost\.(.+?)(?:\..+)?$/, label: m => `Smarthost Vault Password [${m[1]}]` }
-                ];
-
-                let matchedPattern = false;
-                for (const entry of patternMap) {
-                    if ((m = currentPath.match(entry.regex))) {
-                        humanKey = entry.label(m);
-                        matchedPattern = true;
-                        break;
-                    }
-                }
-
-                if (!matchedPattern) {
-                    if (currentPath.startsWith('UI/Backend Context.')) {
-                        humanKey = `UI Parameter -> ${currentPath.split('.')[1] || 'Unknown'}`;
-                    } else if (currentPath.startsWith('Gateway Config.')) {
-                        humanKey = `Gateway Parameter -> ${currentPath.split('.').pop()}`;
-                    }
-                }
-
-                let displayOld = (val1 !== undefined && val1 !== '') ? val1 : 'None';
-                let displayNew = (val2 !== undefined && val2 !== '') ? val2 : 'None';
-
-                if (Array.isArray(displayOld) && displayOld.length === 0) displayOld = 'None';
-                if (Array.isArray(displayNew) && displayNew.length === 0) displayNew = 'None';
-
-                // Mask dictionary objects, but leave Arrays alone to be formatted
-                if (typeof displayOld === 'object' && displayOld !== null && !Array.isArray(displayOld)) displayOld = '[Configured]';
-                if (typeof displayNew === 'object' && displayNew !== null && !Array.isArray(displayNew)) displayNew = '[Configured]';
-
-                if (displayOld === '[Configured]' && displayNew === 'None') displayNew = '[Deleted]';
-                if (displayOld === 'None' && displayNew === '[Configured]') displayOld = '[Not Configured]';
-
-                const isSensitive = ['token', 'user', 'password', 'secret'].includes(key) ||
-                                    (currentPath.includes('.auth.') && key !== 'auth') ||
-                                    currentPath.startsWith('Token Vault.smarthost.');
-
-                if (isSensitive) {
-                    const allAliases = [...(this.vaultAppAliases || []), ...(this.vaultUserAliases || [])];
-
-                    const oldIsAlias = typeof val1 === 'string' && allAliases.includes(val1);
-                    const newIsAlias = typeof val2 === 'string' && allAliases.includes(val2);
-
-                    displayOld = (val1 && val1 !== '') ? (oldIsAlias ? `[Alias] ${val1}` : '••••••••') : 'None';
-                    displayNew = (val2 && val2 !== '') ? (newIsAlias ? `[Alias] ${val2}` : '••••••••') : 'None';
-                }
-
-                diffs.push({
-                    key: currentPath,
-                    humanLabel: humanKey,
-                    old: typeof displayOld === 'string' && !displayOld.startsWith('[') ? JSON.stringify(displayOld).replace(/^"|"$/g, '') : displayOld,
-                    new: typeof displayNew === 'string' && !displayNew.startsWith('[') ? JSON.stringify(displayNew).replace(/^"|"$/g, '') : displayNew,
-                    originalValue: (typeof val1 === 'object' && val1 !== null) ? this._deepClone(val1) : val1
+                patches.push({
+                    op: val1 === undefined ? 'add' : (val2 === undefined ? 'remove' : 'replace'),
+                    path: currentPath,
+                    value: val2 !== undefined ? this._deepClone(val2) : undefined,
+                    oldValue: val1 !== undefined ? this._deepClone(val1) : undefined
                 });
             }
         }
     }
-    return diffs;
+    return patches;
+},
+
+translatePatchToHuman(patchItem) {
+    const path = patchItem.path || '';
+    const segments = path.split('/').filter(Boolean).map(s => s.replace(/~1/g, '/'));
+
+    const labelMap = {
+        'loglevel': 'Log Level Severity',
+        'timezone': 'Display Timezone',
+        'date_format': 'Date Format',
+        'trust_proxy': 'Trust Proxy Headers',
+        'starttls': 'STARTTLS Status',
+        'proxy_protocol': 'PROXY v2',
+        'backend_mode': 'Backend Engine Mode',
+        'local_config_path': 'Local Config Path',
+        'remote_url': 'Remote API URL',
+        'remote_secret': 'Remote API Secret',
+        'remote_verify_tls': 'Verify Remote TLS',
+        'ui_loglevel': 'UI Log Level',
+        'relative_time': 'Relative Time Display',
+        'expand_adv': 'Auto-Expand Advanced',
+        'trust_proxy_cidrs': 'Trusted Proxy CIDRs',
+        'allowed_cidrs': 'Allowed IPs/CIDRs',
+        'disable_attachments': 'Disable Attachments',
+        'force_plaintext': 'Force Plaintext'
+    };
+
+    if (segments[0] === 'routes' && segments[1]) {
+        const field = segments[2] || 'Configuration';
+        return `Route Mapping Rule [${segments[1]}] -> ${labelMap[field] || field}`;
+    }
+    if (segments[0] === 'smtpListeners' && segments[1]) {
+        const field = segments[2] || 'Binding';
+        return `SMTP Port Listener [${segments[1]}] -> ${labelMap[field] || field}`;
+    }
+    if (segments[0] === 'uiListeners' && segments[1]) {
+        const field = segments[2] || 'Binding';
+        return `UI Port Listener [${segments[1]}] -> ${labelMap[field] || field}`;
+    }
+    if (segments[0] === 'smarthost' && segments[1] === 'aliases' && segments[2]) {
+        const field = segments[3] || 'Configuration';
+        return `Smarthost [${segments[2]}] -> ${labelMap[field] || field}`;
+    }
+    if (segments[0] === 'vaultApp' && segments[1]) {
+        return `App Token Vault [${segments[1]}]`;
+    }
+    if (segments[0] === 'vaultUser' && segments[1]) {
+        return `User Key Vault [${segments[1]}]`;
+    }
+    if (segments[0] === 'vaultSmarthost' && segments[1]) {
+        return `Smarthost Vault Password [${segments[1]}]`;
+    }
+
+    const leafKey = segments[segments.length - 1] || 'Unknown';
+    return labelMap[leafKey] || `Parameter -> ${leafKey.charAt(0).toUpperCase() + leafKey.slice(1)}`;
+},
+
+isPathSensitive(path) {
+    if (!path) return false;
+    const lower = path.toLowerCase();
+    return lower.includes('token') ||
+           lower.includes('user') ||
+           lower.includes('password') ||
+           lower.includes('secret') ||
+           lower.includes('auth') ||
+           lower.includes('vaultsmarthost');
 },
 
 preparePayload() {
@@ -148,14 +161,14 @@ prepareVaultPayload() {
 },
 
 formatDiffValue(val) {
-    if (val === null || val === undefined) return '-';
+    if (val === null || val === undefined) return 'None';
     if (typeof val === 'boolean') return val ? 'True' : 'False';
-    if (Array.isArray(val)) {
-        return val.join('<br>');
-    }
+    if (Array.isArray(val) && val.length === 0) return 'None';
+    if (Array.isArray(val)) return val.join('<br>');
+    if (typeof val === 'object' && val !== null) return '[Configured]';
 
     let strVal = String(val);
-    // Replace both literal newlines and escaped JSON newline characters with line breaks
+    if (strVal === '') return 'None';
     if (strVal.includes('\n') || strVal.includes('\\n')) {
         return strVal.replace(/\\n/g, '<br>').replace(/\n/g, '<br>');
     }
@@ -194,43 +207,69 @@ requestSave(formId) {
 
     const newConfig = JSON.parse(this.preparePayload());
     const newVault = JSON.parse(this.prepareVaultPayload());
-
     const newUi = this._buildUiStatePayload();
+
+    let rawPatches = [];
 
     if (formId === 'backend_form' || formId === 'ui_form') {
         const oldUi = { ...this.rawUiConfig }; delete oldUi.listeners;
         const newUiObj = { ...newUi }; delete newUiObj.listeners;
-        this.diffModal.changes.push(...this._getDiffs(oldUi, newUiObj, 'UI/Backend Context'));
+        rawPatches.push(...this._generatePatches(oldUi, newUiObj, '/ui'));
 
         const oldUiListeners = Object.fromEntries((this.rawUiConfig.listeners || []).map(x => [x.bind, x]));
         const newUiListeners = Object.fromEntries((newUi.listeners || []).map(x => [x.bind, x]));
-        this.diffModal.changes.push(...this._getDiffs(oldUiListeners, newUiListeners, 'UI/Backend Context.listeners'));
+        rawPatches.push(...this._generatePatches(oldUiListeners, newUiListeners, '/uiListeners'));
     } else {
         if (this.tab === 'routes') {
-            this.diffModal.changes.push(...this._getDiffs(this.rawConfig.routes || {}, newConfig.routes || {}, 'Gateway Config.routes'));
+            rawPatches.push(...this._generatePatches(this.rawConfig.routes || {}, newConfig.routes || {}, '/routes'));
         } else if (this.tab === 'pushover') {
-            this.diffModal.changes.push(...this._getDiffs(this.rawConfig.pushover || {}, newConfig.pushover || {}, 'Gateway Config.pushover'));
+            rawPatches.push(...this._generatePatches(this.rawConfig.pushover || {}, newConfig.pushover || {}, '/pushover'));
 
             const oldVaultApp = Object.fromEntries((this.rawVault.app || []).map(x => [x.name, x]));
             const newVaultApp = Object.fromEntries((newVault.app || []).map(x => [x.name, x]));
-            this.diffModal.changes.push(...this._getDiffs(oldVaultApp, newVaultApp, 'Token Vault.app'));
+            rawPatches.push(...this._generatePatches(oldVaultApp, newVaultApp, '/vaultApp'));
 
             const oldVaultUser = Object.fromEntries((this.rawVault.user || []).map(x => [x.name, x]));
             const newVaultUser = Object.fromEntries((newVault.user || []).map(x => [x.name, x]));
-            this.diffModal.changes.push(...this._getDiffs(oldVaultUser, newVaultUser, 'Token Vault.user'));
+            rawPatches.push(...this._generatePatches(oldVaultUser, newVaultUser, '/vaultUser'));
 
         } else if (this.tab === 'smarthost') {
-            this.diffModal.changes.push(...this._getDiffs(this.rawConfig.smarthost || {}, newConfig.smarthost || {}, 'Gateway Config.smarthost'));
-            this.diffModal.changes.push(...this._getDiffs(this.rawVault.smarthost || {}, newVault.smarthost || {}, 'Token Vault.smarthost'));
+            rawPatches.push(...this._generatePatches(this.rawConfig.smarthost || {}, newConfig.smarthost || {}, '/smarthost'));
+            rawPatches.push(...this._generatePatches(this.rawVault.smarthost || {}, newVault.smarthost || {}, '/vaultSmarthost'));
         } else if (this.tab === 'server') {
             const oldSmtp = { ...this.rawConfig.smtp }; delete oldSmtp.listeners;
             const newSmtp = { ...newConfig.smtp }; delete newSmtp.listeners;
-            this.diffModal.changes.push(...this._getDiffs(oldSmtp, newSmtp, 'Gateway Config.smtp'));
+            rawPatches.push(...this._generatePatches(oldSmtp, newSmtp, '/smtp'));
 
             const oldSmtpListeners = Object.fromEntries((this.rawConfig.smtp?.listeners || []).map(x => [x.bind, x]));
             const newSmtpListeners = Object.fromEntries((newConfig.smtp?.listeners || []).map(x => [x.bind, x]));
-            this.diffModal.changes.push(...this._getDiffs(oldSmtpListeners, newSmtpListeners, 'Gateway Config.smtp.listeners'));
+            rawPatches.push(...this._generatePatches(oldSmtpListeners, newSmtpListeners, '/smtpListeners'));
         }
+    }
+
+    // Translate raw generic patches down into the highly contextual UI table variables seamlessly
+    for (const patch of rawPatches) {
+        let displayOld = patch.oldValue;
+        let displayNew = patch.value;
+
+        if (this.isPathSensitive(patch.path)) {
+            const allAliases = [...(this.vaultAppAliases || []), ...(this.vaultUserAliases || [])];
+            const oldIsAlias = typeof displayOld === 'string' && allAliases.includes(displayOld);
+            const newIsAlias = typeof displayNew === 'string' && allAliases.includes(displayNew);
+
+            displayOld = (displayOld && displayOld !== '') ? (oldIsAlias ? `[Alias] ${displayOld}` : '••••••••') : 'None';
+            displayNew = (displayNew && displayNew !== '') ? (newIsAlias ? `[Alias] ${displayNew}` : '••••••••') : 'None';
+        }
+
+        this.diffModal.changes.push({
+            op: patch.op,
+            path: patch.path,
+            key: patch.path, // Ensures backward compatibility with html array looping binds
+            humanLabel: this.translatePatchToHuman(patch),
+            old: this.formatDiffValue(displayOld),
+            new: patch.op === 'remove' ? '[Deleted]' : this.formatDiffValue(displayNew),
+            originalValue: patch.oldValue
+        });
     }
 
     if (this.diffModal.changes.length === 0) {
@@ -255,14 +294,15 @@ confirmSave() {
 
 revertChange(idx) {
     const item = this.diffModal.changes[idx];
-    const path = item.key;
+    const path = item.path;
     const val = item.originalValue;
     let isComplexReset = false;
 
-    if (path.includes('smarthost.aliases') || path.includes('Token Vault.smarthost')) {
-        let matches = path.match(/(?:aliases|smarthost)\.([^.]+)/i);
-        if (matches && matches[1]) {
-            const shAlias = matches[1];
+    // 1. Structural Inverse Patches (Arrays / Matrix Objects / Dynamic UI tables)
+    if (path.startsWith('/smarthost/aliases') || path.startsWith('/vaultSmarthost')) {
+        const segments = path.split('/').filter(Boolean).map(s => s.replace(/~1/g, '/'));
+        const shAlias = segments[1] === 'aliases' ? segments[2] : segments[1];
+        if (shAlias) {
             const shObj = JSON.parse(this.snapshots.smarthost);
 
             if (shObj.smarthosts[shAlias]) this.smarthosts[shAlias] = this._deepClone(shObj.smarthosts[shAlias]);
@@ -271,31 +311,42 @@ revertChange(idx) {
             if (shObj.vaultSmarthost[shAlias]) this.vaultSmarthost[shAlias] = this._deepClone(shObj.vaultSmarthost[shAlias]);
             else delete this.vaultSmarthost[shAlias];
 
-            this.diffModal.changes = this.diffModal.changes.filter(c => !c.key.includes(shAlias));
+            this.diffModal.changes = this.diffModal.changes.filter(c => {
+                const cSegments = c.path.split('/').filter(Boolean).map(s => s.replace(/~1/g, '/'));
+                const cAlias = cSegments[1] === 'aliases' ? cSegments[2] : cSegments[1];
+                return cAlias !== shAlias;
+            });
             isComplexReset = true;
         }
-    } else if (path.includes('Vault.app')) {
+    } else if (path.startsWith('/vaultApp')) {
         this.vaultApp = this._deepClone(JSON.parse(this.snapshots.pushover).vaultApp);
-        this.diffModal.changes = this.diffModal.changes.filter(c => !c.key.includes('Vault.app'));
+        this.diffModal.changes = this.diffModal.changes.filter(c => !c.path.startsWith('/vaultApp'));
         isComplexReset = true;
-    } else if (path.includes('Vault.user')) {
+    } else if (path.startsWith('/vaultUser')) {
         this.vaultUser = this._deepClone(JSON.parse(this.snapshots.pushover).vaultUser);
-        this.diffModal.changes = this.diffModal.changes.filter(c => !c.key.includes('Vault.user'));
+        this.diffModal.changes = this.diffModal.changes.filter(c => !c.path.startsWith('/vaultUser'));
         isComplexReset = true;
-    } else if (path.includes('smtp.listeners')) {
+    } else if (path.startsWith('/smtpListeners')) {
         this.smtp.listeners = this._deepClone(JSON.parse(this.snapshots.server).listeners || []);
-        this.diffModal.changes = this.diffModal.changes.filter(c => !c.key.includes('smtp.listeners'));
+        this.diffModal.changes = this.diffModal.changes.filter(c => !c.path.startsWith('/smtpListeners'));
         isComplexReset = true;
-    } else if (path.includes('UI/Backend Context.listeners')) {
+    } else if (path.startsWith('/uiListeners')) {
         this.uiListeners = this._deepClone(JSON.parse(this.snapshots.ui).uiListeners || []);
-        this.diffModal.changes = this.diffModal.changes.filter(c => !c.key.includes('UI/Backend Context.listeners'));
+        this.diffModal.changes = this.diffModal.changes.filter(c => !c.path.startsWith('/uiListeners'));
+        isComplexReset = true;
+    } else if (path.startsWith('/routes')) {
+        this.resetTab('routes');
+        this.diffModal.changes = this.diffModal.changes.filter(c => !c.path.startsWith('/routes'));
         isComplexReset = true;
     }
 
+    // 2. Simple Scalar Inverse Patches (Primitive property mapping via target translation)
     if (!isComplexReset) {
-        const key = path.split('.').pop();
+        const segments = path.split('/').filter(Boolean).map(s => s.replace(/~1/g, '/'));
+        const root = segments[0];
+        const key = segments[segments.length - 1];
 
-        if (path.startsWith('UI/Backend Context.')) {
+        if (root === 'ui') {
             if (key === 'backend_mode') this.ui_backend_remote = (val === 'remote');
             else if (key === 'local_config_path') this.ui_local_config_path = val || 'config.json';
             else if (key === 'remote_url') this.ui_remote_url = val || '';
@@ -307,24 +358,24 @@ revertChange(idx) {
             else if (key === 'relative_time') this.ui_relative = (val === true);
             else if (key === 'expand_adv') this.ui_expand_adv = (val === true);
             else if (key === 'trust_proxy') this.ui_trust_proxy = (val === true);
-            else if (key === 'trust_proxy_cidrs') {
-                this.ui_trust_proxy_cidrs = Array.isArray(val) ? this._deepClone(val) : [];
-            }
-            else if (key === 'allowed_cidrs') {
-                this.ui_allowed_cidrs = Array.isArray(val) ? this._deepClone(val) : [];
-            }
-        } else if (path.startsWith('Gateway Config.smtp.')) {
+            else if (key === 'trust_proxy_cidrs') this.ui_trust_proxy_cidrs = Array.isArray(val) ? this._deepClone(val) : [];
+            else if (key === 'allowed_cidrs') this.ui_allowed_cidrs = Array.isArray(val) ? this._deepClone(val) : [];
+            else if (key === 'vault_sort') this.ui_vault_sort = val || 'name_asc';
+            else if (key === 'smtp_sort') this.ui_smtp_sort = val || 'name_asc';
+            else if (key === 'smarthost_sort') this.ui_smarthost_sort = val || 'alias_asc';
+        } else if (root === 'smtp') {
             this.smtp[key] = (typeof val === 'object' && val !== null) ? this._deepClone(val) : val;
-        } else if (path.startsWith('Gateway Config.pushover.')) {
+        } else if (root === 'pushover') {
             if (key === 'attachments') this.pushGlobals.disable_attachments = (val === false);
             else this.pushGlobals[key] = val !== undefined ? val : '';
-        } else if (path.startsWith('Gateway Config.smarthost.globals.')) {
+        } else if (root === 'smarthost' && segments[1] === 'globals') {
             if (key === 'alias') this.smartGlobals.alias = val || '';
             if (key === 'force_plaintext') this.smartGlobals.force_plaintext = (val === true);
             if (key === 'disable_attachments') this.smartGlobals.disable_attachments = (val === true);
         }
 
-        this.diffModal.changes.splice(idx, 1);
+        const patchIndex = this.diffModal.changes.findIndex(c => c.path === path);
+        if (patchIndex !== -1) this.diffModal.changes.splice(patchIndex, 1);
     }
 
     if (this.diffModal.changes.length === 0) {
