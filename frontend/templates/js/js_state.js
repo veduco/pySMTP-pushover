@@ -24,6 +24,7 @@ defaultTestPayload: {
     message_html: '<html><body><p>Test message from SMTP Gateway</p></body></html>',
     attachments: []
 },
+
 testPayload: {
     status: '', isError: false, loading: false
 },

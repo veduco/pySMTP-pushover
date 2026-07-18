@@ -2,6 +2,7 @@
 openVaultModal(type) {
     this.modals.vault.initOpen('add', { type: type, name: '', token: '' });
 },
+
 saveVaultModal() {
     this.modals.vault.error = '';
     const f = this.modals.vault.fields;
@@ -18,9 +19,11 @@ saveVaultModal() {
     aliasesArray.push(name);
     this.modals.vault.open = false;
 },
+
 get canSaveVaultModal() {
     return this.modals.vault.isDirty && this.modals.vault.fields.name.trim() !== '' && this.modals.vault.fields.token.trim() !== '';
 },
+
 deleteVaultToken(type, name) {
     let isAssigned = false;
     if (type === 'app') {
@@ -51,6 +54,7 @@ deleteVaultToken(type, name) {
 openSmtpUserModal() {
     this.modals.smtpUser.initOpen('add');
 },
+
 saveSmtpUserModal() {
     const f = this.modals.smtpUser.fields;
     const u = f.name.trim(); const p = f.password.trim();
@@ -59,9 +63,11 @@ saveSmtpUserModal() {
     this.smtp_meta[u] = Math.floor(Date.now() / 1000);
     this.modals.smtpUser.open = false;
 },
+
 get canSaveSmtpUserModal() {
     return this.modals.smtpUser.isDirty && this.modals.smtpUser.fields.name.trim() !== '' && this.modals.smtpUser.fields.password.trim() !== '';
 },
+
 deleteSmtpUser(username) {
     if (this.smtp.auth && this.smtp.auth[username] !== undefined) {
         delete this.smtp.auth[username];
@@ -74,6 +80,7 @@ deleteSmtpUser(username) {
 openEditModal(type, name, subType='') {
     this.modals.edit.initOpen('edit', { type: type, subType: subType, name: name, value: '' });
 },
+
 saveEditModal() {
     const f = this.modals.edit.fields;
     const v = f.value.trim();
@@ -87,6 +94,7 @@ saveEditModal() {
     }
     this.modals.edit.open = false;
 },
+
 get canSaveEditModal() { return this.modals.edit.isDirty && this.modals.edit.fields.value.trim() !== ''; },
 
 // --- SMARTHOST MODAL ACTIONS ---
@@ -104,6 +112,7 @@ openSmarthostModal(mode, alias = '') {
         });
     }
 },
+
 saveSmarthostModal() {
     const f = this.modals.smarthost.fields;
     const alias = f.alias.trim();
@@ -133,6 +142,7 @@ saveSmarthostModal() {
 
     this.modals.smarthost.open = false;
 },
+
 get canSaveSmarthostModal() {
     const f = this.modals.smarthost.fields;
     if (!f.alias.trim() || !f.hostname.trim()) return false;
@@ -150,6 +160,7 @@ get canSaveSmarthostModal() {
     if (!this.modals.smarthost.isDirty && this.modals.smarthost.mode === 'edit') return false;
     return true;
 },
+
 deleteSmarthost(alias) {
     let isAssigned = false;
     if (this.smtp.default_route === 'smarthost' && this.smartGlobals.alias === alias) isAssigned = true;
@@ -180,6 +191,7 @@ openListenerModal(mode, idx=null) {
         });
     }
 },
+
 saveListenerModal() {
     const f = this.modals.listener.fields;
     const ip = f.ip.trim() || '0.0.0.0';
@@ -205,6 +217,7 @@ saveListenerModal() {
     else this.smtp.listeners[f.idx] = obj;
     this.modals.listener.open = false;
 },
+
 get canSaveListenerModal() {
     if (!this.modals.listener.isDirty && this.modals.listener.mode === 'edit') return false;
     const f = this.modals.listener.fields;
@@ -223,6 +236,7 @@ openUiListenerModal(mode, idx=null) {
         });
     }
 },
+
 saveUiListenerModal() {
     const f = this.modals.uiListener.fields;
     const ip = f.ip.trim() || '0.0.0.0';
@@ -247,12 +261,14 @@ saveUiListenerModal() {
     else this.uiListeners[f.idx] = obj;
     this.modals.uiListener.open = false;
 },
+
 get canSaveUiListenerModal() {
     if (!this.modals.uiListener.isDirty && this.modals.uiListener.mode === 'edit') return false;
     const f = this.modals.uiListener.fields;
     if (!f.port || f.port < 1 || f.port > 65535) return false;
     return this.isValidIP(f.ip.trim() || '0.0.0.0');
 },
+
 deleteUiListener(idx) {
     if (this.uiListeners.length <= 1) {
         this.alertModal.title = 'Cannot Remove Listener';
@@ -280,6 +296,7 @@ openLinkModal() {
         remote_url: this.ui_remote_url, remote_secret: '', remote_verify_tls: this.ui_remote_verify_tls
     });
 },
+
 saveLinkModal() {
     const f = this.modals.link.fields;
     this.ui_backend_remote = f.backend_remote;
@@ -289,6 +306,7 @@ saveLinkModal() {
     this.ui_remote_verify_tls = f.remote_verify_tls;
     this.modals.link.open = false;
 },
+
 get canSaveLinkModal() {
     if (!this.modals.link.isDirty) return false;
     const f = this.modals.link.fields;
