@@ -80,6 +80,8 @@
     </div>
 
     <script>
+        const schemaSource = {{ schema_json | safe }};
+        {% include "js_base_modal.js" %}
         {% include "alpine_store.js" %}
     </script>
 </body>

@@ -28,12 +28,6 @@ testPayload: {
     status: '', isError: false, loading: false
 },
 
-linkEditModal: {
-    open: false, backend_remote: false, showSecret: false,
-    local_config_path: '', remote_url: '', remote_secret: '', remote_verify_tls: false,
-    orig: {}
-},
-
 validTimezones: [],
 tzError: false,
 uiCidrError: '',
@@ -88,12 +82,16 @@ smarthostSortCol: 'alias', smarthostSortDir: 1,
 smtpListenerSortCol: 'bind', smtpListenerSortDir: 1,
 uiListenerSortCol: 'bind', uiListenerSortDir: 1,
 
-vaultModal: { open: false, type: 'app', name: '', token: '', showToken: false, error: '', orig: {} },
-smtpUserModal: { open: false, name: '', password: '', showToken: false, error: '', orig: {} },
-editModal: { open: false, type: '', subType: '', name: '', value: '', showToken: false, orig: {} },
-listenerModal: { open: false, mode: 'add', idx: null, ip: '', port: 25, starttls: false, proxy_protocol: false, tls_cert_file: '', tls_key_file: '', hostname: '', error: '', orig: {} },
-uiListenerModal: { open: false, mode: 'add', idx: null, ip: '', port: 8443, https: true, tls_cert: '', tls_key: '', error: '', orig: {} },
-smarthostModal: { open: false, mode: 'add', oldAlias: '', alias: '', hostname: '', advertised_hostname: '', port: 25, starttls: false, disable_tls_validation: false, auth: false, username: '', password: '', disable_attachments: false, force_plaintext: false, showPass: false, error: '', orig: {} },
-
 diffModal: { open: false, changes: [], targetForm: '' },
 alertModal: { open: false, title: '', message: '' },
+
+// Bootstrapped Polymorphic Modal Component Engine Bindings
+modals: {
+    vault: new GatewayModal(schemaSource, '', { type: 'app', name: '', token: '' }),
+    smtpUser: new GatewayModal(schemaSource, '', { name: '', password: '' }),
+    edit: new GatewayModal(schemaSource, '', { type: '', subType: '', name: '', value: '' }),
+    listener: new GatewayModal(schemaSource, 'gateway_config.smtp.listeners', { idx: null, ip: '0.0.0.0', port: 25 }),
+    uiListener: new GatewayModal(schemaSource, 'ui_config.listeners', { idx: null, ip: '0.0.0.0', port: 8443 }),
+    smarthost: new GatewayModal(schemaSource, 'gateway_config.smarthost.aliases', { oldAlias: '', alias: '', auth: false, username: '', password: '' }),
+    link: new GatewayModal(schemaSource, '', { backend_remote: false, local_config_path: '', remote_url: '', remote_secret: '', remote_verify_tls: false })
+},
