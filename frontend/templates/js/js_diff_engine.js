@@ -1,3 +1,8 @@
+_deepClone(obj) {
+    if (obj === undefined) return undefined;
+    return JSON.parse(JSON.stringify(obj));
+},
+
 _buildUiStatePayload() {
     return {
         timezone: this.ui_tz,
@@ -9,14 +14,14 @@ _buildUiStatePayload() {
         smtp_sort: this.ui_smtp_sort,
         smarthost_sort: this.ui_smarthost_sort,
         ui_loglevel: this.ui_loglevel,
-        listeners: JSON.parse(JSON.stringify(this.uiListeners || [])),
+        listeners: this._deepClone(this.uiListeners || []),
         backend_mode: this.ui_backend_remote ? 'remote' : 'local',
         local_config_path: this.ui_local_config_path,
         remote_url: this.ui_remote_url,
         remote_secret: this.ui_remote_secret,
         remote_verify_tls: this.ui_remote_verify_tls,
-        allowed_cidrs: JSON.parse(JSON.stringify(this.ui_allowed_cidrs || [])),
-        trust_proxy_cidrs: JSON.parse(JSON.stringify(this.ui_trust_proxy_cidrs || []))
+        allowed_cidrs: this._deepClone(this.ui_allowed_cidrs || []),
+        trust_proxy_cidrs: this._deepClone(this.ui_trust_proxy_cidrs || [])
     };
 },
 
@@ -93,7 +98,7 @@ _getDiffs(obj1, obj2, path = '') {
                     humanLabel: humanKey,
                     old: typeof displayOld === 'string' && !displayOld.startsWith('[') ? JSON.stringify(displayOld).replace(/^"|"$/g, '') : displayOld,
                     new: typeof displayNew === 'string' && !displayNew.startsWith('[') ? JSON.stringify(displayNew).replace(/^"|"$/g, '') : displayNew,
-                    originalValue: (typeof val1 === 'object' && val1 !== null) ? JSON.parse(JSON.stringify(val1)) : val1
+                    originalValue: (typeof val1 === 'object' && val1 !== null) ? this._deepClone(val1) : val1
                 });
             }
         }
@@ -103,11 +108,11 @@ _getDiffs(obj1, obj2, path = '') {
 
 preparePayload() {
     const payload = {
-        smtp: JSON.parse(JSON.stringify(this.smtp)),
+        smtp: this._deepClone(this.smtp),
         pushover: { ...this.pushGlobals },
         smarthost: {
             globals: { ...this.smartGlobals },
-            aliases: JSON.parse(JSON.stringify(this.smarthosts))
+            aliases: this._deepClone(this.smarthosts)
         },
         routes: {}
     };
@@ -173,14 +178,14 @@ takeSnapshot() {
         }),
         ui: JSON.stringify(this._buildUiStatePayload())
     };
-    this.initialState = JSON.parse(JSON.stringify({
+    this.initialState = this._deepClone({
         ui: this.rawUiConfig,
         routes: { mappings: this.mappings },
         pushover: { pushGlobals: this.pushGlobals },
         smarthost: { smarthosts: this.smarthosts, smartGlobals: this.smartGlobals },
         server: { smtp: this.smtp, smtp_meta: this.smtp_meta },
         vault: { vaultApp: this.vaultApp, vaultUser: this.vaultUser, vaultSmarthost: this.vaultSmarthost, vaultAppAliases: this.vaultAppAliases, vaultUserAliases: this.vaultUserAliases }
-    }));
+    });
 },
 
 requestSave(formId) {
@@ -260,33 +265,29 @@ revertChange(idx) {
             const shAlias = matches[1];
             const shObj = JSON.parse(this.snapshots.smarthost);
 
-            if (shObj.smarthosts[shAlias]) this.smarthosts[shAlias] = JSON.parse(JSON.stringify(shObj.smarthosts[shAlias]));
+            if (shObj.smarthosts[shAlias]) this.smarthosts[shAlias] = this._deepClone(shObj.smarthosts[shAlias]);
             else delete this.smarthosts[shAlias];
 
-            if (shObj.vaultSmarthost[shAlias]) this.vaultSmarthost[shAlias] = JSON.parse(JSON.stringify(shObj.vaultSmarthost[shAlias]));
+            if (shObj.vaultSmarthost[shAlias]) this.vaultSmarthost[shAlias] = this._deepClone(shObj.vaultSmarthost[shAlias]);
             else delete this.vaultSmarthost[shAlias];
 
             this.diffModal.changes = this.diffModal.changes.filter(c => !c.key.includes(shAlias));
             isComplexReset = true;
         }
     } else if (path.includes('Vault.app')) {
-        this.vaultApp = JSON.parse(JSON.stringify(JSON.parse(this.snapshots.pushover).vaultApp));
+        this.vaultApp = this._deepClone(JSON.parse(this.snapshots.pushover).vaultApp);
         this.diffModal.changes = this.diffModal.changes.filter(c => !c.key.includes('Vault.app'));
         isComplexReset = true;
     } else if (path.includes('Vault.user')) {
-        this.vaultUser = JSON.parse(JSON.stringify(JSON.parse(this.snapshots.pushover).vaultUser));
+        this.vaultUser = this._deepClone(JSON.parse(this.snapshots.pushover).vaultUser);
         this.diffModal.changes = this.diffModal.changes.filter(c => !c.key.includes('Vault.user'));
         isComplexReset = true;
     } else if (path.includes('smtp.listeners')) {
-        this.smtp.listeners = JSON.parse(JSON.stringify(JSON.parse(this.snapshots.server).listeners || []));
+        this.smtp.listeners = this._deepClone(JSON.parse(this.snapshots.server).listeners || []);
         this.diffModal.changes = this.diffModal.changes.filter(c => !c.key.includes('smtp.listeners'));
         isComplexReset = true;
-    } else if (path.includes('routes')) {
-        this.resetTab('routes');
-        this.diffModal.changes = this.diffModal.changes.filter(c => !c.key.includes('routes'));
-        isComplexReset = true;
     } else if (path.includes('UI/Backend Context.listeners')) {
-        this.uiListeners = JSON.parse(JSON.stringify(JSON.parse(this.snapshots.ui).uiListeners || []));
+        this.uiListeners = this._deepClone(JSON.parse(this.snapshots.ui).uiListeners || []);
         this.diffModal.changes = this.diffModal.changes.filter(c => !c.key.includes('UI/Backend Context.listeners'));
         isComplexReset = true;
     }
@@ -307,14 +308,14 @@ revertChange(idx) {
             else if (key === 'expand_adv') this.ui_expand_adv = (val === true);
             else if (key === 'trust_proxy') this.ui_trust_proxy = (val === true);
             else if (key === 'trust_proxy_cidrs') {
-                this.ui_trust_proxy_cidrs = Array.isArray(val) ? JSON.parse(JSON.stringify(val)) : [];
+                this.ui_trust_proxy_cidrs = Array.isArray(val) ? this._deepClone(val) : [];
             }
             else if (key === 'allowed_cidrs') {
-                this.ui_allowed_cidrs = Array.isArray(val) ? JSON.parse(JSON.stringify(val)) : [];
+                this.ui_allowed_cidrs = Array.isArray(val) ? this._deepClone(val) : [];
                 this.ui_allowed_cidrs_text = this.ui_allowed_cidrs.join('\n');
             }
         } else if (path.startsWith('Gateway Config.smtp.')) {
-            this.smtp[key] = (typeof val === 'object' && val !== null) ? JSON.parse(JSON.stringify(val)) : val;
+            this.smtp[key] = (typeof val === 'object' && val !== null) ? this._deepClone(val) : val;
             if (key === 'allowed_cidrs') {
                 this.smtp_cidrs_text = Array.isArray(val) ? val.join('\n') : '';
             }
@@ -347,7 +348,7 @@ discardAllChanges() {
 
 resetTab(tabContext) {
     if (!this.snapshots) return;
-    const backup = JSON.parse(JSON.stringify(this.initialState));
+    const backup = this._deepClone(this.initialState);
 
     if (tabContext === 'ui' || tabContext === 'backend') {
         const uiObj = backup.ui || {};
@@ -356,46 +357,45 @@ resetTab(tabContext) {
         this.ui_remote_url = uiObj.remote_url || '';
         this.ui_remote_secret = uiObj.remote_secret || '';
         this.ui_remote_verify_tls = uiObj.remote_verify_tls === true;
-
         this.ui_loglevel = uiObj.ui_loglevel || 'INFO';
         this.ui_tz = uiObj.timezone || 'UTC';
         this.ui_fmt = uiObj.date_format || 'YYYY-MM-DD HH:mm:ss';
         this.ui_relative = uiObj.relative_time === true;
         this.ui_expand_adv = uiObj.expand_adv === true;
         this.ui_trust_proxy = uiObj.trust_proxy === true;
-        this.ui_trust_proxy_cidrs = JSON.parse(JSON.stringify(uiObj.trust_proxy_cidrs || []));
+        this.ui_trust_proxy_cidrs = this._deepClone(uiObj.trust_proxy_cidrs || []);
         this.uiTrustProxyCidrInput = '';
         this.uiTrustProxyCidrError = '';
         this.ui_vault_sort = uiObj.vault_sort || 'name_asc';
         this.ui_smtp_sort = uiObj.smtp_sort || 'name_asc';
         this.ui_smarthost_sort = uiObj.smarthost_sort || 'alias_asc';
-        this.uiListeners = JSON.parse(JSON.stringify(uiObj.listeners || []));
+        this.uiListeners = this._deepClone(uiObj.listeners || []);
         this.tzError = false;
-        this.ui_allowed_cidrs = JSON.parse(JSON.stringify(uiObj.allowed_cidrs || []));
+        this.ui_allowed_cidrs = this._deepClone(uiObj.allowed_cidrs || []);
         this.ui_allowed_cidrs_text = this.ui_allowed_cidrs.join('\n');
     }
 
     if (tabContext === 'pushover') {
-        this.pushGlobals = JSON.parse(JSON.stringify(backup.pushover.pushGlobals));
-        this.vaultApp = JSON.parse(JSON.stringify(backup.vault.vaultApp));
-        this.vaultUser = JSON.parse(JSON.stringify(backup.vault.vaultUser));
+        this.pushGlobals = this._deepClone(backup.pushover.pushGlobals);
+        this.vaultApp = this._deepClone(backup.vault.vaultApp);
+        this.vaultUser = this._deepClone(backup.vault.vaultUser);
         this.vaultAppAliases = this.vaultApp.map(x => x.name);
         this.vaultUserAliases = this.vaultUser.map(x => x.name);
     }
 
     if (tabContext === 'routes') {
-        this.mappings = JSON.parse(JSON.stringify(backup.routes.mappings));
+        this.mappings = this._deepClone(backup.routes.mappings);
     }
 
     if (tabContext === 'smarthost') {
-        this.smarthosts = JSON.parse(JSON.stringify(backup.smarthost.smarthosts));
-        this.smartGlobals = JSON.parse(JSON.stringify(backup.smarthost.smartGlobals));
-        this.vaultSmarthost = JSON.parse(JSON.stringify(backup.vault.vaultSmarthost));
+        this.smarthosts = this._deepClone(backup.smarthost.smarthosts);
+        this.smartGlobals = this._deepClone(backup.smarthost.smartGlobals);
+        this.vaultSmarthost = this._deepClone(backup.vault.vaultSmarthost);
     }
 
     if (tabContext === 'server') {
-        this.smtp = JSON.parse(JSON.stringify(backup.server.smtp));
-        this.smtp_meta = JSON.parse(JSON.stringify(backup.server.smtp_meta));
+        this.smtp = this._deepClone(backup.server.smtp);
+        this.smtp_meta = this._deepClone(backup.server.smtp_meta);
         this.smtp_cidrs_text = (this.smtp.allowed_cidrs || []).join('\n');
     }
 },
