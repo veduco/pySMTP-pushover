@@ -14,6 +14,10 @@ sseSource: null,
 
 isReconnecting: false,
 activeUiPort: {{ active_ui_port | default(0) }},
+
+dragHover: null,
+draggedRouteIdx: null,
+
 defaultTestPayload: {
     from: '', to: '', type: 'multipart',
     message_plain: 'Test message from SMTP Gateway',
@@ -58,7 +62,7 @@ uiListeners: [],
 
 ui_allowed_cidrs: {{ ui_config_json | safe }}.allowed_cidrs || [],
 ui_allowed_cidrs_text: ({{ ui_config_json | safe }}.allowed_cidrs || []).join('\n'),
-smtp_cidrs_text: ({{ config_json | safe }}.smtp?.allowed_cidrs || []).join('\n'),
+smtp_cidrs_text: (({{ config_json | safe }} || {}).smtp?.allowed_cidrs || []).join('\n'),
 
 ui_tz: '{{ ui_tz }}', ui_fmt: '{{ ui_fmt }}',
 ui_relative: {{ 'true' if ui_relative else 'false' }},
