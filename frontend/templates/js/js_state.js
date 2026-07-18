@@ -29,10 +29,14 @@ testPayload: {
 },
 
 validTimezones: [],
-tzError: false,
-uiCidrError: '',
-smtpCidrError: '',
-dedupeWindowError: '',
+
+errors: {
+    tz: '',
+    uiCidr: '',
+    smtpCidr: '',
+    dedupeWindow: '',
+    uiTrustProxyCidr: ''
+},
 
 rawConfig: {{ config_json | safe }},
 rawVault: {},
@@ -57,14 +61,11 @@ uiListeners: [],
 
 ui_allowed_cidrs: {{ ui_config_json | safe }}.allowed_cidrs || [],
 uiCidrInput: '',
-uiCidrError: '',
 
 smtpCidrInput: '',
-smtpCidrError: '',
 
 ui_trust_proxy_cidrs: ({{ ui_config_json | safe }}.trust_proxy_cidrs || []),
 uiTrustProxyCidrInput: '',
-uiTrustProxyCidrError: '',
 
 ui_tz: ({{ ui_config_json | safe }}.timezone || 'UTC'),
 ui_fmt: ({{ ui_config_json | safe }}.date_format || 'YYYY-MM-DD HH:mm:ss'),

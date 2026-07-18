@@ -19,43 +19,22 @@ setListenerSort(col) {
 },
 
 get sortedVaultApp() {
-    return [...this.vaultApp].sort((a, b) => {
-        if(this.vaultSortCol === 'name') return a.name.localeCompare(b.name) * this.vaultSortDir;
-        else return (a.epoch - b.epoch) * this.vaultSortDir;
-    });
+    return this._genericSort(this.vaultApp, this.vaultSortCol, this.vaultSortDir);
 },
 
 get sortedVaultUser() {
-    return [...this.vaultUser].sort((a, b) => {
-        if(this.vaultSortCol === 'name') return a.name.localeCompare(b.name) * this.vaultSortDir;
-        else return (a.epoch - b.epoch) * this.vaultSortDir;
-    });
+    return this._genericSort(this.vaultUser, this.vaultSortCol, this.vaultSortDir);
 },
 
 get sortedSmtpAuth() {
     const arr = Object.keys(this.smtp.auth || {}).map(k => ({ name: k, epoch: this.smtp_meta[k] || 0 }));
-    return arr.sort((a, b) => {
-        if(this.smtpSortCol === 'name') return a.name.localeCompare(b.name) * this.smtpSortDir;
-        else return (a.epoch - b.epoch) * this.smtpSortDir;
-    });
+    return this._genericSort(arr, this.smtpSortCol, this.smtpSortDir);
 },
 
 get sortedSmarthosts() {
     const arr = Object.keys(this.smarthosts).map(k => ({ alias: k, ...this.smarthosts[k] }));
-    return arr.sort((a, b) => {
-        let res = 0;
-        if (this.smarthostSortCol === 'alias') res = a.alias.localeCompare(b.alias);
-        else if (this.smarthostSortCol === 'address') {
-            const aAddr = (a.hostname || '') + ':' + (a.port || 25);
-            const bAddr = (b.hostname || '') + ':' + (b.port || 25);
-            res = aAddr.localeCompare(bAddr);
-        }
-        else if (this.smarthostSortCol === 'starttls') res = (a.starttls === b.starttls) ? 0 : a.starttls ? 1 : -1;
-        else if (this.smarthostSortCol === 'auth') res = (a.auth === b.auth) ? 0 : a.auth ? 1 : -1;
-        else if (this.smarthostSortCol === 'username') res = (a.username || '').localeCompare(b.username || '');
-        else if (this.smarthostSortCol === 'disable_attachments') res = (a.disable_attachments === b.disable_attachments) ? 0 : a.disable_attachments ? 1 : -1;
-        else if (this.smarthostSortCol === 'force_plaintext') res = (a.force_plaintext === b.force_plaintext) ? 0 : a.force_plaintext ? 1 : -1;
-        return res * this.smarthostSortDir;
+    return this._genericSort(arr, this.smarthostSortCol, this.smarthostSortDir, {
+        address: (s) => (s.hostname || '') + ':' + (s.port || 25)
     });
 },
 
@@ -63,35 +42,19 @@ get sortedSmarthostKeys() {
     return this.sortedSmarthosts.map(s => s.alias);
 },
 
-_evaluateListenerSort(listenersArray, sortColumn, sortDirection) {
-    const mapped = (listenersArray || []).map((l, i) => ({ ...l, _idx: i }));
-    return mapped.sort((a, b) => {
-        if (sortColumn === 'bind') {
-            let valA = String(a.bind || '');
-            let valB = String(b.bind || '');
-            return valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' }) * sortDirection;
-        }
-
-        let valA = a[sortColumn];
-        if (valA === undefined || valA === null) valA = '';
-        let valB = b[sortColumn];
-        if (valB === undefined || valB === null) valB = '';
-
-        let res = valA < valB ? -1 : (valA > valB ? 1 : 0);
-        return res * sortDirection;
-    });
-},
-
 get sortedUiListeners() {
-    return this._evaluateListenerSort(this.uiListeners, this.uiListenerSortCol, this.uiListenerSortDir);
+    const mapped = (this.uiListeners || []).map((l, i) => ({ ...l, _idx: i }));
+    return this._genericSort(mapped, this.uiListenerSortCol, this.uiListenerSortDir);
 },
 
 get sortedSmtpListeners() {
-    return this._evaluateListenerSort(this.smtp.listeners, this.smtpListenerSortCol, this.smtpListenerSortDir);
+    const mapped = (this.smtp.listeners || []).map((l, i) => ({ ...l, _idx: i }));
+    return this._genericSort(mapped, this.smtpListenerSortCol, this.smtpListenerSortDir);
 },
 
 get sortedListeners() {
-    return this._evaluateListenerSort(this.smtp.listeners, this.listenerSortCol, this.listenerSortDir);
+    const mapped = (this.smtp.listeners || []).map((l, i) => ({ ...l, _idx: i }));
+    return this._genericSort(mapped, this.listenerSortCol, this.listenerSortDir);
 },
 
 setUiListenerSort(col) {

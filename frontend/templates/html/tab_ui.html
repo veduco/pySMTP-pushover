@@ -60,8 +60,8 @@
 
             <div class="flex-col" style="flex: 1; min-width: 200px; padding-bottom: 2px;">
                 <label>Display Timezone Location</label>
-                <input type="text" x-model="ui_tz" @blur="checkTimezone()" @input="tzError = ''" :class="tzError ? 'input-invalid' : ''" list="timezone-list" placeholder="Search timezone... e.g. America/New_York" autocomplete="off" style="width: 100%;">
-                <span class="validation-error" x-show="tzError" x-text="tzError" style="display: none;"></span>
+                <input type="text" x-model="ui_tz" @blur="checkTimezone()" @input="errors.tz = ''" :class="errors.tz ? 'input-invalid' : ''" list="timezone-list" placeholder="Search timezone... e.g. America/New_York" autocomplete="off" style="width: 100%;">
+                <span class="validation-error" x-show="errors.tz" x-text="errors.tz" style="display: none;"></span>
                 <datalist id="timezone-list">
                     <template x-for="tz in validTimezones" :key="tz"><option :value="tz"></option></template>
                 </datalist>
@@ -116,7 +116,7 @@
             {{ cidr_input(
                 list_model="ui_trust_proxy_cidrs",
                 input_model="uiTrustProxyCidrInput",
-                error_model="uiTrustProxyCidrError",
+                error_model="errors.uiTrustProxyCidr",
                 ref_name="trustProxyInput",
                 placeholder="e.g. 10.0.0.0/8",
                 add_fn="addTrustProxyCidr",
@@ -130,7 +130,7 @@
             {{ cidr_input(
                 list_model="ui_allowed_cidrs",
                 input_model="uiCidrInput",
-                error_model="uiCidrError",
+                error_model="errors.uiCidr",
                 ref_name="uiCidrInput",
                 placeholder="e.g. 192.168.1.0/24",
                 add_fn="addUiCidr",

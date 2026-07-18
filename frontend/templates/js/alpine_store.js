@@ -46,14 +46,14 @@ const GatewayStore = {
                 if (m.method === 'smarthost' && (!m.smarthost_alias || m.smarthost_alias.trim() === '')) return false;
             }
         } else if (tab === 'server') {
-            if (ctx.smtpCidrError || ctx.dedupeWindowError) return false;
+            if (ctx.errors.smtpCidr || ctx.errors.dedupeWindow) return false;
             if (ctx.smtp.default_route === 'pushover') {
                 if (!ctx.pushGlobals.token || !ctx.pushGlobals.user) return false;
             } else if (ctx.smtp.default_route === 'smarthost') {
                 if (!ctx.smartGlobals.alias) return false;
             }
         } else if (tab === 'ui') {
-            if (ctx.tzError || ctx.uiCidrError || ctx.uiTrustProxyCidrError) return false;
+            if (ctx.errors.tz || ctx.errors.uiCidr || ctx.errors.uiTrustProxyCidr) return false;
         }
         return true;
     }

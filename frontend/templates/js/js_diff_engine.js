@@ -448,10 +448,10 @@ resetTab(tabContext) {
 
         this.uiListeners = this._deepClone(uiObj.listeners || []);
         this.uiTrustProxyCidrInput = '';
-        this.uiTrustProxyCidrError = '';
-        this.tzError = false;
+        this.errors.uiTrustProxyCidr = '';
+        this.errors.tz = '';
         this.uiCidrInput = '';
-        this.uiCidrError = '';
+        this.errors.uiCidr = '';
     }
 
     if (tabContext === 'pushover') {
@@ -476,8 +476,8 @@ resetTab(tabContext) {
         this.smtp = this._deepClone(backup.server.smtp);
         this.smtp_meta = this._deepClone(backup.server.smtp_meta);
         this.smtpCidrInput = '';
-        this.smtpCidrError = '';
-        this.dedupeWindowError = '';
+        this.errors.smtpCidr = '';
+        this.errors.dedupeWindow = '';
     }
 },
 

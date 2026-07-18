@@ -57,7 +57,7 @@
         {{ cidr_input(
             list_model="smtp.allowed_cidrs",
             input_model="smtpCidrInput",
-            error_model="smtpCidrError",
+            error_model="errors.smtpCidr",
             ref_name="smtpCidrInput",
             placeholder="e.g. 192.168.1.0/24",
             add_fn="addSmtpCidr",
@@ -79,8 +79,8 @@
             <div class="flex-col" style="flex: 1; min-width: 200px;">
                 <label>Signature Retention Cache Window</label>
                 <input type="text" x-model="smtp.dedupe_window" @input="validateDedupeWindow()" placeholder="e.g. 10m, 45s, 1h30m" autocomplete="off" style="width: 100%;">
-                <span class="validation-error" x-show="dedupeWindowError" x-text="dedupeWindowError" style="color: var(--danger-color); font-size: 0.8rem; font-weight: bold; margin-top: 0.25rem; display: block;"></span>
-                <span class="helper-text" x-show="!dedupeWindowError" style="font-size: 0.8rem; opacity: 0.6; display: block; margin-top: 0.25rem;">Valid syntax models: <code>45s</code>, <code>10m</code>, <code>12h30m2s</code>. Defaults to <code>10m</code> if blank.</span>
+                <span class="validation-error" x-show="errors.dedupeWindow" x-text="errors.dedupeWindow" style="color: var(--danger-color); font-size: 0.8rem; font-weight: bold; margin-top: 0.25rem; display: block;"></span>
+                <span class="helper-text" x-show="!errors.dedupeWindow" style="font-size: 0.8rem; opacity: 0.6; display: block; margin-top: 0.25rem;">Valid syntax models: <code>45s</code>, <code>10m</code>, <code>12h30m2s</code>. Defaults to <code>10m</code> if blank.</span>
             </div>
 
             <div class="flex-col" style="flex: 2; min-width: 250px;">

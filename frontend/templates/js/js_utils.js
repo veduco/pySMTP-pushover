@@ -80,27 +80,48 @@ executeAbsoluteFormat(d) {
     return `${yyyy}-${mm}-${dd} ${pad(hh)}:${min}:${ss}`;
 },
 
+_genericSort(array, col, dir, customMap = {}) {
+    if (!array || !Array.isArray(array)) return [];
+    return [...array].sort((a, b) => {
+        let valA = customMap[col] ? customMap[col](a) : a[col];
+        let valB = customMap[col] ? customMap[col](b) : b[col];
+
+        if (valA === undefined || valA === null) valA = '';
+        if (valB === undefined || valB === null) valB = '';
+
+        let res = 0;
+        if (typeof valA === 'string' && typeof valB === 'string') {
+            res = valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' });
+        } else if (typeof valA === 'boolean' && typeof valB === 'boolean') {
+            res = (valA === valB) ? 0 : valA ? 1 : -1;
+        } else {
+            res = valA < valB ? -1 : (valA > valB ? 1 : 0);
+        }
+        return res * dir;
+    });
+},
+
 checkTimezone() {
     if (this.ui_tz && !this.validTimezones.includes(this.ui_tz)) {
-        this.tzError = 'Please select a valid timezone location from the list.';
+        this.errors.tz = 'Please select a valid timezone location from the list.';
         return false;
     }
-    this.tzError = '';
+    this.errors.tz = '';
     return true;
 },
 
 validateDedupeWindow() {
     const val = (this.smtp.dedupe_window || '').trim().toLowerCase();
     if (!val) {
-        this.dedupeWindowError = '';
+        this.errors.dedupeWindow = '';
         return true;
     }
     const regex = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/;
     if (!regex.test(val)) {
-        this.dedupeWindowError = 'Invalid window string format definition constraint.';
+        this.errors.dedupeWindow = 'Invalid window string format definition constraint.';
         return false;
     }
-    this.dedupeWindowError = '';
+    this.errors.dedupeWindow = '';
     return true;
 },
 
@@ -175,34 +196,34 @@ async _processCidrAdd(targetArray, inputVal) {
 
 async addUiCidr() {
     const res = await this._processCidrAdd(this.ui_allowed_cidrs, this.uiCidrInput);
-    this.uiCidrError = res.error;
+    this.errors.uiCidr = res.error;
     if (res.clear) this.uiCidrInput = '';
 },
 
 removeUiCidr(idx) {
     this.ui_allowed_cidrs.splice(idx, 1);
-    this.uiCidrError = '';
+    this.errors.uiCidr = '';
 },
 
 async addSmtpCidr() {
     if (!this.smtp.allowed_cidrs) this.smtp.allowed_cidrs = [];
     const res = await this._processCidrAdd(this.smtp.allowed_cidrs, this.smtpCidrInput);
-    this.smtpCidrError = res.error;
+    this.errors.smtpCidr = res.error;
     if (res.clear) this.smtpCidrInput = '';
 },
 
 removeSmtpCidr(idx) {
     this.smtp.allowed_cidrs.splice(idx, 1);
-    this.smtpCidrError = '';
+    this.errors.smtpCidr = '';
 },
 
 async addTrustProxyCidr() {
     const res = await this._processCidrAdd(this.ui_trust_proxy_cidrs, this.uiTrustProxyCidrInput);
-    this.uiTrustProxyCidrError = res.error;
+    this.errors.uiTrustProxyCidr = res.error;
     if (res.clear) this.uiTrustProxyCidrInput = '';
 },
 
 removeTrustProxyCidr(idx) {
     this.ui_trust_proxy_cidrs.splice(idx, 1);
-    this.uiTrustProxyCidrError = '';
+    this.errors.uiTrustProxyCidr = '';
 },
