@@ -312,13 +312,9 @@ revertChange(idx) {
             }
             else if (key === 'allowed_cidrs') {
                 this.ui_allowed_cidrs = Array.isArray(val) ? this._deepClone(val) : [];
-                this.ui_allowed_cidrs_text = this.ui_allowed_cidrs.join('\n');
             }
         } else if (path.startsWith('Gateway Config.smtp.')) {
             this.smtp[key] = (typeof val === 'object' && val !== null) ? this._deepClone(val) : val;
-            if (key === 'allowed_cidrs') {
-                this.smtp_cidrs_text = Array.isArray(val) ? val.join('\n') : '';
-            }
         } else if (path.startsWith('Gateway Config.pushover.')) {
             if (key === 'attachments') this.pushGlobals.disable_attachments = (val === false);
             else this.pushGlobals[key] = val !== undefined ? val : '';
@@ -372,7 +368,8 @@ resetTab(tabContext) {
         this.uiListeners = this._deepClone(uiObj.listeners || []);
         this.tzError = false;
         this.ui_allowed_cidrs = this._deepClone(uiObj.allowed_cidrs || []);
-        this.ui_allowed_cidrs_text = this.ui_allowed_cidrs.join('\n');
+        this.uiCidrInput = '';
+        this.uiCidrError = '';
     }
 
     if (tabContext === 'pushover') {
@@ -396,7 +393,8 @@ resetTab(tabContext) {
     if (tabContext === 'server') {
         this.smtp = this._deepClone(backup.server.smtp);
         this.smtp_meta = this._deepClone(backup.server.smtp_meta);
-        this.smtp_cidrs_text = (this.smtp.allowed_cidrs || []).join('\n');
+        this.smtpCidrInput = '';
+        this.smtpCidrError = '';
     }
 },
 

@@ -6,6 +6,8 @@
     }
 </style>
 
+<input type="hidden" name="smtp_allowed_cidrs_json" :value="JSON.stringify(smtp.allowed_cidrs || [])">
+
 <div class="card" style="margin-bottom: 1.5rem;">
     <h3>Global Configuration</h3>
     <div class="flex-row" style="margin-bottom: 1rem; align-items: flex-end;">
@@ -44,8 +46,17 @@
 
     <div style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
         <label style="font-weight: bold; margin-bottom: 0.35rem; display: block;">Inbound SMTP IP Whitelist ACL</label>
-        <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; opacity: 0.7;">Restrict connection rules on the email receiving sockets by entering one IP address or CIDR mask per line. Leave completely blank to allow permissive incoming traffic streams.</p>
-        <textarea rows="4" x-model="smtp_cidrs_text" @keydown.enter.stop @input="smtp.allowed_cidrs = smtp_cidrs_text.split('\n').map(l => l.trim()).filter(l => l); validateSmtpCidrs();" :class="smtpCidrError ? 'input-invalid' : ''" placeholder="e.g.&#10;127.0.0.1&#10;192.168.1.0/24" style="font-family: monospace; font-size: 0.9rem; resize: vertical;"></textarea>
+        <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; opacity: 0.7;">Restrict connection rules on the email receiving sockets by entering allowed IP addresses or CIDR masks. Leave completely blank to allow permissive incoming traffic streams. Press <strong>Enter</strong> to add a tag.</p>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.5rem; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 6px; cursor: text; align-items: center;" :class="smtpCidrError ? 'input-invalid' : ''" @click="$refs.smtpCidrInput.focus()">
+            <template x-for="(cidr, idx) in (smtp.allowed_cidrs || [])" :key="idx">
+                <span style="display: inline-flex; align-items: center; gap: 0.3rem; background: var(--primary-color); color: white; padding: 0.2rem 0.5rem; border-radius: 12px; font-size: 0.85rem;">
+                    <span x-text="cidr"></span>
+                    <svg @click.stop="removeSmtpCidr(idx)" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; opacity: 0.8;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </span>
+            </template>
+            <input type="text" x-ref="smtpCidrInput" x-model="smtpCidrInput" @keydown.enter.prevent="addSmtpCidr()" @keydown.backspace="if(smtpCidrInput === '' && smtp.allowed_cidrs && smtp.allowed_cidrs.length > 0) removeSmtpCidr(smtp.allowed_cidrs.length - 1)" placeholder="e.g. 192.168.1.0/24" style="border: none; background: transparent; outline: none; flex: 1; min-width: 120px; font-size: 0.9rem; color: var(--text-color);">
+        </div>
         <span class="validation-error" x-show="smtpCidrError" x-text="smtpCidrError" style="display: none;"></span>
     </div>
 </div>

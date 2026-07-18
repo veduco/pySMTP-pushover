@@ -125,38 +125,42 @@ _validateCidrList(lines) {
     return '';
 },
 
-validateSmtpCidrs() {
-    const lines = this.smtp_cidrs_text.split('\n').map(l => l.trim()).filter(l => l);
-    this.smtpCidrError = this._validateCidrList(lines);
-    return !this.smtpCidrError;
+_processCidrAdd(targetArray, inputVal) {
+    const val = (inputVal || '').trim();
+    if (!val) return { error: '', clear: true };
+    if (!this._isValidNetworkTarget(val, true)) {
+        return { error: `Invalid IP or CIDR Subnet: ${val}`, clear: false };
+    }
+    if (!targetArray.includes(val)) targetArray.push(val);
+    return { error: '', clear: true };
 },
 
-validateUiCidrs() {
-    const lines = this.ui_allowed_cidrs_text.split('\n').map(l => l.trim()).filter(l => l);
-    this.uiCidrError = this._validateCidrList(lines);
-    return !this.uiCidrError;
+addUiCidr() {
+    const res = this._processCidrAdd(this.ui_allowed_cidrs, this.uiCidrInput);
+    this.uiCidrError = res.error;
+    if (res.clear) this.uiCidrInput = '';
+},
+removeUiCidr(idx) {
+    this.ui_allowed_cidrs.splice(idx, 1);
+    this.uiCidrError = '';
+},
+
+addSmtpCidr() {
+    if (!this.smtp.allowed_cidrs) this.smtp.allowed_cidrs = [];
+    const res = this._processCidrAdd(this.smtp.allowed_cidrs, this.smtpCidrInput);
+    this.smtpCidrError = res.error;
+    if (res.clear) this.smtpCidrInput = '';
+},
+removeSmtpCidr(idx) {
+    this.smtp.allowed_cidrs.splice(idx, 1);
+    this.smtpCidrError = '';
 },
 
 addTrustProxyCidr() {
-    const val = this.uiTrustProxyCidrInput.trim();
-    if (!val) {
-        this.uiTrustProxyCidrError = '';
-        return;
-    }
-    if (!this._isValidNetworkTarget(val, true)) {
-        this.uiTrustProxyCidrError = `Invalid IP or CIDR Subnet: ${val}`;
-        return;
-    }
-    if (this.ui_trust_proxy_cidrs.includes(val)) {
-        this.uiTrustProxyCidrInput = '';
-        this.uiTrustProxyCidrError = '';
-        return;
-    }
-    this.ui_trust_proxy_cidrs.push(val);
-    this.uiTrustProxyCidrInput = '';
-    this.uiTrustProxyCidrError = '';
+    const res = this._processCidrAdd(this.ui_trust_proxy_cidrs, this.uiTrustProxyCidrInput);
+    this.uiTrustProxyCidrError = res.error;
+    if (res.clear) this.uiTrustProxyCidrInput = '';
 },
-
 removeTrustProxyCidr(idx) {
     this.ui_trust_proxy_cidrs.splice(idx, 1);
     this.uiTrustProxyCidrError = '';

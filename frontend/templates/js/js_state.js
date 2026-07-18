@@ -61,8 +61,11 @@ smartGlobals: {},
 uiListeners: [],
 
 ui_allowed_cidrs: {{ ui_config_json | safe }}.allowed_cidrs || [],
-ui_allowed_cidrs_text: ({{ ui_config_json | safe }}.allowed_cidrs || []).join('\n'),
-smtp_cidrs_text: (({{ config_json | safe }} || {}).smtp?.allowed_cidrs || []).join('\n'),
+uiCidrInput: '',
+uiCidrError: '',
+
+smtpCidrInput: '',
+smtpCidrError: '',
 
 ui_trust_proxy_cidrs: ({{ ui_config_json | safe }}.trust_proxy_cidrs || []),
 uiTrustProxyCidrInput: '',
