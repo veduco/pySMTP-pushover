@@ -21,18 +21,23 @@ from backend.events import broker
 # Added centralized primitive for string parsing
 from core.json_store import parse_bind_string
 
-def get_smtp_factory(handler, eff_hostname, tls_context, authenticator):
+def get_smtp_factory(handler, eff_hostname, tls_context, authenticator, proxy_protocol=False):
     """
     Safely constructs the aiosmtpd Protocol class.
     Attributes that are not supported in the __init__ signature are bound post-instantiation.
     """
     def factory():
+        proxy_kwargs = {}
+        if proxy_protocol:
+            proxy_kwargs["proxy_protocol_timeout"] = 5.0
+
         smtp_instance = GatewaySMTP(
             handler,
             ident=eff_hostname,
             tls_context=tls_context,
             authenticator=authenticator,
-            auth_require_tls=False
+            auth_require_tls=False,
+            **proxy_kwargs
         )
 
         # Explicitly set the internal hostname used for EHLO responses
@@ -46,6 +51,73 @@ def get_smtp_factory(handler, eff_hostname, tls_context, authenticator):
 
         return smtp_instance
     return factory
+
+class SMTPListenerManager:
+    """Centralizes network socket lifecycles, proxy state configuration, and TLS binding."""
+    def __init__(self, loop, handler, authenticator, app_state):
+        self.loop = loop
+        self.handler = handler
+        self.authenticator = authenticator
+        self.app_state = app_state
+        self.active_servers = {}
+
+    async def bind_listener(self, l_conf, is_reload=False):
+        bind = l_conf["bind"]
+        listen_address, listen_port = parse_bind_string(bind, 25)
+        eff_hostname = l_conf.get("hostname", self.app_state.smtp.get("hostname"))
+        eff_cert = l_conf.get("tls_cert_file")
+        eff_key = l_conf.get("tls_key_file")
+        proxy_protocol = l_conf.get("proxy_protocol", False)
+
+        eff_config = {
+            "hostname": eff_hostname,
+            "starttls": l_conf.get("starttls", False),
+            "proxy_protocol": proxy_protocol,
+            "tls_cert_file": eff_cert,
+            "tls_key_file": eff_key,
+            "cert_hash": get_file_hash(eff_cert),
+            "key_hash": get_file_hash(eff_key)
+        }
+
+        try:
+            tls_context = get_tls_context(l_conf, eff_hostname)
+            starttls_status = "enabled" if tls_context else "disabled"
+
+            logging.debug(f"Starting SMTP listener on {listen_address}:{listen_port} (STARTTLS: {starttls_status}, PROXY: {proxy_protocol}, Hostname: {eff_hostname})")
+
+            factory = get_smtp_factory(self.handler, eff_hostname, tls_context, self.authenticator, proxy_protocol)
+            server = await self.loop.create_server(factory, host=listen_address, port=listen_port)
+
+            self.active_servers[bind] = {
+                "server": server,
+                "config": eff_config
+            }
+            logging.info(f"SMTP listener started on {listen_address}:{listen_port} (STARTTLS: {starttls_status}, PROXY: {proxy_protocol}, Hostname: {eff_hostname})")
+            return True
+        except Exception as e:
+            if not is_reload:
+                # Safely register UI interface warnings on initial startup
+                if "_bind_errors" not in self.app_state.smtp.setdefault("_smtp_meta", {}):
+                    self.app_state.smtp["_smtp_meta"]["_bind_errors"] = []
+                self.app_state.smtp["_smtp_meta"]["_bind_errors"].append(bind)
+                logging.critical(f"CRITICAL: Failed to bind SMTP listener to {bind}. Error: {e}")
+            else:
+                logging.critical(f"CRITICAL: Failed to start SMTP listener on {bind}. Port may be occupied. Error: {e}")
+            return False
+
+    async def remove_listener(self, bind):
+        """Gracefully unbinds and tears down an active SMTP socket."""
+        if bind in self.active_servers:
+            logging.info(f"Removing listener on {bind}...")
+            srv = self.active_servers[bind]["server"]
+            srv.close()
+            await srv.wait_closed()
+            del self.active_servers[bind]
+
+    async def close_all(self):
+        """Forcefully halts all listening sockets during application shutdown."""
+        for bind in list(self.active_servers.keys()):
+            await self.remove_listener(bind)
 
 async def main():
     shutdown_event = asyncio.Event()
@@ -91,7 +163,9 @@ async def main():
 
     handler = PushoverSMTPHandler(app_state, msg_queue, broker)
     authenticator = GatewayAuthenticator(app_state)
-    active_servers = {}
+
+    # Initialize our centralized network manager instead of a raw dictionary
+    listener_manager = SMTPListenerManager(loop, handler, authenticator, app_state)
 
     num_workers = 5
     worker_task = asyncio.create_task(async_delivery_manager(msg_queue, app_state, num_workers, broker))
@@ -104,37 +178,9 @@ async def main():
     startup_errors = False
 
     for l_conf in app_state.smtp["listeners"]:
-        bind = l_conf["bind"]
-        listen_address, listen_port = parse_bind_string(bind, 25)
-        eff_hostname = l_conf.get("hostname", app_state.smtp.get("hostname"))
-
-        try:
-            tls_context = get_tls_context(l_conf, eff_hostname)
-            starttls_status = "enabled" if tls_context else "disabled"
-
-            logging.debug(f"Starting SMTP listener on {listen_address}:{listen_port} (STARTTLS: {starttls_status}, Hostname: {eff_hostname})")
-
-            factory = get_smtp_factory(handler, eff_hostname, tls_context, authenticator)
-            server = await loop.create_server(factory, host=listen_address, port=listen_port)
-
-            active_servers[bind] = {
-                "server": server,
-                "config": {
-                    "hostname": eff_hostname,
-                    "starttls": l_conf.get("starttls", False),
-                    "tls_cert_file": l_conf.get("tls_cert_file"),
-                    "tls_key_file": l_conf.get("tls_key_file"),
-                    "cert_hash": get_file_hash(l_conf.get("tls_cert_file")),
-                    "key_hash": get_file_hash(l_conf.get("tls_key_file"))
-                }
-            }
-            logging.info(f"SMTP listener started on {listen_address}:{listen_port} (STARTTLS: {starttls_status}, Hostname: {eff_hostname})")
-        except Exception as e:
+        success = await listener_manager.bind_listener(l_conf, is_reload=False)
+        if not success:
             startup_errors = True
-            if "_bind_errors" not in app_state.smtp.get("_smtp_meta", {}):
-                app_state.smtp["_smtp_meta"]["_bind_errors"] = []
-            app_state.smtp["_smtp_meta"]["_bind_errors"].append(bind)
-            logging.critical(f"CRITICAL: Failed to bind SMTP listener to {bind}. Error: {e}")
 
     if startup_errors:
         logging.warning("Application startup completed with errors.")
@@ -158,31 +204,28 @@ async def main():
                 reload_event.clear()
                 logging.info("Checking listeners for dynamic network or TLS modifications...")
 
-                # Force a disk-read to pull the updated listener array into active memory
                 fresh_state = load_config()
                 if fresh_state is not None:
                     app_state.smtp["listeners"] = fresh_state.smtp.get("listeners", [])
 
-                current_binds = set(active_servers.keys())
+                current_binds = set(listener_manager.active_servers.keys())
                 new_binds = set(l["bind"] for l in app_state.smtp["listeners"])
 
                 reload_errors = False
 
                 for bind in current_binds - new_binds:
-                    logging.info(f"Removing deprecated listener on {bind}...")
-                    srv = active_servers[bind]["server"]
-                    srv.close()
-                    await srv.wait_closed()
-                    del active_servers[bind]
+                    await listener_manager.remove_listener(bind)
 
                 for l_conf in app_state.smtp["listeners"]:
                     bind = l_conf["bind"]
                     eff_hostname = l_conf.get("hostname", app_state.smtp.get("hostname"))
                     eff_cert = l_conf.get("tls_cert_file")
                     eff_key = l_conf.get("tls_key_file")
+                    proxy_protocol = l_conf.get("proxy_protocol", False)
                     eff_config = {
                         "hostname": eff_hostname,
                         "starttls": l_conf.get("starttls", False),
+                        "proxy_protocol": proxy_protocol,
                         "tls_cert_file": eff_cert,
                         "tls_key_file": eff_key,
                         "cert_hash": get_file_hash(eff_cert),
@@ -190,32 +233,18 @@ async def main():
                     }
 
                     needs_restart = False
-                    if bind not in active_servers:
+                    if bind not in listener_manager.active_servers:
                         logging.info(f"New listener declaration discovered for {bind}.")
                         needs_restart = True
-                    elif active_servers[bind]["config"] != eff_config:
+                    elif listener_manager.active_servers[bind]["config"] != eff_config:
                         logging.info(f"Configuration or TLS modification detected for {bind}. Restarting listener...")
-                        srv = active_servers[bind]["server"]
-                        srv.close()
-                        await srv.wait_closed()
+                        await listener_manager.remove_listener(bind)
                         needs_restart = True
 
                     if needs_restart:
-                        listen_address, listen_port = parse_bind_string(bind, 25)
-                        try:
-                            tls_context = get_tls_context(l_conf, eff_hostname)
-                            starttls_status = "enabled" if tls_context else "disabled"
-
-                            logging.debug(f"Starting SMTP listener on {listen_address}:{listen_port} (STARTTLS: {starttls_status}, Hostname: {eff_hostname})")
-
-                            factory = get_smtp_factory(handler, eff_hostname, tls_context, authenticator)
-                            server = await loop.create_server(factory, host=listen_address, port=listen_port)
-
-                            active_servers[bind] = {"server": server, "config": eff_config}
-                            logging.info(f"SMTP listener started on {listen_address}:{listen_port} (STARTTLS: {starttls_status}, Hostname: {eff_hostname})")
-                        except Exception as e:
+                        success = await listener_manager.bind_listener(l_conf, is_reload=True)
+                        if not success:
                             reload_errors = True
-                            logging.critical(f"CRITICAL: Failed to start SMTP listener on {bind}. Port may be occupied. Error: {e}")
 
                 if reload_errors:
                     logging.warning("Listener hot-reload completed with errors.")
@@ -258,6 +287,7 @@ async def main():
                             logging.info("Control API configuration change detected. Restarting API listener...")
                             await stop_control_api()
 
+                            # Allow Uvicorn a brief 2-second window to flush active HTTP responses and close TCP sockets safely
                             if api_task:
                                 try:
                                     await asyncio.wait_for(api_task, timeout=2.0)
@@ -281,18 +311,15 @@ async def main():
         logging.info("Shutting down... Flashing queues to disk safely...")
         await stop_control_api()
 
-        # Gracefully await the Uvicorn task teardown to prevent CancelledError traces
+        # Allow Uvicorn a brief 2-second window to flush active HTTP responses and close TCP sockets safely
         if api_task:
             try:
                 await asyncio.wait_for(api_task, timeout=2.0)
             except Exception:
                 pass
 
-        # Close all SMTP sockets to forcefully stop new traffic
-        for data in active_servers.values():
-            srv = data["server"]
-            srv.close()
-            await srv.wait_closed()
+        # Close all SMTP sockets forcefully to stop new traffic via the manager
+        await listener_manager.close_all()
 
         # Push shutdown sentinels to tear down the 5 concurrent worker tasks gracefully
         for _ in range(num_workers):

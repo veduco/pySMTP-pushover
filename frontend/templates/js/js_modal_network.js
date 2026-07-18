@@ -2,15 +2,15 @@ openListenerModal(mode, idx=null) {
     this.listenerModal.mode = mode; this.listenerModal.idx = idx; this.listenerModal.error = '';
     if(mode === 'add') {
         this.listenerModal.ip = '0.0.0.0'; this.listenerModal.port = 25; this.listenerModal.hostname = '';
-        this.listenerModal.starttls = false; this.listenerModal.tls_cert_file = ''; this.listenerModal.tls_key_file = '';
+        this.listenerModal.starttls = false; this.listenerModal.proxy_protocol = false; this.listenerModal.tls_cert_file = ''; this.listenerModal.tls_key_file = '';
     } else {
         const l = this.smtp.listeners[idx];
         let ip = '0.0.0.0'; let port = 25;
         if(l.bind && l.bind.includes(':')) { const parts = l.bind.split(':'); ip = parts[0]; port = parseInt(parts[1]); }
         this.listenerModal.ip = ip; this.listenerModal.port = port; this.listenerModal.hostname = l.hostname || '';
-        this.listenerModal.starttls = l.starttls === true; this.listenerModal.tls_cert_file = l.tls_cert_file || ''; this.listenerModal.tls_key_file = l.tls_key_file || '';
+        this.listenerModal.starttls = l.starttls === true; this.listenerModal.proxy_protocol = l.proxy_protocol === true; this.listenerModal.tls_cert_file = l.tls_cert_file || ''; this.listenerModal.tls_key_file = l.tls_key_file || '';
     }
-    this.listenerModal.orig = { ip: this.listenerModal.ip, port: this.listenerModal.port, hostname: this.listenerModal.hostname, starttls: this.listenerModal.starttls, tls_cert_file: this.listenerModal.tls_cert_file, tls_key_file: this.listenerModal.tls_key_file };
+    this.listenerModal.orig = { ip: this.listenerModal.ip, port: this.listenerModal.port, hostname: this.listenerModal.hostname, starttls: this.listenerModal.starttls, proxy_protocol: this.listenerModal.proxy_protocol, tls_cert_file: this.listenerModal.tls_cert_file, tls_key_file: this.listenerModal.tls_key_file };
     this.listenerModal.open = true;
 },
 saveListenerModal() {
@@ -26,7 +26,7 @@ saveListenerModal() {
         return;
     }
 
-    const obj = { bind: bind, starttls: this.listenerModal.starttls };
+    const obj = { bind: bind, starttls: this.listenerModal.starttls, proxy_protocol: this.listenerModal.proxy_protocol };
     if(this.listenerModal.hostname.trim()) obj.hostname = this.listenerModal.hostname.trim();
     if(this.listenerModal.starttls) {
         if(this.listenerModal.tls_cert_file.trim()) obj.tls_cert_file = this.listenerModal.tls_cert_file.trim();
@@ -37,7 +37,7 @@ saveListenerModal() {
 },
 clearListenerModal() {
     this.listenerModal.ip = this.listenerModal.orig.ip; this.listenerModal.port = this.listenerModal.orig.port; this.listenerModal.hostname = this.listenerModal.orig.hostname;
-    this.listenerModal.starttls = this.listenerModal.orig.starttls; this.listenerModal.tls_cert_file = this.listenerModal.orig.tls_cert_file; this.listenerModal.tls_key_file = this.listenerModal.orig.tls_key_file;
+    this.listenerModal.starttls = this.listenerModal.orig.starttls; this.listenerModal.proxy_protocol = this.listenerModal.orig.proxy_protocol; this.listenerModal.tls_cert_file = this.listenerModal.orig.tls_cert_file; this.listenerModal.tls_key_file = this.listenerModal.orig.tls_key_file;
     this.listenerModal.error = '';
 },
 openUiListenerModal(mode, idx=null) {
@@ -84,7 +84,7 @@ clearUiListenerModal() {
 },
 get hasListenerModalChanges() {
     const m = this.listenerModal; const o = m.orig;
-    return m.ip !== o.ip || String(m.port) !== String(o.port) || m.hostname !== o.hostname || m.starttls !== o.starttls || m.tls_cert_file !== o.tls_cert_file || m.tls_key_file !== o.tls_key_file;
+    return m.ip !== o.ip || String(m.port) !== String(o.port) || m.hostname !== o.hostname || m.starttls !== o.starttls || m.proxy_protocol !== o.proxy_protocol || m.tls_cert_file !== o.tls_cert_file || m.tls_key_file !== o.tls_key_file;
 },
 get canSaveListenerModal() {
     if (!this.hasListenerModalChanges && this.listenerModal.mode === 'edit') return false;

@@ -129,7 +129,7 @@ def load_config(ignore_missing=False):
     state.smtp["max_retry_backoff"] = int(state.smtp.get("max_retry_backoff", 21600))
     state.smtp["loglevel"] = state.smtp.get("loglevel", "INFO")
     state.smtp["default_route"] = state.smtp.get("default_route", "pushover")
-    state.smtp["listeners"] = state.smtp.get("listeners", [{"bind": "0.0.0.0:25", "starttls": False}])
+    state.smtp["listeners"] = state.smtp.get("listeners", [{"bind": "0.0.0.0:25", "starttls": False, "proxy_protocol": False}])
     state.smtp["auth"] = state.smtp.get("auth", {})
     state.smtp["max_backups"] = int(state.smtp.get("max_backups", 50))
 

@@ -128,7 +128,7 @@ requestSave(formId) {
 
                     const patternMap = [
                         { regex: /^Gateway Config\.routes\.(.+?)(?:\..+)?$/, label: m => `Route Mapping Rule [${m[1]}]` },
-                        { regex: /^Gateway Config\.smtp\.listeners\.(.+?:\d+)(?:\.(?:bind|hostname|starttls|tls_cert_file|tls_key_file))?$/, label: m => `SMTP Port Listener [${m[1]}]` },
+                        { regex: /^Gateway Config\.smtp\.listeners\.(.+?:\d+)(?:\.(?:bind|hostname|starttls|proxy_protocol|tls_cert_file|tls_key_file))?$/, label: m => `SMTP Port Listener [${m[1]}]` },
                         { regex: /^UI\/Backend Context\.listeners\.(.+?:\d+)(?:\.(?:bind|https|tls_cert|tls_key))?$/, label: m => `UI Port Listener [${m[1]}]` },
                         { regex: /^Gateway Config\.smarthost\.aliases\.(.+?)(?:\..+)?$/, label: m => `Smarthost Configuration [${m[1]}]` },
                         { regex: /^Token Vault\.app\.(.+?)(?:\..+)?$/, label: m => `App Token Vault [${m[1]}]` },

@@ -78,7 +78,7 @@ uiListenerSortCol: 'bind', uiListenerSortDir: 1,
 vaultModal: { open: false, type: 'app', name: '', token: '', showToken: false, error: '', orig: {} },
 smtpUserModal: { open: false, name: '', password: '', showToken: false, error: '', orig: {} },
 editModal: { open: false, type: '', subType: '', name: '', value: '', showToken: false, orig: {} },
-listenerModal: { open: false, mode: 'add', idx: null, ip: '', port: 25, starttls: false, tls_cert_file: '', tls_key_file: '', hostname: '', error: '', orig: {} },
+listenerModal: { open: false, mode: 'add', idx: null, ip: '', port: 25, starttls: false, proxy_protocol: false, tls_cert_file: '', tls_key_file: '', hostname: '', error: '', orig: {} },
 uiListenerModal: { open: false, mode: 'add', idx: null, ip: '', port: 8443, https: true, tls_cert: '', tls_key: '', error: '', orig: {} },
 smarthostModal: { open: false, mode: 'add', oldAlias: '', alias: '', hostname: '', advertised_hostname: '', port: 25, starttls: false, disable_tls_validation: false, auth: false, username: '', password: '', disable_attachments: false, force_plaintext: false, showPass: false, error: '', orig: {} },
 
