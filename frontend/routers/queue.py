@@ -8,6 +8,7 @@ from frontend.state import app_state
 from frontend.utils import get_active_config_path
 from core.config import SCRIPT_DIR, UI_CONFIG_FILE, load_clean_json
 from core.queue_store import get_queue_items, retry_queue_item, delete_queue_item, get_queue_item_raw
+from core.utils import safe_async_lifecycle
 
 router = APIRouter(prefix="/api/queue")
 
@@ -22,9 +23,13 @@ async def queue_stream(request: Request):
         client = request.state.http_client
 
         async def event_proxy():
-            try:
+            async with safe_async_lifecycle("Remote API Proxy"):
                 # Explicitly override the default client timeout for the keepalive SSE connection stream
                 async with client.stream("GET", f"{url.rstrip('/')}/api/stream", headers={"Authorization": f"Bearer {sec}"}, timeout=None) as response:
+                    if response.status_code != 200:
+                        yield f"data: {json.dumps({'action': 'error', 'message': f'Upstream gateway returned HTTP {response.status_code}'})}\n\n"
+                        return
+
                     iterator = response.aiter_text().__aiter__()
                     while not app_state["shutdown"]:
                         try:
@@ -34,16 +39,15 @@ async def queue_stream(request: Request):
                             yield ": keepalive\n\n"
                         except StopAsyncIteration:
                             break
-            except asyncio.CancelledError: pass
-            except Exception as e: logging.error(f"Remote queue stream proxy error: {e}")
 
         return StreamingResponse(event_proxy(), media_type="text/event-stream")
     else:
         async def fallback_stream():
-            yield f"data: {json.dumps({'action': 'init', 'state': {}})}\n\n"
-            while not app_state["shutdown"]:
-                yield ": keepalive\n\n"
-                await asyncio.sleep(2.0)
+            async with safe_async_lifecycle("Local File Watcher"):
+                yield f"data: {json.dumps({'action': 'init', 'state': {}})}\n\n"
+                while not app_state["shutdown"]:
+                    yield ": keepalive\n\n"
+                    await asyncio.sleep(2.0)
 
         return StreamingResponse(fallback_stream(), media_type="text/event-stream")
 

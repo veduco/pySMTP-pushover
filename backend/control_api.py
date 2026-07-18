@@ -12,6 +12,7 @@ import uvicorn
 from backend.events import broker
 from core.json_store import generate_self_signed_certificate, parse_bind_string
 from core.security import build_access_middleware
+from core.utils import safe_async_lifecycle
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -59,17 +60,18 @@ async def api_stream_queue(request: Request):
     async def sse_generator():
         q = asyncio.Queue()
         current_state = broker.add_sub(q)
-        try:
-            yield f"data: {json.dumps({'action': 'init', 'state': current_state})}\n\n"
-            while True:
-                event = await q.get()
-                if event.get("action") == "shutdown":
-                    break
-                yield f"data: {json.dumps(event)}\n\n"
-        except asyncio.CancelledError:
-            pass
-        finally:
-            broker.remove_sub(q)
+
+        async with safe_async_lifecycle("Broker Subscription"):
+            try:
+                yield f"data: {json.dumps({'action': 'init', 'state': current_state})}\n\n"
+                while True:
+                    event = await q.get()
+                    if event.get("action") == "shutdown":
+                        break
+                    yield f"data: {json.dumps(event)}\n\n"
+            finally:
+                # Guaranteed to fire to prevent queue object bloat
+                broker.remove_sub(q)
 
     return StreamingResponse(sse_generator(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "Connection": "keep-alive"})
 
