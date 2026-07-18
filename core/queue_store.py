@@ -11,6 +11,7 @@ def get_queue_items(queue_dir: str):
                 try:
                     with open(os.path.join(queue_dir, fname), "r") as f:
                         data = json.load(f)
+                        # Intentionally exclude raw_eml_base64 here to protect list array memory scale
                         items.append({
                             "id": data.get("id"),
                             "title": data.get("title", "No Subject"),
@@ -28,6 +29,18 @@ def get_queue_items(queue_dir: str):
     # Sort descending by last attempt timestamp, falling back to creation timestamp
     items.sort(key=lambda x: x["last_attempt"] if x["last_attempt"] else x["timestamp"], reverse=True)
     return items
+
+def get_queue_item_raw(queue_dir: str, item_id: str):
+    """Retrieves the raw base64 encoded EML string to minimize general queue memory bloat."""
+    filepath = os.path.join(queue_dir, f"{item_id}.json")
+    if os.path.exists(filepath):
+        try:
+            with open(filepath, 'r') as f:
+                data = json.load(f)
+            return data.get("raw_eml_base64", "")
+        except Exception:
+            pass
+    return ""
 
 def retry_queue_item(queue_dir: str, item_id: str):
     """Resets the backoff timers for a specific queue item to trigger an immediate delivery retry."""

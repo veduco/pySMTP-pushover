@@ -75,6 +75,7 @@ document.addEventListener('alpine:init', () => {
         {% include "js_modal_smtp.js" %}
         {% include "js_modal_smarthost.js" %}
         {% include "js_modal_network.js" %}
+        {% include "js_modal_eml.js" %}
 
         init() {
             this.testPayload = { ...this.defaultTestPayload, ...this.testPayload };

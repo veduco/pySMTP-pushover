@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from frontend.state import app_state
 from frontend.utils import get_active_config_path
 from core.config import SCRIPT_DIR, UI_CONFIG_FILE, load_clean_json
-from core.queue_store import get_queue_items, retry_queue_item, delete_queue_item
+from core.queue_store import get_queue_items, retry_queue_item, delete_queue_item, get_queue_item_raw
 
 router = APIRouter(prefix="/api/queue")
 
@@ -71,6 +71,31 @@ async def get_queue(request: Request):
         q_path = os.path.normpath(os.path.join(SCRIPT_DIR, config.get("smtp", {}).get("queue_dir", "queue")))
         items = get_queue_items(q_path)
         return JSONResponse(items)
+
+@router.get("/{item_id}/eml")
+async def proxy_get_queue_item_eml(request: Request, item_id: str):
+    ui_config = load_clean_json(UI_CONFIG_FILE)
+    bmode = ui_config.get("backend_mode", "local")
+
+    if bmode == "remote":
+        url = ui_config.get("remote_url", "")
+        sec = ui_config.get("remote_secret", "")
+        client = request.state.http_client
+        try:
+            r = await client.get(
+                f"{url.rstrip('/')}/api/queue/{item_id}/eml",
+                headers={"Authorization": f"Bearer {sec}"},
+                timeout=5.0
+            )
+            if r.status_code == 200:
+                return JSONResponse(r.json())
+        except Exception: pass
+        return JSONResponse({"raw_eml_base64": ""})
+    else:
+        config = load_clean_json(get_active_config_path())
+        q_path = os.path.normpath(os.path.join(SCRIPT_DIR, config.get("smtp", {}).get("queue_dir", "queue")))
+        raw_b64 = get_queue_item_raw(q_path, item_id)
+        return JSONResponse({"raw_eml_base64": raw_b64})
 
 @router.post("/{item_id}/retry")
 async def proxy_retry_queue_item(request: Request, item_id: str):

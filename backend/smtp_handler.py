@@ -224,7 +224,8 @@ class PushoverSMTPHandler:
                 "disable_persistence": disable_persist,
                 "retry_count": 0,
                 "sender": sender or "gateway@localhost",
-                "recipients": recipients
+                "recipients": recipients,
+                "raw_eml_base64": base64.b64encode(raw_content).decode('ascii')  # Centralized preservation of diagnostic payload
             }
 
             if method == "pushover":
@@ -245,7 +246,6 @@ class PushoverSMTPHandler:
                 payload["smarthost_alias"] = route.get("smarthost_alias")
                 payload["force_plaintext"] = force_pt
                 payload["disable_attachments"] = not attachments_enabled
-                payload["raw_eml_base64"] = base64.b64encode(raw_content).decode('ascii')
 
             if attachments_enabled and best_image:
                 payload["attachment_base64"] = base64.b64encode(best_image[3]).decode('ascii')

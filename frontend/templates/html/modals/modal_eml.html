@@ -1,0 +1,21 @@
+<div class="modal-backdrop" x-show="emlModal.open" x-transition.opacity style="display: none;">
+    <div class="modal" @click.away="emlModal.open = false" style="width: 800px; max-width: 90vw; height: 80vh; display: flex; flex-direction: column;">
+        <div class="modal-header">
+            <h3 style="margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80%;">Source Payload: <span x-text="emlModal.title"></span></h3>
+            <button class="close-btn" @click="emlModal.open = false">&times;</button>
+        </div>
+        <div class="modal-body" style="flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0;">
+            <div x-show="emlModal.loading" style="padding: 2rem; text-align: center; opacity: 0.7;">
+                Streaming raw structural MIME frame from buffer...
+            </div>
+            <textarea x-show="!emlModal.loading" x-model="emlModal.content" readonly style="flex: 1; width: 100%; border: none; border-radius: 0; padding: 1rem; font-family: monospace; font-size: 0.85rem; resize: none; background: var(--secondary-bg); color: var(--text-color); box-sizing: border-box;"></textarea>
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+            <button type="button" class="success" @click="downloadEml()" :disabled="emlModal.loading || !emlModal.rawBytes">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 0.25rem;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                Download .eml
+            </button>
+            <button type="button" class="outline" @click="emlModal.open = false">Close</button>
+        </div>
+    </div>
+</div>
