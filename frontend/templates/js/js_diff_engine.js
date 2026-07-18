@@ -76,7 +76,10 @@ translatePatchToHuman(patchItem) {
         'allowed_cidrs': 'Allowed IPs/CIDRs',
         'disable_attachments': 'Disable Attachments',
         'attachments': 'Enable Attachments',
-        'force_plaintext': 'Force Plaintext'
+        'force_plaintext': 'Force Plaintext',
+        'dedupe_enabled': 'Deduplication Status',
+        'dedupe_window': 'Deduplication Cache Window',
+        'dedupe_keys': 'Deduplication Keys'
     };
 
     if (segments[0] === 'routes' && segments[1]) {
@@ -454,6 +457,7 @@ resetTab(tabContext) {
         this.smtp_meta = this._deepClone(backup.server.smtp_meta);
         this.smtpCidrInput = '';
         this.smtpCidrError = '';
+        this.dedupeWindowError = '';
     }
 },
 

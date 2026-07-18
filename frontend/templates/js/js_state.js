@@ -38,6 +38,7 @@ validTimezones: [],
 tzError: false,
 uiCidrError: '',
 smtpCidrError: '',
+dedupeWindowError: '',
 
 rawConfig: {{ config_json | safe }},
 rawVault: {},
@@ -45,7 +46,7 @@ rawUiConfig: {{ ui_config_json | safe }},
 
 queueItems: [],
 
-smtp: { listeners: [], default_route: 'pushover', loglevel: 'INFO', hostname: '', queue_dir: '', tls_cert_file: '', tls_key_file: '', disable_persistence: false, auth: {}, allowed_cidrs: [] },
+smtp: { listeners: [], default_route: 'pushover', loglevel: 'INFO', hostname: '', queue_dir: '', tls_cert_file: '', tls_key_file: '', disable_persistence: false, auth: {}, allowed_cidrs: [], dedupe_enabled: false, dedupe_window: '10m', dedupe_keys: ['sender', 'match_reason', 'message'] },
 smtp_meta: {{ smtp_meta_json | safe }},
 
 vaultMeta: {{ vault_meta_json | safe }},

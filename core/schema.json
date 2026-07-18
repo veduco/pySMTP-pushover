@@ -9,7 +9,10 @@
       "max_backups": 50,
       "listeners": [{"bind": "0.0.0.0:25", "starttls": false, "proxy_protocol": false}],
       "auth": {},
-      "allowed_cidrs": []
+      "allowed_cidrs": [],
+      "dedupe_enabled": false,
+      "dedupe_window": "10m",
+      "dedupe_keys": ["sender", "match_reason", "message"]
     },
     "pushover": {
       "attachments": true,

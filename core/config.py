@@ -135,6 +135,11 @@ def load_config(ignore_missing=False, config_path=None):
     for k, v in schema.get("smtp", {}).items():
         state.smtp.setdefault(k, v)
 
+    # Inject deduplication defaults natively from parsing block schema
+    state.smtp.setdefault("dedupe_enabled", False)
+    state.smtp.setdefault("dedupe_window", "10m")
+    state.smtp.setdefault("dedupe_keys", ["sender", "match_reason", "message"])
+
     # 2. Extract Pushover and Smarthost structures natively from Schema
     state.pushover = data.get("pushover", {})
     for k, v in schema.get("pushover", {}).items():
@@ -289,6 +294,24 @@ class ConfigOrchestrator:
             os.kill(pid, signal.SIGUSR2)
         except Exception:
             pass
+
+    @staticmethod
+    def parse_duration_to_seconds(duration_str: str) -> int:
+        """
+        Converts compound alpha-numeric duration formats (e.g. '12h30m2s', '45s', '10m')
+        down into pure standalone integer seconds. Returns 600 (10m) default fallback on missing match.
+        """
+        if not duration_str:
+            return 600
+        pattern = re.compile(r'^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$')
+        match = pattern.match(str(duration_str).strip().lower())
+        if not match:
+            return 600
+        hours = int(match.group(1)) if match.group(1) else 0
+        minutes = int(match.group(2)) if match.group(2) else 0
+        seconds = int(match.group(3)) if match.group(3) else 0
+        total = (hours * 3600) + (minutes * 60) + seconds
+        return total if total > 0 else 600
 
     async def get_config(self):
         """Fetches the configuration state securely from the active deployment target."""

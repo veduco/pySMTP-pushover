@@ -67,6 +67,40 @@
 </div>
 
 <div class="card" style="margin-bottom: 1.5rem;">
+    <h3>Inbound Alert Deduplication</h3>
+    <p style="margin-top: 0; font-size: 0.9rem; opacity: 0.8;">Prevent downstream notification fatigue by seamlessly dropping completely identical messages at the socket ingestion boundary before delivery compilation loops execute.</p>
+
+    <div class="flex-row" style="margin-bottom: 1.5rem; justify-content: flex-start;">
+        {{ toggle(model="smtp.dedupe_enabled", label="Activate Strategic Inbound Alert Deduplication") }}
+    </div>
+
+    <div x-show="smtp.dedupe_enabled" x-transition style="display: none; padding-top: 0.5rem; border-top: 1px dashed var(--border-color);">
+        <div class="flex-row" style="margin-bottom: 1rem;">
+            <div class="flex-col" style="flex: 1; min-width: 200px;">
+                <label>Signature Retention Cache Window</label>
+                <input type="text" x-model="smtp.dedupe_window" @input="validateDedupeWindow()" placeholder="e.g. 10m, 45s, 1h30m" autocomplete="off" style="width: 100%;">
+                <span class="validation-error" x-show="dedupeWindowError" x-text="dedupeWindowError" style="color: var(--danger-color); font-size: 0.8rem; font-weight: bold; margin-top: 0.25rem; display: block;"></span>
+                <span class="helper-text" x-show="!dedupeWindowError" style="font-size: 0.8rem; opacity: 0.6; display: block; margin-top: 0.25rem;">Valid syntax models: <code>45s</code>, <code>10m</code>, <code>12h30m2s</code>. Defaults to <code>10m</code> if blank.</span>
+            </div>
+
+            <div class="flex-col" style="flex: 2; min-width: 250px;">
+                <label>Unique Deduplication Identity Matrix Criteria Tags</label>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.35rem;">
+                    <template x-for="tag in ['recipients', 'sender', 'subject', 'match_reason', 'message', 'senderip']" :key="tag">
+                        <button type="button" class="matrix-toggle-btn"
+                                :class="{ 'active': (smtp.dedupe_keys || []).includes(tag) }"
+                                @click="toggleDedupeTag(tag)">
+                            <span x-text="tag === 'sender' ? 'sender (from)' : tag"></span>
+                        </button>
+                    </template>
+                </div>
+                <span class="helper-text" style="font-size: 0.8rem; opacity: 0.6; display: block; margin-top: 0.5rem;">Incoming items are suppressed if *all* selected components exactly match an active signature hash in memory.</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card" style="margin-bottom: 1.5rem;">
     <div class="table-header-row" style="margin-top: 0;">
         <h3 style="display: flex; align-items: center; gap: 0.75rem; margin: 0;">SMTP Authentication Users
             <button type="button" class="outline success icon-btn" @click="openSmtpUserModal()" title="Add User" style="padding: 0.2rem 0.4rem;">

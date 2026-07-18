@@ -89,6 +89,36 @@ checkTimezone() {
     return true;
 },
 
+validateDedupeWindow() {
+    const val = (this.smtp.dedupe_window || '').trim().toLowerCase();
+    if (!val) {
+        this.dedupeWindowError = '';
+        return true;
+    }
+    const regex = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/;
+    if (!regex.test(val)) {
+        this.dedupeWindowError = 'Invalid window string format definition constraint.';
+        return false;
+    }
+    this.dedupeWindowError = '';
+    return true;
+},
+
+toggleDedupeTag(tag) {
+    let currentKeys = Array.isArray(this.smtp.dedupe_keys) ? [...this.smtp.dedupe_keys] : ['sender', 'match_reason', 'message'];
+
+    if (currentKeys.includes(tag)) {
+        if (currentKeys.length <= 1) {
+            alert("You must maintain at least one configuration property tag to compose deduplication contract hashes.");
+            return;
+        }
+        this.smtp.dedupe_keys = currentKeys.filter(k => k !== tag);
+    } else {
+        currentKeys.push(tag);
+        this.smtp.dedupe_keys = currentKeys;
+    }
+},
+
 clone(targetObj) {
     if (!targetObj) return {};
     return JSON.parse(JSON.stringify(targetObj));

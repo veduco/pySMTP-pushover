@@ -46,7 +46,7 @@ const GatewayStore = {
                 if (m.method === 'smarthost' && (!m.smarthost_alias || m.smarthost_alias.trim() === '')) return false;
             }
         } else if (tab === 'server') {
-            if (ctx.smtpCidrError) return false;
+            if (ctx.smtpCidrError || ctx.dedupeWindowError) return false;
             if (ctx.smtp.default_route === 'pushover') {
                 if (!ctx.pushGlobals.token || !ctx.pushGlobals.user) return false;
             } else if (ctx.smtp.default_route === 'smarthost') {
@@ -208,6 +208,12 @@ document.addEventListener('alpine:init', () => {
                 if(!this.smtp.auth) this.smtp.auth = {};
                 if(!this.smtp.default_route) this.smtp.default_route = 'pushover';
                 if(this.smtp.disable_persistence === undefined) this.smtp.disable_persistence = false;
+
+                if(this.smtp.dedupe_enabled === undefined) this.smtp.dedupe_enabled = false;
+                if(!this.smtp.dedupe_window) this.smtp.dedupe_window = '10m';
+                if(!this.smtp.dedupe_keys || !Array.isArray(this.smtp.dedupe_keys)) {
+                    this.smtp.dedupe_keys = ['sender', 'match_reason', 'message'];
+                }
             }
 
             this.takeSnapshot();

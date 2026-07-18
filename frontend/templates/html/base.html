@@ -132,6 +132,110 @@
         .hover-scale { transition: transform 0.1s ease; }
         .hover-scale:hover { transform: scale(1.05) !important; }
 
+        .tag-pill-box {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            background: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            align-items: center;
+            min-height: 42px;
+            box-sizing: border-box;
+            cursor: text;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .tag-pill-box:focus-within {
+            border-color: var(--primary-color) !important;
+            box-shadow: 0 0 0 3px var(--input-focus-glow);
+        }
+
+        .tag-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.35rem;
+            background: var(--primary-color);
+            color: white;
+            padding: 0.25rem 0.6rem;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            line-height: 1; /* Eliminates lowercase letters looking unaligned */
+            box-sizing: border-box;
+        }
+        .tag-badge span {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+        }
+        .tag-badge svg {
+            display: block;
+            cursor: pointer;
+            opacity: 0.8;
+        }
+
+        /* Enforce absolute normalization; safely overrides borders and outlines causing cursor truncations */
+        .tag-input, .tag-select {
+            border: none !important;
+            background: transparent !important;
+            outline: none !important;
+            box-shadow: none !important;
+            font-size: 0.9rem !important;
+            color: var(--text-color) !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            box-sizing: border-box !important;
+        }
+        .tag-input {
+            flex: 1;
+            min-width: 120px;
+        }
+        .tag-select {
+            max-width: 180px;
+            padding-right: 1.5rem !important;
+            cursor: pointer;
+            appearance: none !important;
+            -webkit-appearance: none !important;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23666677' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E") !important;
+            background-repeat: no-repeat !important;
+            background-position: right center !important;
+            background-size: 10px !important;
+        }
+        .tag-select option {
+            background: var(--surface-color);
+            color: var(--text-color);
+        }
+
+        .matrix-toggle-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            font-weight: 600;
+            padding: 0.4rem 0.8rem;
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            background: var(--input-bg);
+            color: var(--text-color);
+            cursor: pointer;
+            line-height: 1;
+            box-sizing: border-box;
+            transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        }
+        .matrix-toggle-btn span {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            height: 14px; /* Rigid baseline bound for lowercase alignment */
+        }
+        .matrix-toggle-btn.active {
+            background-color: var(--primary-color) !important;
+            border-color: var(--primary-color) !important;
+            color: white !important;
+        }
+
         /* Mobile constraint strict enforcement */
         @media (max-width: 768px) {
             html, body { padding: 0; margin: 0; overflow-x: hidden; width: 100vw; }
