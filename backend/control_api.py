@@ -10,16 +10,17 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import uvicorn
 from backend.events import broker
-from core.json_store import generate_self_signed_certificate, parse_bind_string
-from core.security import create_secure_app
+from core.json_store import parse_bind_string
+from core.security import create_secure_app, TLSManager
 from core.utils import safe_async_lifecycle
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Safely yields the app context and delegates normal ASGI cancellation events to the centralized utility."""
+    """Safely yields the app context and cleans up ephemeral assets on teardown."""
     async with safe_async_lifecycle("Control API Lifespan"):
         yield
         await asyncio.sleep(0.01)
+        TLSManager.cleanup()
 
 def backend_config_resolver(request: Request):
     """Dynamically pulls ACL constraints mapped to the live Python core loops."""
@@ -170,18 +171,20 @@ async def start_control_api(api_conf, reload_event, mappings_reload_event, gatew
     bind = api_conf.get("bind", "0.0.0.0:6443")
     host, port = parse_bind_string(bind, 6443)
 
-    cert = api_conf.get("tls_cert_file")
-    key = api_conf.get("tls_key_file")
-
-    if not (cert and os.path.exists(cert) and key and os.path.exists(key)):
-        logging.warning("No valid TLS certificate found for Control API. Generating a random memory-bound certificate.")
-        cert, key = generate_self_signed_certificate(host, f"control_api_{host}")
+    # Retrieve unified SSLContext and memory paths
+    ctx, cert_path, key_path = TLSManager.get_unified_context(
+        cert_file=api_conf.get("tls_cert_file"),
+        key_file=api_conf.get("tls_key_file"),
+        bind_address=bind,
+        listener_hostname="control-api-internal",
+        global_hostname="gateway-core"
+    )
 
     logging.debug(f"Attempting to start HTTPS Control API listener at https://{host}:{port}")
 
     # Disable uvicorn's internal logging so our custom access_log_middleware handles everything uniformly
     config = uvicorn.Config(
-        app=app, host=host, port=port, ssl_keyfile=key, ssl_certfile=cert,
+        app=app, host=host, port=port, ssl_keyfile=key_path, ssl_certfile=cert_path,
         log_config=None, access_log=False
     )
     server = uvicorn.Server(config)

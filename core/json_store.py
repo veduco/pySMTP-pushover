@@ -32,47 +32,6 @@ def load_vault_safe(vault_path):
             v[vtype] = {}
     return v
 
-def generate_self_signed_certificate(hostname: str, prefix_name: str):
-    """
-    Unified cryptographic utility to generate secure SECP384R1 certificates
-    for SMTP listeners or Web UI endpoints when dedicated certs are missing.
-    """
-    cert_path = f"/tmp/{prefix_name}_cert.pem"
-    key_path = f"/tmp/{prefix_name}_key.pem"
-    if os.path.exists(cert_path) and os.path.exists(key_path):
-        return cert_path, key_path
-
-    private_key = ec.generate_private_key(ec.SECP384R1())
-    subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, hostname)])
-    now = datetime.datetime.now(datetime.timezone.utc)
-
-    cert = x509.CertificateBuilder().subject_name(
-        subject
-    ).issuer_name(
-        issuer
-    ).public_key(
-        private_key.public_key()
-    ).serial_number(
-        x509.random_serial_number()
-    ).not_valid_before(
-        now
-    ).not_valid_after(
-        now + datetime.timedelta(days=365)
-    ).add_extension(
-        x509.SubjectAlternativeName([x509.DNSName(hostname)]), critical=False
-    ).sign(private_key, hashes.SHA256())
-
-    with open(key_path, "wb") as f:
-        f.write(private_key.private_bytes(
-            serialization.Encoding.PEM,
-            serialization.PrivateFormat.TraditionalOpenSSL,
-            serialization.NoEncryption()
-        ))
-    with open(cert_path, "wb") as f:
-        f.write(cert.public_bytes(serialization.Encoding.PEM))
-
-    return cert_path, key_path
-
 def parse_bind_string(bind_str: str, default_port: int = 25):
     """Unified helper to safely separate bind interfaces from port numbers."""
     if not bind_str:

@@ -1,46 +1,22 @@
 import os
-import uuid
-import ssl
 import hashlib
-from core.json_store import generate_self_signed_certificate, parse_bind_string
-
-def file_contains_private_key(filepath):
-    try:
-        with open(filepath, 'r') as f:
-            return "PRIVATE KEY-----" in f.read()
-    except Exception:
-        return False
+from core.security import TLSManager
 
 def get_tls_context(listener_conf, fallback_hostname):
+    """Retrieves the unified SSL context mapped to the specific listener constraints."""
     if not listener_conf.get("starttls"):
         return None
-    cert_file = listener_conf.get("tls_cert_file")
-    key_file = listener_conf.get("tls_key_file")
-    cert_has_key = False
 
-    if cert_file and os.path.isfile(cert_file) and os.access(cert_file, os.R_OK):
-        cert_has_key = file_contains_private_key(cert_file)
-    if cert_has_key and key_file:
-        key_file = None
+    # Delegate full resolution, SAN mapping, and context generation to the centralized wrapper
+    ctx, _, _ = TLSManager.get_unified_context(
+        cert_file=listener_conf.get("tls_cert_file"),
+        key_file=listener_conf.get("tls_key_file"),
+        bind_address=listener_conf.get("bind", "0.0.0.0:25"),
+        listener_hostname=listener_conf.get("hostname", ""),
+        global_hostname=fallback_hostname
+    )
 
-    files_ok = False
-    if cert_file and os.path.isfile(cert_file) and os.access(cert_file, os.R_OK):
-        if cert_has_key or (key_file and os.path.isfile(key_file) and os.access(key_file, os.R_OK)):
-            files_ok = True
-
-    if not files_ok:
-        hostname = fallback_hostname or str(uuid.uuid4())
-
-        # Eliminate inline split slicing to construct secure internal file strings
-        bind_address = listener_conf.get("bind", "0.0.0.0:25")
-        host, port = parse_bind_string(bind_address, 25)
-        safe_bind = f"{host}_{port}"
-
-        cert_file, key_file = generate_self_signed_certificate(hostname, f"smtp_pushover_{safe_bind}")
-
-    tls_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-    tls_context.load_cert_chain(certfile=cert_file, keyfile=key_file)
-    return tls_context
+    return ctx
 
 def get_file_hash(filepath):
     if not filepath or not os.path.exists(filepath):

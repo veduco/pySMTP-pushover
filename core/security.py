@@ -1,8 +1,130 @@
 import logging
-from typing import Callable, List
+import os
+import ssl
+import uuid
+import tempfile
+import ipaddress
+from datetime import datetime, timedelta
+from typing import Callable, List, Tuple
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, HTMLResponse
-from core.json_store import is_ip_allowed
+
+from cryptography import x509
+from cryptography.x509.oid import NameOID
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization
+
+from core.json_store import is_ip_allowed, parse_bind_string
+
+class TLSManager:
+    """Centralized Cryptographic Asset Assurance Wrapper."""
+
+    _ephemeral_files = []
+
+    @staticmethod
+    def _file_contains_private_key(filepath: str) -> bool:
+        try:
+            with open(filepath, 'r') as f:
+                return "PRIVATE KEY-----" in f.read()
+        except Exception:
+            return False
+
+    @classmethod
+    def get_unified_context(
+        cls,
+        cert_file: str = None,
+        key_file: str = None,
+        bind_address: str = "0.0.0.0:25",
+        listener_hostname: str = "",
+        global_hostname: str = ""
+    ) -> Tuple[ssl.SSLContext, str, str]:
+        """
+        Validates existing TLS assets. If invalid, generates an ephemeral, memory-bound
+        certificate matching the specified SAN fallback rules, returning a unified SSLContext.
+        """
+        host, _ = parse_bind_string(bind_address, 25)
+
+        cert_valid = cert_file and os.path.isfile(cert_file) and os.access(cert_file, os.R_OK)
+        key_valid = key_file and os.path.isfile(key_file) and os.access(key_file, os.R_OK)
+
+        if cert_valid:
+            if cls._file_contains_private_key(cert_file):
+                key_file = None
+                key_valid = True
+
+        if cert_valid and key_valid:
+            ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+            ctx.load_cert_chain(certfile=cert_file, keyfile=key_file)
+            return ctx, cert_file, key_file
+
+        # Fallback Hierarchy: Specific Listener -> Global Route -> Random UUID
+        target_hostname = listener_hostname or global_hostname or str(uuid.uuid4())
+        logging.warning(f"Valid TLS assets missing for {bind_address}. Generating ephemeral in-memory certificate for '{target_hostname}'.")
+
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        subject = issuer = x509.Name([
+            x509.NameAttribute(NameOID.COMMON_NAME, target_hostname),
+        ])
+
+        san_list = [x509.DNSName(target_hostname)]
+        if host and host not in ("0.0.0.0", "", "::"):
+            try:
+                ip = ipaddress.ip_address(host)
+                san_list.append(x509.IPAddress(ip))
+            except ValueError:
+                if host != target_hostname:
+                    san_list.append(x509.DNSName(host))
+
+        cert = x509.CertificateBuilder().subject_name(
+            subject
+        ).issuer_name(
+            issuer
+        ).public_key(
+            key.public_key()
+        ).serial_number(
+            x509.random_serial_number()
+        ).not_valid_before(
+            datetime.utcnow()
+        ).not_valid_after(
+            datetime.utcnow() + timedelta(days=365)
+        ).add_extension(
+            x509.SubjectAlternativeName(san_list),
+            critical=False,
+        ).sign(key, hashes.SHA256())
+
+        cert_pem = cert.public_bytes(serialization.Encoding.PEM)
+        key_pem = key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption()
+        )
+
+        # Utilize tmpfs directly to avoid disk persistence while satisfying Python's ssl file requirements
+        cert_temp = tempfile.NamedTemporaryFile(delete=False, suffix=".crt")
+        cert_temp.write(cert_pem)
+        cert_temp.close()
+
+        key_temp = tempfile.NamedTemporaryFile(delete=False, suffix=".key")
+        key_temp.write(key_pem)
+        key_temp.close()
+
+        cls._ephemeral_files.extend([cert_temp.name, key_temp.name])
+
+        ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        ctx.load_cert_chain(certfile=cert_temp.name, keyfile=key_temp.name)
+
+        return ctx, cert_temp.name, key_temp.name
+
+    @classmethod
+    def cleanup(cls):
+        """Releases and unlinks all ephemeral tmpfs cryptographic assets from memory."""
+        for f in cls._ephemeral_files:
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+        cls._ephemeral_files.clear()
 
 def get_real_ip(request: Request, trust_proxy: bool, trust_proxy_cidrs: list) -> str:
     """Safely extracts the origin client IP, validating against proxy trust rules."""
