@@ -11,21 +11,15 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import uvicorn
 from backend.events import broker
 from core.json_store import generate_self_signed_certificate, parse_bind_string
-from core.security import build_access_middleware
+from core.security import create_secure_app
 from core.utils import safe_async_lifecycle
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Safely yields the app context and traps normal ASGI cancellation events on shutdown."""
-    yield
-    try:
+    """Safely yields the app context and delegates normal ASGI cancellation events to the centralized utility."""
+    async with safe_async_lifecycle("Control API Lifespan"):
+        yield
         await asyncio.sleep(0.01)
-    except asyncio.CancelledError:
-        pass
-
-app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
-security = HTTPBearer()
-active_server = None
 
 def backend_config_resolver(request: Request):
     """Dynamically pulls ACL constraints mapped to the live Python core loops."""
@@ -36,12 +30,16 @@ def backend_config_resolver(request: Request):
         "trust_proxy_cidrs": []
     }
 
-# Wire up the unified security factory module
-app.middleware("http")(build_access_middleware(
+# Mount onto the centralized application infrastructure factory
+app = create_secure_app(
     app_type="backend",
     config_resolver=backend_config_resolver,
-    excluded_paths=["/healthcheck"]
-))
+    lifespan_handler=lifespan,
+    excluded_paths=[]  # Enforce strict zero-leak isolation on the internal worker daemon
+)
+
+security = HTTPBearer()
+active_server = None
 
 async def verify_token(request: Request, creds: HTTPAuthorizationCredentials = Security(security)):
     secret = getattr(request.app.state, "secret", "")
@@ -61,19 +59,23 @@ async def api_stream_queue(request: Request):
         q = asyncio.Queue()
         current_state = broker.add_sub(q)
 
+        # Leverage the centralized async lifecycle manager to absorb ASGI disconnections cleanly
         async with safe_async_lifecycle("Broker Subscription"):
-            try:
-                yield f"data: {json.dumps({'action': 'init', 'state': current_state})}\n\n"
-                while True:
-                    event = await q.get()
-                    if event.get("action") == "shutdown":
-                        break
-                    yield f"data: {json.dumps(event)}\n\n"
-            finally:
-                # Guaranteed to fire to prevent queue object bloat
-                broker.remove_sub(q)
+            yield f"data: {json.dumps({'action': 'init', 'state': current_state})}\n\n"
+            while True:
+                event = await q.get()
+                if event.get("action") == "shutdown":
+                    break
+                yield f"data: {json.dumps(event)}\n\n"
 
-    return StreamingResponse(sse_generator(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "Connection": "keep-alive"})
+        # This executes safely outside the context once the loop terminates normally via a shutdown action
+        broker.remove_sub(q)
+
+    return StreamingResponse(
+        sse_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
+    )
 
 @app.get("/api/config", dependencies=[Depends(verify_token)])
 async def api_get_config(request: Request):

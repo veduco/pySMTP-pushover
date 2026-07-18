@@ -1,6 +1,6 @@
 import logging
 from typing import Callable, List
-from fastapi import Request
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, HTMLResponse
 from core.json_store import is_ip_allowed
 
@@ -79,3 +79,37 @@ def build_access_middleware(
         return response
 
     return access_log_middleware
+
+def create_secure_app(
+    app_type: str,
+    config_resolver: Callable[[Request], dict],
+    lifespan_handler=None,
+    pre_hook: Callable[[Request], None] = None,
+    excluded_paths: List[str] = None
+) -> FastAPI:
+    """
+    Centralized monolithic application factory generating identical ASGI framework
+    configurations and unified middleware boundaries.
+    """
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan_handler)
+
+    if excluded_paths is None:
+        excluded_paths = ["/healthcheck"] if app_type == "frontend" else []
+
+    if app_type == "frontend":
+        excluded_paths.extend(["/api/queue", "/api/queue/stream", "/api/validate/network"])
+
+    app.middleware("http")(build_access_middleware(
+        app_type=app_type,
+        config_resolver=config_resolver,
+        excluded_paths=excluded_paths,
+        pre_hook=pre_hook
+    ))
+
+    # Explicit Frontend-Only Endpoint Isolation Pass
+    if app_type == "frontend":
+        @app.api_route("/healthcheck", methods=["GET", "HEAD"])
+        async def healthcheck_endpoint(request: Request):
+            return JSONResponse({"status": "healthy"})
+
+    return app

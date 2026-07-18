@@ -9,7 +9,7 @@ from frontend.state import app_state
 from frontend.routers import queue, ui
 from core.config import UI_CONFIG_FILE, load_clean_json
 from core.json_store import is_valid_network_target
-from core.security import build_access_middleware
+from core.security import create_secure_app
 from core.utils import HttpClientPool
 
 # Silence urllib3 warnings against backend self-signed proxy certs
@@ -17,6 +17,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Manages application startup and loop-aware HTTP client teardown limits seamlessly."""
     app_state["active_servers"] = app_state.get("active_servers", 0) + 1
     app_state["shutdown"] = False
     try:
@@ -27,8 +28,6 @@ async def lifespan(app: FastAPI):
         if app_state["active_servers"] <= 0:
             app_state["shutdown"] = True
             await HttpClientPool.close_all()
-
-app = FastAPI(lifespan=lifespan)
 
 def frontend_config_resolver(request: Request):
     """Dynamically parses the UI file schema structure to extract real-time web panel settings."""
@@ -45,16 +44,17 @@ def frontend_pre_hook(request: Request):
     verify_tls = ui_config.get("remote_verify_tls", False)
     request.state.http_client = HttpClientPool.get_client("frontend", verify_tls=verify_tls)
 
-# Wire up the unified security factory module
-app.middleware("http")(build_access_middleware(
+# Instantiate the Frontend application utilizing the secure app factory
+app = create_secure_app(
     app_type="frontend",
     config_resolver=frontend_config_resolver,
-    excluded_paths=["/healthcheck", "/api/queue", "/api/queue/stream", "/api/validate/network"],
+    lifespan_handler=lifespan,
     pre_hook=frontend_pre_hook
-))
+)
 
 @app.post("/api/validate/network")
 async def validate_network_target(request: Request):
+    """Proxy validator endpoint routing local UI form constraints to core validation helpers."""
     try:
         data = await request.json()
         target = data.get("target", "")
@@ -63,9 +63,6 @@ async def validate_network_target(request: Request):
         return JSONResponse({"valid": is_valid})
     except Exception:
         return JSONResponse({"valid": False}, status_code=400)
-
-@app.api_route("/healthcheck", methods=["GET", "HEAD"])
-async def healthcheck_endpoint(request: Request): return {"status": "healthy"}
 
 # Mount Modular Routers
 app.include_router(queue.router)
