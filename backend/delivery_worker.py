@@ -5,6 +5,7 @@ import logging
 import asyncio
 import httpx
 from backend.delivery_clients import send_pushover, send_smarthost
+from core.utils import HttpClientPool
 
 def _purge_queue_item_record(payload_id, state, broker):
     """Uniformly synchronization utility to clear completed or dropped alerts from RAM and disk states."""
@@ -90,13 +91,15 @@ async def async_worker_task(worker_id, async_q, state, broker, pushover_client):
         async_q.task_done()
 
 async def async_delivery_manager(msg_queue, state, num_workers, broker):
-    limits = httpx.Limits(max_connections=1, max_keepalive_connections=1)
-    async with httpx.AsyncClient(limits=limits, timeout=15.0) as pushover_client:
+    pushover_client = HttpClientPool.get_client("pushover", verify_tls=True)
+    try:
         workers = [
             asyncio.create_task(async_worker_task(i, msg_queue, state, broker, pushover_client))
             for i in range(num_workers)
         ]
         await asyncio.gather(*workers, return_exceptions=True)
+    finally:
+        await HttpClientPool.close_all()
 
 def load_queue_from_disk(msg_queue, state, broker=None):
     if not os.path.exists(state.smtp["queue_dir"]): return
