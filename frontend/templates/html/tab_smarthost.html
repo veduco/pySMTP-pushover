@@ -36,12 +36,14 @@
                     <th class="table-sort" @click="setSmarthostSort('address')">Address <span x-show="smarthostSortCol === 'address'" x-text="smarthostSortDir === 1 ? '▲' : '▼'"></span></th>
                     <th class="table-sort table-col-min" @click="setSmarthostSort('starttls')">STARTTLS <span x-show="smarthostSortCol === 'starttls'" x-text="smarthostSortDir === 1 ? '▲' : '▼'"></span></th>
                     <th class="table-sort table-col-min" @click="setSmarthostSort('auth')">Auth <span x-show="smarthostSortCol === 'auth'" x-text="smarthostSortDir === 1 ? '▲' : '▼'"></span></th>
+                    <th class="table-sort table-col-min" @click="setSmarthostSort('disable_attachments')">No Attach <span x-show="smarthostSortCol === 'disable_attachments'" x-text="smarthostSortDir === 1 ? '▲' : '▼'"></span></th>
+                    <th class="table-sort table-col-min" @click="setSmarthostSort('force_plaintext')">Plaintext <span x-show="smarthostSortCol === 'force_plaintext'" x-text="smarthostSortDir === 1 ? '▲' : '▼'"></span></th>
                     <th class="table-col-min">Actions</th>
                 </tr>
             </thead>
             <tbody>
                 <tr x-show="sortedSmarthosts.length === 0">
-                    <td colspan="5" style="text-align: center; font-style: italic; opacity: 0.7; padding: 1.5rem;">No configured smarthosts. Click the green plus icon to provision.</td>
+                    <td colspan="7" style="text-align: center; font-style: italic; opacity: 0.7; padding: 1.5rem;">No configured smarthosts. Click the green plus icon to provision.</td>
                 </tr>
                 <template x-for="s in sortedSmarthosts" :key="s.alias">
                     <tr>
@@ -54,6 +56,14 @@
                         <td class="table-col-min" style="text-align: center; vertical-align: middle;">
                             <svg x-show="s.auth" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: 0 auto;"><polyline points="20 6 9 17 4 12"></polyline></svg>
                             <svg x-show="!s.auth" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: 0 auto;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        </td>
+                        <td class="table-col-min" style="text-align: center; vertical-align: middle;">
+                            <svg x-show="s.disable_attachments === true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: 0 auto;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            <svg x-show="s.disable_attachments !== true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: 0 auto;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        </td>
+                        <td class="table-col-min" style="text-align: center; vertical-align: middle;">
+                            <svg x-show="s.force_plaintext === true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: 0 auto;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            <svg x-show="s.force_plaintext !== true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: 0 auto;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                         </td>
                         <td class="table-col-min">
                             <div style="display: flex; gap: 0.5rem;">

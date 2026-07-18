@@ -2,14 +2,17 @@ setVaultSort(col) {
     if(this.vaultSortCol === col) { this.vaultSortDir = this.vaultSortDir === 1 ? -1 : 1; }
     else { this.vaultSortCol = col; this.vaultSortDir = 1; }
 },
+
 setSmtpSort(col) {
     if(this.smtpSortCol === col) { this.smtpSortDir = this.smtpSortDir === 1 ? -1 : 1; }
     else { this.smtpSortCol = col; this.smtpSortDir = 1; }
 },
+
 setSmarthostSort(col) {
     if(this.smarthostSortCol === col) { this.smarthostSortDir = this.smarthostSortDir === 1 ? -1 : 1; }
     else { this.smarthostSortCol = col; this.smarthostSortDir = 1; }
 },
+
 setListenerSort(col) {
     if(this.listenerSortCol === col) { this.listenerSortDir = this.listenerSortDir === 1 ? -1 : 1; }
     else { this.listenerSortCol = col; this.listenerSortDir = 1; }
@@ -21,12 +24,14 @@ get sortedVaultApp() {
         else return (a.epoch - b.epoch) * this.vaultSortDir;
     });
 },
+
 get sortedVaultUser() {
     return [...this.vaultUser].sort((a, b) => {
         if(this.vaultSortCol === 'name') return a.name.localeCompare(b.name) * this.vaultSortDir;
         else return (a.epoch - b.epoch) * this.vaultSortDir;
     });
 },
+
 get sortedSmtpAuth() {
     const arr = Object.keys(this.smtp.auth || {}).map(k => ({ name: k, epoch: this.smtp_meta[k] || 0 }));
     return arr.sort((a, b) => {
@@ -34,6 +39,7 @@ get sortedSmtpAuth() {
         else return (a.epoch - b.epoch) * this.smtpSortDir;
     });
 },
+
 get sortedSmarthosts() {
     const arr = Object.keys(this.smarthosts).map(k => ({ alias: k, ...this.smarthosts[k] }));
     return arr.sort((a, b) => {
@@ -52,55 +58,62 @@ get sortedSmarthosts() {
         return res * this.smarthostSortDir;
     });
 },
+
 get sortedSmarthostKeys() {
     return this.sortedSmarthosts.map(s => s.alias);
 },
-get sortedListeners() {
-    const mapped = (this.smtp.listeners || []).map((l, i) => ({ ...l, _idx: i }));
+
+_evaluateListenerSort(listenersArray, sortColumn, sortDirection) {
+    const mapped = (listenersArray || []).map((l, i) => ({ ...l, _idx: i }));
     return mapped.sort((a, b) => {
-        let res = 0;
-        if (this.listenerSortCol === 'bind') res = (a.bind || '').localeCompare(b.bind || '');
-        else if (this.listenerSortCol === 'hostname') res = (a.hostname || '').localeCompare(b.hostname || '');
-        else if (this.listenerSortCol === 'starttls') res = (a.starttls === b.starttls) ? 0 : a.starttls ? 1 : -1;
-        return res * this.listenerSortDir;
-    });
-},
-setUiListenerSort(col) {
-    if(this.uiListenerSortCol === col) { this.uiListenerSortDir = this.uiListenerSortDir === 1 ? -1 : 1; }
-    else { this.uiListenerSortCol = col; this.uiListenerSortDir = 1; }
-},
-get sortedUiListeners() {
-    const mapped = (this.uiListeners || []).map((l, i) => ({ ...l, _idx: i }));
-    return mapped.sort((a, b) => {
-        let valA = String(a.bind || '');
-        let valB = String(b.bind || '');
-        return valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' }) * this.uiListenerSortDir;
+        if (sortColumn === 'bind') {
+            let valA = String(a.bind || '');
+            let valB = String(b.bind || '');
+            return valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' }) * sortDirection;
+        }
+
+        let valA = a[sortColumn];
+        if (valA === undefined || valA === null) valA = '';
+        let valB = b[sortColumn];
+        if (valB === undefined || valB === null) valB = '';
+
+        let res = valA < valB ? -1 : (valA > valB ? 1 : 0);
+        return res * sortDirection;
     });
 },
 
+get sortedUiListeners() {
+    return this._evaluateListenerSort(this.uiListeners, this.uiListenerSortCol, this.uiListenerSortDir);
+},
+
 get sortedSmtpListeners() {
-    return (this.smtp.listeners || []).map((l, i) => ({ ...l, _idx: i })).sort((a,b) => {
-        let valA = a[this.smtpListenerSortCol];
-        if (valA === undefined || valA === null) valA = '';
-        let valB = b[this.smtpListenerSortCol];
-        if (valB === undefined || valB === null) valB = '';
-        let res = valA < valB ? -1 : (valA > valB ? 1 : 0);
-        return res * this.smtpListenerSortDir;
-    });
+    return this._evaluateListenerSort(this.smtp.listeners, this.smtpListenerSortCol, this.smtpListenerSortDir);
+},
+
+get sortedListeners() {
+    return this._evaluateListenerSort(this.smtp.listeners, this.listenerSortCol, this.listenerSortDir);
+},
+
+setUiListenerSort(col) {
+    if(this.uiListenerSortCol === col) { this.uiListenerSortDir = this.uiListenerSortDir === 1 ? -1 : 1; }
+    else { this.uiListenerSortCol = col; this.uiListenerSortDir = 1; }
 },
 
 get hasRouteChanges() {
     if (!this.snapshots || !this.snapshots.routes) return false;
     return this.snapshots.routes !== JSON.stringify(this.mappings.map(({_uid, _showToken, _showUser, _tokenAliasVal, _tokenRaw, _userAliasVal, _userRaw, ...rest}) => rest));
 },
+
 get hasPushoverChanges() {
     if (!this.snapshots || !this.snapshots.pushover) return false;
     return this.snapshots.pushover !== JSON.stringify({ pushGlobals: this.pushGlobals, vaultApp: this.vaultApp, vaultUser: this.vaultUser });
 },
+
 get hasSmarthostChanges() {
     if (!this.snapshots || !this.snapshots.smarthost) return false;
     return this.snapshots.smarthost !== JSON.stringify({ smarthosts: this.smarthosts, smartGlobals: this.smartGlobals, vaultSmarthost: this.vaultSmarthost });
 },
+
 get hasServerChanges() {
     if (!this.snapshots || !this.snapshots.server) return false;
     return this.snapshots.server !== JSON.stringify(this.smtp);
