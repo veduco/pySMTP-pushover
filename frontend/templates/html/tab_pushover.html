@@ -1,3 +1,4 @@
+{% from "components.html" import toggle, secret_input, empty_table_state %}
 <div class="card">
     <h3>Global API Fallbacks</h3>
 
@@ -5,16 +6,10 @@
         <div style="width: max-content; max-width: 100%;">
             <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.25rem; flex-wrap: wrap;">
                 <label style="margin: 0;">Default App Token</label>
-                <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" :checked="pushGlobals._isTokenAlias" @change="toggleAlias(pushGlobals, 'token')"><span class="slider"></span></div> Use Alias</label>
+                {{ toggle(checked="pushGlobals._isTokenAlias", change="toggleAlias(pushGlobals, 'token')", label="Use Alias") }}
             </div>
             <template x-if="!pushGlobals._isTokenAlias">
-                <div class="token-input" style="position: relative; display: block; max-width: 100%;">
-                    <input :type="pushGlobals._showToken ? 'text' : 'password'" x-model="pushGlobals.token" maxlength="30" placeholder="Required for Catch-All" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
-                    <div @click="pushGlobals._showToken = !pushGlobals._showToken" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
-                        <svg x-show="!pushGlobals._showToken" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                        <svg x-show="pushGlobals._showToken" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
-                    </div>
-                </div>
+                {{ secret_input(value_model="pushGlobals.token", show_model="pushGlobals._showToken", placeholder_text="Required for Catch-All", max_length=30) }}
             </template>
             <template x-if="pushGlobals._isTokenAlias">
                 <select style="width: 100%; box-sizing: border-box;" x-model="pushGlobals.token">
@@ -27,16 +22,10 @@
         <div style="width: max-content; max-width: 100%;">
             <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.25rem; flex-wrap: wrap;">
                 <label style="margin: 0;">Default User Key</label>
-                <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" :checked="pushGlobals._isUserAlias" @change="toggleAlias(pushGlobals, 'user')"><span class="slider"></span></div> Use Alias</label>
+                {{ toggle(checked="pushGlobals._isUserAlias", change="toggleAlias(pushGlobals, 'user')", label="Use Alias") }}
             </div>
             <template x-if="!pushGlobals._isUserAlias">
-                <div class="token-input" style="position: relative; display: block; max-width: 100%;">
-                    <input :type="pushGlobals._showUser ? 'text' : 'password'" x-model="pushGlobals.user" maxlength="30" placeholder="Required for Catch-All" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
-                    <div @click="pushGlobals._showUser = !pushGlobals._showUser" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
-                        <svg x-show="!pushGlobals._showUser" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                        <svg x-show="pushGlobals._showUser" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
-                    </div>
-                </div>
+                {{ secret_input(value_model="pushGlobals.user", show_model="pushGlobals._showUser", placeholder_text="Required for Catch-All", max_length=30) }}
             </template>
             <template x-if="pushGlobals._isUserAlias">
                 <select style="width: 100%; box-sizing: border-box;" x-model="pushGlobals.user">
@@ -48,8 +37,8 @@
     </div>
 
     <div class="flex-row" style="gap: 1.5rem; margin-bottom: 1rem;">
-        <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="pushGlobals.disable_attachments"><span class="slider"></span></div> Disable Attachments</label>
-        <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="pushGlobals.force_plaintext"><span class="slider"></span></div> Force Plaintext Formatting</label>
+        {{ toggle(model="pushGlobals.disable_attachments", label="Disable Attachments") }}
+        {{ toggle(model="pushGlobals.force_plaintext", label="Force Plaintext Formatting") }}
     </div>
 
     <button type="button" class="outline" @click="showGlobalAdv = !showGlobalAdv" style="margin-bottom: 1rem;" x-text="showGlobalAdv ? 'Hide Advanced Globals' : 'Show Advanced Globals'">Show Advanced Globals</button>
@@ -112,7 +101,9 @@
                     </td>
                 </tr>
             </template>
-            <tr x-show="vaultApp.length === 0"><td colspan="3" style="text-align: center; opacity: 0.6; padding: 1.5rem; font-style: italic;">No configured application tokens. Click the green plus icon to provision.</td></tr>
+            <template x-if="vaultApp.length === 0">
+                {{ empty_table_state(colspan_count=3, message_text="'No configured application tokens.'", action_click="vaultModal.type = 'app'; vaultModal.name = ''; vaultModal.token = ''; vaultModal.error = ''; vaultModal.showToken = false; vaultModal.open = true;", action_text="Provision App Token Now") }}
+            </template>
         </tbody>
     </table>
 
@@ -153,7 +144,9 @@
                     </td>
                 </tr>
             </template>
-            <tr x-show="vaultUser.length === 0"><td colspan="3" style="text-align: center; opacity: 0.6; padding: 1.5rem; font-style: italic;">No configured user keys. Click the green plus icon to provision.</td></tr>
+            <template x-if="vaultUser.length === 0">
+                {{ empty_table_state(colspan_count=3, message_text="'No configured user keys.'", action_click="vaultModal.type = 'user'; vaultModal.name = ''; vaultModal.token = ''; vaultModal.error = ''; vaultModal.showToken = false; vaultModal.open = true;", action_text="Provision User Key Now") }}
+            </template>
         </tbody>
     </table>
 </div>

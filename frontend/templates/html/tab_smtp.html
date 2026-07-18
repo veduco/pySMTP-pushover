@@ -1,4 +1,4 @@
-{% from "components.html" import toggle, cidr_input, segment_track %}
+{% from "components.html" import toggle, cidr_input, segment_track, empty_table_state %}
 <style>
     .segment-label.compact {
         padding: 0.3rem 0;
@@ -85,9 +85,6 @@
                 </tr>
             </thead>
             <tbody>
-                <tr x-show="sortedSmtpAuth.length === 0">
-                    <td colspan="4" style="text-align: center; font-style: italic; opacity: 0.7; padding: 1.5rem;">No configured SMTP users. Click the green plus icon to provision.</td>
-                </tr>
                 <template x-for="u in sortedSmtpAuth" :key="u.name">
                     <tr>
                         <td x-text="u.name"></td>
@@ -103,6 +100,9 @@
                             </div>
                         </td>
                     </tr>
+                </template>
+                <template x-if="sortedSmtpAuth.length === 0">
+                    {{ empty_table_state(colspan_count=3, message_text="'No configured SMTP users.'", action_click="openSmtpUserModal()", action_text="Provision New SMTP Account") }}
                 </template>
             </tbody>
         </table>
@@ -131,9 +131,6 @@
                 </tr>
             </thead>
             <tbody>
-                <tr x-show="sortedSmtpListeners.length === 0">
-                    <td colspan="6" style="text-align: center; font-style: italic; opacity: 0.7; padding: 1.5rem;">No configured SMTP listeners. Click the green plus icon to provision.</td>
-                </tr>
                 <template x-for="l in sortedSmtpListeners" :key="l._idx">
                     <tr>
                         <td x-text="l.bind" style="font-weight: bold;">
@@ -166,6 +163,9 @@
                             </div>
                         </td>
                     </tr>
+                </template>
+                <template x-if="sortedSmtpListeners.length === 0">
+                    {{ empty_table_state(colspan_count=7, message_text="'No configured SMTP listeners.'", action_click="openListenerModal('add')", action_text="Add Binding Socket Now") }}
                 </template>
             </tbody>
         </table>

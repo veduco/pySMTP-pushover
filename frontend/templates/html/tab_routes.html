@@ -1,4 +1,4 @@
-{% from "components.html" import toggle, cidr_input, segment_track %}
+{% from "components.html" import toggle, cidr_input, segment_track, secret_input %}
 <style>
     .route-card {
         position: relative;
@@ -65,13 +65,7 @@
                                 {{ toggle(checked="map._isTokenAlias", change="toggleAlias(map, 'token')", label="Use Alias") }}
                             </div>
                             <template x-if="!map._isTokenAlias">
-                                <div class="token-input" style="position: relative; display: block; max-width: 100%;">
-                                    <input :type="map._showToken ? 'text' : 'password'" x-model="map.token" maxlength="30" placeholder="Required Override" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
-                                    <div @click="map._showToken = !map._showToken" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
-                                        <svg x-show="!map._showToken" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                                        <svg x-show="map._showToken" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
-                                    </div>
-                                </div>
+                                {{ secret_input(value_model="map.token", show_model="map._showToken", placeholder_text="Required Override", max_length=30) }}
                             </template>
                             <template x-if="map._isTokenAlias">
                                 <select style="width: 100%; box-sizing: border-box;" x-model="map.token">
@@ -113,13 +107,7 @@
                                         {{ toggle(checked="map._isUserAlias", change="toggleAlias(map, 'user')", label="Use Alias") }}
                                     </div>
                                     <template x-if="!map._isUserAlias">
-                                        <div class="token-input" style="position: relative; display: block; max-width: 100%;">
-                                            <input :type="map._showUser ? 'text' : 'password'" x-model="map.user" maxlength="30" placeholder="Inherit Global" autocomplete="new-password" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%; padding-right: 30px; box-sizing: border-box;">
-                                            <div @click="map._showUser = !map._showUser" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-color); opacity: 0.6; display: flex; align-items: center; justify-content: center; height: 100%;">
-                                                <svg x-show="!map._showUser" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                                                <svg x-show="map._showUser" style="display: none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
-                                            </div>
-                                        </div>
+                                        {{ secret_input(value_model="map.user", show_model="map._showUser", placeholder_text="Inherit Global", max_length=30) }}
                                     </template>
                                     <template x-if="map._isUserAlias">
                                         <select style="width: 100%; box-sizing: border-box;" x-model="map.user">
