@@ -4,8 +4,7 @@ import signal
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from frontend.config_manager import ConfigManager
-from core.config import UI_CONFIG_FILE, load_clean_json, save_json
+from core.config import UI_CONFIG_FILE, load_clean_json, save_json, ConfigOrchestrator
 
 router = APIRouter()
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "templates")
@@ -26,8 +25,8 @@ async def index(request: Request):
     # Safely merge defaults into actual payload
     safe_ui_config = {**ui_schema_defaults, **ui_config}
 
-    # Feed the global HTTP client into the ConfigManager wrapper
-    manager = ConfigManager(safe_ui_config, http_client=request.state.http_client)
+    # Feed the global HTTP client into the ConfigOrchestrator wrapper
+    manager = ConfigOrchestrator(safe_ui_config, http_client=request.state.http_client)
     config, vault_data, smtp_meta, config_ok = await manager.get_config()
 
     # Safely guarantee the dictionary exists
@@ -63,7 +62,7 @@ async def index(request: Request):
 @router.post("/save/config")
 async def save_config(request: Request, config_json: str = Form(...), vault_json: str = Form(None)):
     ui_config = load_clean_json(UI_CONFIG_FILE)
-    manager = ConfigManager(ui_config, http_client=request.state.http_client)
+    manager = ConfigOrchestrator(ui_config, http_client=request.state.http_client)
 
     try:
         parsed = json.loads(config_json)

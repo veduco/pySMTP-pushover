@@ -49,13 +49,6 @@ async def verify_token(request: Request, creds: HTTPAuthorizationCredentials = S
         raise HTTPException(status_code=401, detail="Unauthorized")
     return creds.credentials
 
-@app.post("/api/reload/config", dependencies=[Depends(verify_token)])
-async def api_reload_config(request: Request):
-    logging.info("Control API: Remote request received to reload full configuration.")
-    request.app.state.mappings_reload_event.set()
-    broker.publish("CONFIG_RELOADED", None)
-    return JSONResponse({"status": "reload_scheduled"})
-
 @app.post("/api/reload/listeners", dependencies=[Depends(verify_token)])
 async def api_reload_listeners(request: Request):
     logging.info("Control API: Remote request received to hot-reload TCP listeners.")
@@ -108,6 +101,9 @@ async def api_save_config(request: Request):
 
         # Delegate all payload normalization, secret hashing, and diff evaluation to the core engine
         save_unified_config(CONFIG_FILE, new_config=data.get("config"), new_vault=data.get("vault"))
+
+        request.app.state.mappings_reload_event.set()
+        broker.publish("CONFIG_RELOADED", None)
 
         return JSONResponse({"status": "saved"})
     except Exception as e:

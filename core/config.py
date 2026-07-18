@@ -40,7 +40,7 @@ class AppState:
         self.raw_config = {}
         self.raw_vault = {}
 
-def _execute_unified_snapshot(state):
+def _execute_unified_snapshot(state, config_path):
     """
     Creates a unified backup frame bundling both the config and vault data structures.
     Performs a semantic deep-diff against the latest backup to avoid redundant writes
@@ -51,10 +51,10 @@ def _execute_unified_snapshot(state):
         if max_backups <= 0:
             return
 
-        conf_dir = os.path.dirname(CONFIG_FILE) or "."
+        conf_dir = os.path.dirname(config_path) or "."
 
         # 1. Read live clean data states directly from the verified sources
-        live_config = load_clean_json(CONFIG_FILE)
+        live_config = load_clean_json(config_path)
         live_vault = load_clean_json(state.vault_file)
 
         # Sanitize runtime transient tracking blocks to prevent false diff flags
@@ -87,7 +87,7 @@ def _execute_unified_snapshot(state):
 
         # 4. Content has changed or no backup exists; compile and write the unified file
         unified_payload = {
-            "config": load_clean_json(CONFIG_FILE),
+            "config": load_clean_json(config_path),
             "vault": load_clean_json(state.vault_file)
         }
 
@@ -110,20 +110,22 @@ def _execute_unified_snapshot(state):
         # Protect core lifecycle loops from crashing on local environment storage issues
         pass
 
-def load_config(ignore_missing=False):
+def load_config(ignore_missing=False, config_path=None):
     """
     Executes a strict, unified compilation of the configuration state.
     Once this function completes, parameters are entirely static in memory
     and disk access is strictly prohibited until a SIGUSR2 signal is tripped.
     """
-    if not os.path.exists(CONFIG_FILE) and not ignore_missing:
+    target_path = config_path if config_path else CONFIG_FILE
+
+    if not os.path.exists(target_path) and not ignore_missing:
         return None
 
     # Load Source of Truth schema to inject missing default structures
     schema = load_clean_json(SCHEMA_FILE).get("gateway_config", {})
 
-    data = load_clean_json(CONFIG_FILE)
-    state = AppState(CONFIG_FILE)
+    data = load_clean_json(target_path)
+    state = AppState(target_path)
 
     # Store the pristine disk read immediately
     state.raw_config = data
@@ -144,7 +146,7 @@ def load_config(ignore_missing=False):
 
     # 3. Resolve cryptographic vault parameters securely
     v_path = state.smtp.get("vault_file")
-    conf_dir = os.path.dirname(CONFIG_FILE) or "."
+    conf_dir = os.path.dirname(target_path) or "."
     state.vault_file = os.path.normpath(os.path.join(conf_dir, v_path)) if v_path else os.path.join(conf_dir, "vault.json")
     vault_data = load_vault_safe(state.vault_file)
 
@@ -176,7 +178,7 @@ def load_config(ignore_missing=False):
             if match_type in ["from", "both"]: state.mappings["from"][actual_key] = route
 
     # 5. Schema verification pass successful. Fire unified semantic data backup check.
-    _execute_unified_snapshot(state)
+    _execute_unified_snapshot(state, target_path)
 
     return state
 
@@ -261,3 +263,86 @@ def save_unified_config(config_path, new_config=None, new_vault=None):
         save_json(v_path, normalized_vault)
 
     return listeners_changed
+
+class ConfigOrchestrator:
+    """
+    Centralized controller for configuration reads, commits, and systemic hot-reload signaling.
+    Works seamlessly across local filesystem mapping and remote API connectivity paradigms.
+    """
+    def __init__(self, ui_config: dict, http_client=None):
+        self.ui_config = ui_config
+        self.bmode = ui_config.get("backend_mode", "local")
+        self.url = ui_config.get("remote_url", "")
+        self.sec = ui_config.get("remote_secret", "")
+        self.http_client = http_client
+        self.timeout = 5.0
+        self.active_path = self.ui_config.get("local_config_path") or CONFIG_FILE
+
+    def trigger_local_backend_reload(self):
+        """Dispatches an unconditional systemic reload payload to the active python core loop."""
+        import signal
+        if not os.path.exists(SMTP_PID_FILE):
+            return
+        try:
+            with open(SMTP_PID_FILE, 'r') as f:
+                pid = int(f.read().strip())
+            os.kill(pid, signal.SIGUSR2)
+        except Exception:
+            pass
+
+    async def get_config(self):
+        """Fetches the configuration state securely from the active deployment target."""
+        config = {}
+        vault_data = {"app": {}, "user": {}, "smarthost": {}}
+        smtp_meta = {}
+        config_ok = False
+
+        if self.bmode == "remote":
+            if self.http_client:
+                try:
+                    r = await self.http_client.get(
+                        f"{self.url.rstrip('/')}/api/config",
+                        headers={"Authorization": f"Bearer {self.sec}"},
+                        timeout=self.timeout
+                    )
+                    if r.status_code == 200:
+                        data = r.json()
+                        config = data.get("config", {})
+                        vault_data = data.get("vault", {})
+                        smtp_meta = data.get("smtp_meta", {})
+                        config_ok = True
+                except Exception:
+                    pass
+        else:
+            try:
+                parsed = load_config(ignore_missing=True, config_path=self.active_path)
+                if parsed:
+                    config = load_clean_json(self.active_path)
+                    vault_data = load_vault_safe(parsed.vault_file)
+                    smtp_meta = config.get("smtp", {}).get("_smtp_meta", {})
+                    config_ok = True
+            except Exception:
+                pass
+
+        return config, vault_data, smtp_meta, config_ok
+
+    async def save_config(self, parsed_config, vault_parsed=None):
+        """Pushes the updated configuration payload to the target and issues automatic reload signals."""
+        if self.bmode == "remote":
+            payload = {"config": parsed_config}
+            if vault_parsed:
+                payload["vault"] = vault_parsed
+
+            if self.http_client:
+                await self.http_client.post(
+                    f"{self.url.rstrip('/')}/api/save",
+                    json=payload,
+                    headers={"Authorization": f"Bearer {self.sec}"},
+                    timeout=self.timeout
+                )
+
+            return "Configuration successfully synchronized with the remote gateway daemon."
+        else:
+            save_unified_config(self.active_path, new_config=parsed_config, new_vault=vault_parsed)
+            self.trigger_local_backend_reload()
+            return "Configuration successfully synchronized with the local gateway daemon."
