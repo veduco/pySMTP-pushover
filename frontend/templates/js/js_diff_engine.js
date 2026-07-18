@@ -1,3 +1,25 @@
+_buildUiStatePayload() {
+    return {
+        timezone: this.ui_tz,
+        date_format: this.ui_fmt,
+        relative_time: this.ui_relative,
+        expand_adv: this.ui_expand_adv,
+        trust_proxy: this.ui_trust_proxy,
+        vault_sort: this.ui_vault_sort,
+        smtp_sort: this.ui_smtp_sort,
+        smarthost_sort: this.ui_smarthost_sort,
+        ui_loglevel: this.ui_loglevel,
+        listeners: JSON.parse(JSON.stringify(this.uiListeners || [])),
+        backend_mode: this.ui_backend_remote ? 'remote' : 'local',
+        local_config_path: this.ui_local_config_path,
+        remote_url: this.ui_remote_url,
+        remote_secret: this.ui_remote_secret,
+        remote_verify_tls: this.ui_remote_verify_tls,
+        allowed_cidrs: JSON.parse(JSON.stringify(this.ui_allowed_cidrs || [])),
+        trust_proxy_cidrs: JSON.parse(JSON.stringify(this.ui_trust_proxy_cidrs || []))
+    };
+},
+
 preparePayload() {
     const payload = {
         smtp: JSON.parse(JSON.stringify(this.smtp)),
@@ -57,17 +79,7 @@ formatDiffValue(val) {
 takeSnapshot() {
     this.rawConfig = JSON.parse(this.preparePayload());
     this.rawVault = JSON.parse(this.prepareVaultPayload());
-    this.rawUiConfig = {
-        timezone: this.ui_tz, date_format: this.ui_fmt, relative_time: this.ui_relative,
-        expand_adv: this.ui_expand_adv, trust_proxy: this.ui_trust_proxy,
-        vault_sort: this.ui_vault_sort, smtp_sort: this.ui_smtp_sort, smarthost_sort: this.ui_smarthost_sort,
-        ui_loglevel: this.ui_loglevel, listeners: JSON.parse(JSON.stringify(this.uiListeners)),
-        backend_mode: this.ui_backend_remote ? 'remote' : 'local',
-        local_config_path: this.ui_local_config_path, remote_url: this.ui_remote_url,
-        remote_secret: this.ui_remote_secret, remote_verify_tls: this.ui_remote_verify_tls,
-        allowed_cidrs: JSON.parse(JSON.stringify(this.ui_allowed_cidrs)),
-        trust_proxy_cidrs: JSON.parse(JSON.stringify(this.ui_trust_proxy_cidrs))
-    };
+    this.rawUiConfig = this._buildUiStatePayload();
 
     this.snapshots = {
         routes: JSON.stringify(this.mappings.map(({_uid, _showToken, _showUser, _tokenAliasVal, _tokenRaw, _userAliasVal, _userRaw, ...rest}) => rest)),
@@ -78,14 +90,7 @@ takeSnapshot() {
             backend_remote: this.ui_backend_remote, local_config_path: this.ui_local_config_path,
             remote_url: this.ui_remote_url, remote_secret: this.ui_remote_secret, remote_verify_tls: this.ui_remote_verify_tls
         }),
-        ui: JSON.stringify({
-            ui_loglevel: this.ui_loglevel, ui_tz: this.ui_tz, ui_fmt: this.ui_fmt,
-            ui_relative: this.ui_relative, ui_expand_adv: this.ui_expand_adv, ui_trust_proxy: this.ui_trust_proxy,
-            ui_vault_sort: this.ui_vault_sort, ui_smtp_sort: this.ui_smtp_sort, ui_smarthost_sort: this.ui_smarthost_sort,
-            uiListeners: this.uiListeners,
-            ui_allowed_cidrs: this.ui_allowed_cidrs,
-            ui_trust_proxy_cidrs: this.ui_trust_proxy_cidrs
-        })
+        ui: JSON.stringify(this._buildUiStatePayload())
     };
     this.initialState = JSON.parse(JSON.stringify({
         ui: this.rawUiConfig,
@@ -103,17 +108,7 @@ requestSave(formId) {
 
     const newConfig = JSON.parse(this.preparePayload());
     const newVault = JSON.parse(this.prepareVaultPayload());
-    const newUi = {
-        timezone: this.ui_tz, date_format: this.ui_fmt, relative_time: this.ui_relative,
-        expand_adv: this.ui_expand_adv, trust_proxy: this.ui_trust_proxy,
-        vault_sort: this.ui_vault_sort, smtp_sort: this.ui_smtp_sort, smarthost_sort: this.ui_smarthost_sort,
-        ui_loglevel: this.ui_loglevel, listeners: JSON.parse(JSON.stringify(this.uiListeners)),
-        backend_mode: this.ui_backend_remote ? 'remote' : 'local',
-        local_config_path: this.ui_local_config_path, remote_url: this.ui_remote_url,
-        remote_secret: this.ui_remote_secret, remote_verify_tls: this.ui_remote_verify_tls,
-        allowed_cidrs: this.ui_allowed_cidrs,
-        trust_proxy_cidrs: JSON.parse(JSON.stringify(this.ui_trust_proxy_cidrs))
-    };
+    const newUi = this._buildUiStatePayload();
 
     const getDiffs = (obj1, obj2, path = '') => {
         const diffs = [];
