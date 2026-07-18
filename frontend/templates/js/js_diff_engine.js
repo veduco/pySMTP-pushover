@@ -20,6 +20,87 @@ _buildUiStatePayload() {
     };
 },
 
+_getDiffs(obj1, obj2, path = '') {
+    const diffs = [];
+    const allKeys = new Set([...Object.keys(obj1 || {}), ...Object.keys(obj2 || {})]);
+    for (const key of allKeys) {
+        const val1 = obj1?.[key]; const val2 = obj2?.[key];
+        const currentPath = path ? `${path}.${key}` : key;
+        if (JSON.stringify(val1) !== JSON.stringify(val2)) {
+            if (typeof val1 === 'object' && val1 !== null && !Array.isArray(val1) &&
+                typeof val2 === 'object' && val2 !== null && !Array.isArray(val2)) {
+                diffs.push(...this._getDiffs(val1, val2, currentPath));
+            } else {
+                let humanKey = currentPath;
+                let m;
+
+                const patternMap = [
+                    { regex: /^Gateway Config\.routes\.(.+?)(?:\..+)?$/, label: m => `Route Mapping Rule [${m[1]}]` },
+                    { regex: /^Gateway Config\.smtp\.listeners\.(.+?:\d+)(?:\.(?:bind|hostname|starttls|proxy_protocol|tls_cert_file|tls_key_file))?$/, label: m => `SMTP Port Listener [${m[1]}]` },
+                    { regex: /^UI\/Backend Context\.listeners\.(.+?:\d+)(?:\.(?:bind|https|tls_cert|tls_key))?$/, label: m => `UI Port Listener [${m[1]}]` },
+                    { regex: /^Gateway Config\.smarthost\.aliases\.(.+?)(?:\..+)?$/, label: m => `Smarthost Configuration [${m[1]}]` },
+                    { regex: /^Token Vault\.app\.(.+?)(?:\..+)?$/, label: m => `App Token Vault [${m[1]}]` },
+                    { regex: /^Token Vault\.user\.(.+?)(?:\..+)?$/, label: m => `User Key Vault [${m[1]}]` },
+                    { regex: /^Token Vault\.smarthost\.(.+?)(?:\..+)?$/, label: m => `Smarthost Vault Password [${m[1]}]` }
+                ];
+
+                let matchedPattern = false;
+                for (const entry of patternMap) {
+                    if ((m = currentPath.match(entry.regex))) {
+                        humanKey = entry.label(m);
+                        matchedPattern = true;
+                        break;
+                    }
+                }
+
+                if (!matchedPattern) {
+                    if (currentPath.startsWith('UI/Backend Context.')) {
+                        humanKey = `UI Parameter -> ${currentPath.split('.')[1] || 'Unknown'}`;
+                    } else if (currentPath.startsWith('Gateway Config.')) {
+                        humanKey = `Gateway Parameter -> ${currentPath.split('.').pop()}`;
+                    }
+                }
+
+                let displayOld = (val1 !== undefined && val1 !== '') ? val1 : 'None';
+                let displayNew = (val2 !== undefined && val2 !== '') ? val2 : 'None';
+
+                if (Array.isArray(displayOld) && displayOld.length === 0) displayOld = 'None';
+                if (Array.isArray(displayNew) && displayNew.length === 0) displayNew = 'None';
+
+                // Mask dictionary objects, but leave Arrays alone to be formatted
+                if (typeof displayOld === 'object' && displayOld !== null && !Array.isArray(displayOld)) displayOld = '[Configured]';
+                if (typeof displayNew === 'object' && displayNew !== null && !Array.isArray(displayNew)) displayNew = '[Configured]';
+
+                if (displayOld === '[Configured]' && displayNew === 'None') displayNew = '[Deleted]';
+                if (displayOld === 'None' && displayNew === '[Configured]') displayOld = '[Not Configured]';
+
+                const isSensitive = ['token', 'user', 'password', 'secret'].includes(key) ||
+                                    (currentPath.includes('.auth.') && key !== 'auth') ||
+                                    currentPath.startsWith('Token Vault.smarthost.');
+
+                if (isSensitive) {
+                    const allAliases = [...(this.vaultAppAliases || []), ...(this.vaultUserAliases || [])];
+
+                    const oldIsAlias = typeof val1 === 'string' && allAliases.includes(val1);
+                    const newIsAlias = typeof val2 === 'string' && allAliases.includes(val2);
+
+                    displayOld = (val1 && val1 !== '') ? (oldIsAlias ? `[Alias] ${val1}` : '••••••••') : 'None';
+                    displayNew = (val2 && val2 !== '') ? (newIsAlias ? `[Alias] ${val2}` : '••••••••') : 'None';
+                }
+
+                diffs.push({
+                    key: currentPath,
+                    humanLabel: humanKey,
+                    old: typeof displayOld === 'string' && !displayOld.startsWith('[') ? JSON.stringify(displayOld).replace(/^"|"$/g, '') : displayOld,
+                    new: typeof displayNew === 'string' && !displayNew.startsWith('[') ? JSON.stringify(displayNew).replace(/^"|"$/g, '') : displayNew,
+                    originalValue: (typeof val1 === 'object' && val1 !== null) ? JSON.parse(JSON.stringify(val1)) : val1
+                });
+            }
+        }
+    }
+    return diffs;
+},
+
 preparePayload() {
     const payload = {
         smtp: JSON.parse(JSON.stringify(this.smtp)),
@@ -108,168 +189,42 @@ requestSave(formId) {
 
     const newConfig = JSON.parse(this.preparePayload());
     const newVault = JSON.parse(this.prepareVaultPayload());
+
     const newUi = this._buildUiStatePayload();
-
-    const getDiffs = (obj1, obj2, path = '') => {
-        const diffs = [];
-        const allKeys = new Set([...Object.keys(obj1 || {}), ...Object.keys(obj2 || {})]);
-        for (const key of allKeys) {
-            const val1 = obj1?.[key]; const val2 = obj2?.[key];
-            const currentPath = path ? `${path}.${key}` : key;
-            if (JSON.stringify(val1) !== JSON.stringify(val2)) {
-                if (typeof val1 === 'object' && val1 !== null && !Array.isArray(val1) &&
-                    typeof val2 === 'object' && val2 !== null && !Array.isArray(val2)) {
-                    diffs.push(...getDiffs(val1, val2, currentPath));
-                } else {
-                    let humanKey = currentPath;
-                    let m;
-
-                    const patternMap = [
-                        { regex: /^Gateway Config\.routes\.(.+?)(?:\..+)?$/, label: m => `Route Mapping Rule [${m[1]}]` },
-                        { regex: /^Gateway Config\.smtp\.listeners\.(.+?:\d+)(?:\.(?:bind|hostname|starttls|proxy_protocol|tls_cert_file|tls_key_file))?$/, label: m => `SMTP Port Listener [${m[1]}]` },
-                        { regex: /^UI\/Backend Context\.listeners\.(.+?:\d+)(?:\.(?:bind|https|tls_cert|tls_key))?$/, label: m => `UI Port Listener [${m[1]}]` },
-                        { regex: /^Gateway Config\.smarthost\.aliases\.(.+?)(?:\..+)?$/, label: m => `Smarthost Configuration [${m[1]}]` },
-                        { regex: /^Token Vault\.app\.(.+?)(?:\..+)?$/, label: m => `App Token Vault [${m[1]}]` },
-                        { regex: /^Token Vault\.user\.(.+?)(?:\..+)?$/, label: m => `User Key Vault [${m[1]}]` },
-                        { regex: /^Token Vault\.smarthost\.(.+?)(?:\..+)?$/, label: m => `Smarthost Vault Password [${m[1]}]` }
-                    ];
-
-                    let matchedPattern = false;
-                    for (const entry of patternMap) {
-                        if ((m = currentPath.match(entry.regex))) {
-                            humanKey = entry.label(m);
-                            matchedPattern = true;
-                            break;
-                        }
-                    }
-
-                    if (!matchedPattern) {
-                        if (currentPath.startsWith('UI/Backend Context.')) {
-                            humanKey = `UI Parameter -> ${currentPath.split('.')[1] || 'Unknown'}`;
-                        } else if (currentPath.startsWith('Gateway Config.')) {
-                            humanKey = `Gateway Parameter -> ${currentPath.split('.').pop()}`;
-                        }
-                    }
-
-                    let displayOld = (val1 !== undefined && val1 !== '') ? val1 : 'None';
-                    let displayNew = (val2 !== undefined && val2 !== '') ? val2 : 'None';
-
-                    if (Array.isArray(displayOld) && displayOld.length === 0) displayOld = 'None';
-                    if (Array.isArray(displayNew) && displayNew.length === 0) displayNew = 'None';
-
-                    // Mask dictionary objects, but leave Arrays alone to be formatted
-                    if (typeof displayOld === 'object' && displayOld !== null && !Array.isArray(displayOld)) displayOld = '[Configured]';
-                    if (typeof displayNew === 'object' && displayNew !== null && !Array.isArray(displayNew)) displayNew = '[Configured]';
-
-                    if (displayOld === '[Configured]' && displayNew === 'None') displayNew = '[Deleted]';
-                    if (displayOld === 'None' && displayNew === '[Configured]') displayOld = '[Not Configured]';
-
-                    const isSensitive = ['token', 'user', 'password', 'secret'].includes(key) ||
-                                        (currentPath.includes('.auth.') && key !== 'auth') ||
-                                        currentPath.startsWith('Token Vault.smarthost.');
-
-                    if (isSensitive) {
-                        const allAliases = [...(this.vaultAppAliases || []), ...(this.vaultUserAliases || [])];
-
-                        const oldIsAlias = typeof val1 === 'string' && allAliases.includes(val1);
-                        const newIsAlias = typeof val2 === 'string' && allAliases.includes(val2);
-
-                        displayOld = (val1 && val1 !== '') ? (oldIsAlias ? `[Alias] ${val1}` : '••••••••') : 'None';
-                        displayNew = (val2 && val2 !== '') ? (newIsAlias ? `[Alias] ${val2}` : '••••••••') : 'None';
-                    }
-
-                    let revertClosure = () => { this.resetTab(this.tab); };
-
-                    if (currentPath.startsWith('UI/Backend Context.') && !currentPath.includes('.listeners.')) {
-                        revertClosure = () => {
-                            if (key === 'backend_mode') this.ui_backend_remote = (val1 === 'remote');
-                            else if (key === 'local_config_path') this.ui_local_config_path = val1 || 'config.json';
-                            else if (key === 'remote_url') this.ui_remote_url = val1 || '';
-                            else if (key === 'remote_secret') this.ui_remote_secret = val1 || '';
-                            else if (key === 'remote_verify_tls') this.ui_remote_verify_tls = (val1 === true);
-                            else if (key === 'ui_loglevel') this.ui_loglevel = val1 || 'INFO';
-                            else if (key === 'timezone') this.ui_tz = val1 || 'UTC';
-                            else if (key === 'date_format') this.ui_fmt = val1 || 'YYYY-MM-DD HH:mm:ss';
-                            else if (key === 'relative_time') this.ui_relative = (val1 === true);
-                            else if (key === 'expand_adv') this.ui_expand_adv = (val1 === true);
-                            else if (key === 'trust_proxy') this.ui_trust_proxy = (val1 === true);
-                            else if (key === 'trust_proxy_cidrs') {
-                                this.ui_trust_proxy_cidrs = Array.isArray(val1) ? JSON.parse(JSON.stringify(val1)) : [];
-                            }
-                            else if (key === 'allowed_cidrs') {
-                                this.ui_allowed_cidrs = Array.isArray(val1) ? JSON.parse(JSON.stringify(val1)) : [];
-                                this.ui_allowed_cidrs_text = this.ui_allowed_cidrs.join('\n');
-                            }
-                        };
-                    } else if (currentPath.startsWith('Gateway Config.smtp.')) {
-                        if (!currentPath.includes('listeners') && !currentPath.includes('auth')) {
-                            revertClosure = () => {
-                                this.smtp[key] = (typeof val1 === 'object') ? JSON.parse(JSON.stringify(val1)) : val1;
-                                if (key === 'allowed_cidrs') {
-                                    this.smtp_cidrs_text = Array.isArray(val1) ? val1.join('\n') : '';
-                                }
-                            };
-                        }
-                    } else if (currentPath.startsWith('Gateway Config.pushover.')) {
-                        let prop = currentPath.split('.').pop();
-                        revertClosure = () => {
-                            if (prop === 'attachments') this.pushGlobals.disable_attachments = (val1 === false);
-                            else this.pushGlobals[prop] = val1 !== undefined ? val1 : '';
-                        };
-                    } else if (currentPath.startsWith('Gateway Config.smarthost.globals.')) {
-                        revertClosure = () => {
-                            if (key === 'alias') this.smartGlobals.alias = val1 || '';
-                            if (key === 'force_plaintext') this.smartGlobals.force_plaintext = (val1 === true);
-                            if (key === 'disable_attachments') this.smartGlobals.disable_attachments = (val1 === true);
-                        };
-                    }
-
-                    diffs.push({
-                        key: currentPath,
-                        humanLabel: humanKey,
-                        old: typeof displayOld === 'string' && !displayOld.startsWith('[') ? JSON.stringify(displayOld).replace(/^"|"$/g, '') : displayOld,
-                        new: typeof displayNew === 'string' && !displayNew.startsWith('[') ? JSON.stringify(displayNew).replace(/^"|"$/g, '') : displayNew,
-                        revert: revertClosure
-                    });
-                }
-            }
-        }
-        return diffs;
-    };
 
     if (formId === 'backend_form' || formId === 'ui_form') {
         const oldUi = { ...this.rawUiConfig }; delete oldUi.listeners;
         const newUiObj = { ...newUi }; delete newUiObj.listeners;
-        this.diffModal.changes.push(...getDiffs(oldUi, newUiObj, 'UI/Backend Context'));
+        this.diffModal.changes.push(...this._getDiffs(oldUi, newUiObj, 'UI/Backend Context'));
 
         const oldUiListeners = Object.fromEntries((this.rawUiConfig.listeners || []).map(x => [x.bind, x]));
         const newUiListeners = Object.fromEntries((newUi.listeners || []).map(x => [x.bind, x]));
-        this.diffModal.changes.push(...getDiffs(oldUiListeners, newUiListeners, 'UI/Backend Context.listeners'));
+        this.diffModal.changes.push(...this._getDiffs(oldUiListeners, newUiListeners, 'UI/Backend Context.listeners'));
     } else {
         if (this.tab === 'routes') {
-            this.diffModal.changes.push(...getDiffs(this.rawConfig.routes || {}, newConfig.routes || {}, 'Gateway Config.routes'));
+            this.diffModal.changes.push(...this._getDiffs(this.rawConfig.routes || {}, newConfig.routes || {}, 'Gateway Config.routes'));
         } else if (this.tab === 'pushover') {
-            this.diffModal.changes.push(...getDiffs(this.rawConfig.pushover || {}, newConfig.pushover || {}, 'Gateway Config.pushover'));
+            this.diffModal.changes.push(...this._getDiffs(this.rawConfig.pushover || {}, newConfig.pushover || {}, 'Gateway Config.pushover'));
 
             const oldVaultApp = Object.fromEntries((this.rawVault.app || []).map(x => [x.name, x]));
             const newVaultApp = Object.fromEntries((newVault.app || []).map(x => [x.name, x]));
-            this.diffModal.changes.push(...getDiffs(oldVaultApp, newVaultApp, 'Token Vault.app'));
+            this.diffModal.changes.push(...this._getDiffs(oldVaultApp, newVaultApp, 'Token Vault.app'));
 
             const oldVaultUser = Object.fromEntries((this.rawVault.user || []).map(x => [x.name, x]));
             const newVaultUser = Object.fromEntries((newVault.user || []).map(x => [x.name, x]));
-            this.diffModal.changes.push(...getDiffs(oldVaultUser, newVaultUser, 'Token Vault.user'));
+            this.diffModal.changes.push(...this._getDiffs(oldVaultUser, newVaultUser, 'Token Vault.user'));
 
         } else if (this.tab === 'smarthost') {
-            this.diffModal.changes.push(...getDiffs(this.rawConfig.smarthost || {}, newConfig.smarthost || {}, 'Gateway Config.smarthost'));
-            this.diffModal.changes.push(...getDiffs(this.rawVault.smarthost || {}, newVault.smarthost || {}, 'Token Vault.smarthost'));
+            this.diffModal.changes.push(...this._getDiffs(this.rawConfig.smarthost || {}, newConfig.smarthost || {}, 'Gateway Config.smarthost'));
+            this.diffModal.changes.push(...this._getDiffs(this.rawVault.smarthost || {}, newVault.smarthost || {}, 'Token Vault.smarthost'));
         } else if (this.tab === 'server') {
             const oldSmtp = { ...this.rawConfig.smtp }; delete oldSmtp.listeners;
             const newSmtp = { ...newConfig.smtp }; delete newSmtp.listeners;
-            this.diffModal.changes.push(...getDiffs(oldSmtp, newSmtp, 'Gateway Config.smtp'));
+            this.diffModal.changes.push(...this._getDiffs(oldSmtp, newSmtp, 'Gateway Config.smtp'));
 
             const oldSmtpListeners = Object.fromEntries((this.rawConfig.smtp?.listeners || []).map(x => [x.bind, x]));
             const newSmtpListeners = Object.fromEntries((newConfig.smtp?.listeners || []).map(x => [x.bind, x]));
-            this.diffModal.changes.push(...getDiffs(oldSmtpListeners, newSmtpListeners, 'Gateway Config.smtp.listeners'));
+            this.diffModal.changes.push(...this._getDiffs(oldSmtpListeners, newSmtpListeners, 'Gateway Config.smtp.listeners'));
         }
     }
 
@@ -295,10 +250,12 @@ confirmSave() {
 
 revertChange(idx) {
     const item = this.diffModal.changes[idx];
-    let complexResetTriggered = false;
+    const path = item.key;
+    const val = item.originalValue;
+    let isComplexReset = false;
 
-    if (item.key.includes('smarthost') || item.key.includes('Smarthost')) {
-        let matches = item.key.match(/(?:aliases|smarthost)\.([^.]+)/i);
+    if (path.includes('smarthost.aliases') || path.includes('Token Vault.smarthost')) {
+        let matches = path.match(/(?:aliases|smarthost)\.([^.]+)/i);
         if (matches && matches[1]) {
             const shAlias = matches[1];
             const shObj = JSON.parse(this.snapshots.smarthost);
@@ -310,32 +267,66 @@ revertChange(idx) {
             else delete this.vaultSmarthost[shAlias];
 
             this.diffModal.changes = this.diffModal.changes.filter(c => !c.key.includes(shAlias));
-            complexResetTriggered = true;
+            isComplexReset = true;
         }
-    } else if (item.key.includes('Vault.app')) {
+    } else if (path.includes('Vault.app')) {
         this.vaultApp = JSON.parse(JSON.stringify(JSON.parse(this.snapshots.pushover).vaultApp));
         this.diffModal.changes = this.diffModal.changes.filter(c => !c.key.includes('Vault.app'));
-        complexResetTriggered = true;
-    } else if (item.key.includes('Vault.user')) {
+        isComplexReset = true;
+    } else if (path.includes('Vault.user')) {
         this.vaultUser = JSON.parse(JSON.stringify(JSON.parse(this.snapshots.pushover).vaultUser));
         this.diffModal.changes = this.diffModal.changes.filter(c => !c.key.includes('Vault.user'));
-        complexResetTriggered = true;
-    } else if (item.key.includes('smtp.listeners')) {
+        isComplexReset = true;
+    } else if (path.includes('smtp.listeners')) {
         this.smtp.listeners = JSON.parse(JSON.stringify(JSON.parse(this.snapshots.server).listeners || []));
         this.diffModal.changes = this.diffModal.changes.filter(c => !c.key.includes('smtp.listeners'));
-        complexResetTriggered = true;
-    } else if (item.key.includes('routes')) {
+        isComplexReset = true;
+    } else if (path.includes('routes')) {
         this.resetTab('routes');
         this.diffModal.changes = this.diffModal.changes.filter(c => !c.key.includes('routes'));
-        complexResetTriggered = true;
-    } else if (item.key.includes('UI/Backend Context.listeners')) {
+        isComplexReset = true;
+    } else if (path.includes('UI/Backend Context.listeners')) {
         this.uiListeners = JSON.parse(JSON.stringify(JSON.parse(this.snapshots.ui).uiListeners || []));
         this.diffModal.changes = this.diffModal.changes.filter(c => !c.key.includes('UI/Backend Context.listeners'));
-        complexResetTriggered = true;
+        isComplexReset = true;
     }
 
-    if (!complexResetTriggered) {
-        item.revert();
+    if (!isComplexReset) {
+        const key = path.split('.').pop();
+
+        if (path.startsWith('UI/Backend Context.')) {
+            if (key === 'backend_mode') this.ui_backend_remote = (val === 'remote');
+            else if (key === 'local_config_path') this.ui_local_config_path = val || 'config.json';
+            else if (key === 'remote_url') this.ui_remote_url = val || '';
+            else if (key === 'remote_secret') this.ui_remote_secret = val || '';
+            else if (key === 'remote_verify_tls') this.ui_remote_verify_tls = (val === true);
+            else if (key === 'ui_loglevel') this.ui_loglevel = val || 'INFO';
+            else if (key === 'timezone') this.ui_tz = val || 'UTC';
+            else if (key === 'date_format') this.ui_fmt = val || 'YYYY-MM-DD HH:mm:ss';
+            else if (key === 'relative_time') this.ui_relative = (val === true);
+            else if (key === 'expand_adv') this.ui_expand_adv = (val === true);
+            else if (key === 'trust_proxy') this.ui_trust_proxy = (val === true);
+            else if (key === 'trust_proxy_cidrs') {
+                this.ui_trust_proxy_cidrs = Array.isArray(val) ? JSON.parse(JSON.stringify(val)) : [];
+            }
+            else if (key === 'allowed_cidrs') {
+                this.ui_allowed_cidrs = Array.isArray(val) ? JSON.parse(JSON.stringify(val)) : [];
+                this.ui_allowed_cidrs_text = this.ui_allowed_cidrs.join('\n');
+            }
+        } else if (path.startsWith('Gateway Config.smtp.')) {
+            this.smtp[key] = (typeof val === 'object' && val !== null) ? JSON.parse(JSON.stringify(val)) : val;
+            if (key === 'allowed_cidrs') {
+                this.smtp_cidrs_text = Array.isArray(val) ? val.join('\n') : '';
+            }
+        } else if (path.startsWith('Gateway Config.pushover.')) {
+            if (key === 'attachments') this.pushGlobals.disable_attachments = (val === false);
+            else this.pushGlobals[key] = val !== undefined ? val : '';
+        } else if (path.startsWith('Gateway Config.smarthost.globals.')) {
+            if (key === 'alias') this.smartGlobals.alias = val || '';
+            if (key === 'force_plaintext') this.smartGlobals.force_plaintext = (val === true);
+            if (key === 'disable_attachments') this.smartGlobals.disable_attachments = (val === true);
+        }
+
         this.diffModal.changes.splice(idx, 1);
     }
 
