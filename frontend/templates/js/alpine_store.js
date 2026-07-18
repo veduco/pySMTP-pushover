@@ -10,8 +10,59 @@ document.addEventListener('htmx:afterSwap', (e) => {
     }
 });
 
+// Centralized Store-Pattern Lifecycle Manager
+const GatewayStore = {
+    isDirty(tab, ctx) {
+        if (!ctx.snapshots) return false;
+        switch(tab) {
+            case 'routes':
+                return ctx.snapshots.routes !== JSON.stringify(ctx.mappings.map(({_uid, _showToken, _showUser, _tokenAliasVal, _tokenRaw, _userAliasVal, _userRaw, ...rest}) => rest));
+            case 'pushover':
+                return ctx.snapshots.pushover !== JSON.stringify({ pushGlobals: ctx.pushGlobals, vaultApp: ctx.vaultApp, vaultUser: ctx.vaultUser });
+            case 'smarthost':
+                return ctx.snapshots.smarthost !== JSON.stringify({ smarthosts: ctx.smarthosts, smartGlobals: ctx.smartGlobals, vaultSmarthost: ctx.vaultSmarthost });
+            case 'server':
+                return ctx.snapshots.server !== JSON.stringify(ctx.smtp);
+            case 'backend':
+                return ctx.snapshots.backend !== JSON.stringify({
+                    backend_remote: ctx.ui_backend_remote, local_config_path: ctx.ui_local_config_path,
+                    remote_url: ctx.ui_remote_url, remote_secret: ctx.ui_remote_secret, remote_verify_tls: ctx.ui_remote_verify_tls
+                });
+            case 'ui':
+                return ctx.snapshots.ui !== JSON.stringify(ctx._buildUiStatePayload());
+            default:
+                return false;
+        }
+    },
+
+    isValid(tab, ctx) {
+        // Enforce constraint mapping: Validation inherently checks against mutation changes
+        if (!this.isDirty(tab, ctx)) return false;
+
+        if (tab === 'routes') {
+            for (let m of ctx.mappings) {
+                if (!m._key || m._key.trim() === '') return false;
+                if (m.method === 'pushover' && (!m.token || m.token.trim() === '')) return false;
+                if (m.method === 'smarthost' && (!m.smarthost_alias || m.smarthost_alias.trim() === '')) return false;
+            }
+        } else if (tab === 'server') {
+            if (ctx.smtpCidrError) return false;
+            if (ctx.smtp.default_route === 'pushover') {
+                if (!ctx.pushGlobals.token || !ctx.pushGlobals.user) return false;
+            } else if (ctx.smtp.default_route === 'smarthost') {
+                if (!ctx.smartGlobals.alias) return false;
+            }
+        } else if (tab === 'ui') {
+            if (ctx.tzError || ctx.uiCidrError || ctx.uiTrustProxyCidrError) return false;
+        }
+        return true;
+    }
+};
+
 document.addEventListener('alpine:init', () => {
     Alpine.data('gatewaySettings', () => ({
+
+        GatewayStore,
 
         {% include "js_state.js" %}
         {% include "js_computed.js" %}

@@ -99,72 +99,20 @@ setUiListenerSort(col) {
     else { this.uiListenerSortCol = col; this.uiListenerSortDir = 1; }
 },
 
-get hasRouteChanges() {
-    if (!this.snapshots || !this.snapshots.routes) return false;
-    return this.snapshots.routes !== JSON.stringify(this.mappings.map(({_uid, _showToken, _showUser, _tokenAliasVal, _tokenRaw, _userAliasVal, _userRaw, ...rest}) => rest));
-},
-
-get hasPushoverChanges() {
-    if (!this.snapshots || !this.snapshots.pushover) return false;
-    return this.snapshots.pushover !== JSON.stringify({ pushGlobals: this.pushGlobals, vaultApp: this.vaultApp, vaultUser: this.vaultUser });
-},
-
-get hasSmarthostChanges() {
-    if (!this.snapshots || !this.snapshots.smarthost) return false;
-    return this.snapshots.smarthost !== JSON.stringify({ smarthosts: this.smarthosts, smartGlobals: this.smartGlobals, vaultSmarthost: this.vaultSmarthost });
-},
-
-get hasServerChanges() {
-    if (!this.snapshots || !this.snapshots.server) return false;
-    return this.snapshots.server !== JSON.stringify(this.smtp);
-},
-
-get hasBackendChanges() {
-    if (!this.snapshots || !this.snapshots.backend) return false;
-    const currentBnd = JSON.stringify({
-        backend_remote: this.ui_backend_remote, local_config_path: this.ui_local_config_path,
-        remote_url: this.ui_remote_url, remote_secret: this.ui_remote_secret, remote_verify_tls: this.ui_remote_verify_tls
-    });
-    return this.snapshots.backend !== currentBnd;
-},
-
-get hasUiChanges() {
-    if (!this.snapshots || !this.snapshots.ui) return false;
-    return this.snapshots.ui !== JSON.stringify(this._buildUiStatePayload());
-},
+// Proxy tracking properties to centralized Flux store
+get hasRouteChanges() { return this.GatewayStore.isDirty('routes', this); },
+get hasPushoverChanges() { return this.GatewayStore.isDirty('pushover', this); },
+get hasSmarthostChanges() { return this.GatewayStore.isDirty('smarthost', this); },
+get hasServerChanges() { return this.GatewayStore.isDirty('server', this); },
+get hasBackendChanges() { return this.GatewayStore.isDirty('backend', this); },
+get hasUiChanges() { return this.GatewayStore.isDirty('ui', this); },
 
 get hasActiveTabChanges() {
-    if (this.tab === 'routes') return this.hasRouteChanges;
-    if (this.tab === 'pushover') return this.hasPushoverChanges;
-    if (this.tab === 'smarthost') return this.hasSmarthostChanges;
-    if (this.tab === 'server') return this.hasServerChanges;
-    if (this.tab === 'backend') return this.hasBackendChanges;
-    if (this.tab === 'ui') return this.hasUiChanges;
-    return false;
+    return this.GatewayStore.isDirty(this.tab, this);
 },
 
 get canSaveActiveTab() {
-    if (!this.hasActiveTabChanges) return false;
-    if (this.tab === 'routes') {
-        for (let m of this.mappings) {
-            if (!m._key || m._key.trim() === '') return false;
-            if (m.method === 'pushover') {
-                if (!m.token || m.token.trim() === '') return false;
-            } else if (m.method === 'smarthost') {
-                if (!m.smarthost_alias || m.smarthost_alias.trim() === '') return false;
-            }
-        }
-    } else if (this.tab === 'server') {
-        if (this.smtpCidrError) return false;
-        if (this.smtp.default_route === 'pushover') {
-            if (!this.pushGlobals.token || !this.pushGlobals.user) return false;
-        } else if (this.smtp.default_route === 'smarthost') {
-            if (!this.smartGlobals.alias) return false;
-        }
-    } else if (this.tab === 'ui') {
-        if (this.tzError || this.uiCidrError || this.uiTrustProxyCidrError) return false;
-    }
-    return true;
+    return this.GatewayStore.isValid(this.tab, this);
 },
 
 get hasTestPayloadChanges() {
