@@ -10,7 +10,7 @@ import hashlib
 import threading
 from aiosmtpd.smtp import SMTP
 
-from core.config import MAX_URL_CHARS, MAX_URL_TITLE_CHARS, ConfigOrchestrator
+from core.config import ConfigOrchestrator
 from backend.mail_parser import parse_email_content
 from core.json_store import is_ip_allowed
 
@@ -171,29 +171,6 @@ class PushoverSMTPHandler:
 
         return unique_routes
 
-    def _resolve_route_flags(self, route, method):
-        if method == "pushover":
-            force_pt = route.get("force_plaintext", self.state.pushover.get("force_plaintext", False))
-            attachments_enabled = route.get("attachments", self.state.pushover.get("attachments", True))
-        else:
-            g_smarthost = self.state.smarthost.get("globals", {})
-            sh_alias = route.get("smarthost_alias")
-            sh_conf = self.state.smarthost.get("aliases", {}).get(sh_alias, {})
-
-            force_pt = route.get("force_plaintext")
-            if force_pt is None: force_pt = sh_conf.get("force_plaintext")
-            if force_pt is None: force_pt = g_smarthost.get("force_plaintext", False)
-
-            route_disable_att = route.get("disable_attachments")
-            if route_disable_att is not None:
-                attachments_enabled = not route_disable_att
-            else:
-                sh_disable_att = sh_conf.get("disable_attachments")
-                if sh_disable_att is not None: attachments_enabled = not sh_disable_att
-                else: attachments_enabled = g_smarthost.get("attachments", True)
-
-        return force_pt, attachments_enabled
-
     def _is_duplicate_suppressed(self, parsed_data, sender, recipients, client_ip, unique_routes) -> bool:
         """Assembles signature strings dynamically from criteria options and flags exact matches via SHA-256."""
         if not self.state.smtp.get("dedupe_enabled", False):
@@ -257,7 +234,12 @@ class PushoverSMTPHandler:
 
         for route in unique_routes:
             method = route.get("method", "pushover")
-            force_pt, attachments_enabled = self._resolve_route_flags(route, method)
+
+            # Delegate dynamic resolution to the centralized engine context
+            ctx = self.state.resolve_delivery_context(method, route)
+
+            force_pt = ctx.get("force_plaintext", False)
+            attachments_enabled = ctx.get("attachments", True)
 
             if not force_pt and body_html_processed is not None:
                 final_body = body_html_processed
@@ -284,27 +266,22 @@ class PushoverSMTPHandler:
                 "retry_count": 0,
                 "sender": sender or "gateway@localhost",
                 "recipients": recipients,
-                "raw_eml_base64": base64.b64encode(raw_content).decode('ascii')  # Centralized preservation of diagnostic payload
+                "raw_eml_base64": base64.b64encode(raw_content).decode('ascii')
             }
 
             if method == "pushover":
-                # Save the configuration values directly (which may be Alias Names)
-                payload["user"] = route.get("user") or self.state.pushover.get("user", "")
-                payload["token"] = route.get("token") or self.state.pushover.get("token", "")
-
+                # Ensure tracking parameters are packed for final delivery context resolution
+                payload["token"] = route.get("token", "")
+                payload["user"] = route.get("user", "")
                 for param in ["device", "sound", "url", "url_title", "priority", "ttl", "tags", "retry", "expire"]:
-                    val = route.get(param)
-                    if val is None or val == "":
-                        val = self.state.pushover.get(param)
-                    if val is not None and val != "":
-                        payload[param] = val
-
-                if "url" in payload and payload["url"]: payload["url"] = str(payload["url"])[:MAX_URL_CHARS]
-                if "url_title" in payload and payload["url_title"]: payload["url_title"] = str(payload["url_title"])[:MAX_URL_TITLE_CHARS]
+                    if route.get(param) is not None and route.get(param) != "":
+                        payload[param] = route.get(param)
             else:
-                payload["smarthost_alias"] = route.get("smarthost_alias")
-                payload["force_plaintext"] = force_pt
-                payload["disable_attachments"] = not attachments_enabled
+                payload["smarthost_alias"] = route.get("smarthost_alias", "")
+
+            # Guarantee structural overrides are preserved across the persistence layer boundaries
+            if "force_plaintext" in route: payload["force_plaintext"] = route["force_plaintext"]
+            if "disable_attachments" in route: payload["disable_attachments"] = route["disable_attachments"]
 
             if attachments_enabled and best_image:
                 payload["attachment_base64"] = base64.b64encode(best_image[3]).decode('ascii')

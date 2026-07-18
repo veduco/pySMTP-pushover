@@ -40,6 +40,85 @@ class AppState:
         self.raw_config = {}
         self.raw_vault = {}
 
+    def resolve_delivery_context(self, method: str, overrides: dict = None) -> dict:
+        """
+        Centralized resolver for outbound configurations. Dynamically evaluates
+        route-specific overrides against global fallbacks and secure vault bindings.
+        """
+        if overrides is None: overrides = {}
+        ctx = {}
+
+        if method == "pushover":
+            # 1. Resolve Identity and Vault Tokens dynamically
+            t_val = overrides.get("token")
+            if not t_val or t_val == "••••••••": t_val = self.pushover.get("token", "")
+            ctx["token"] = self.vault.get("app", {}).get(t_val, t_val)
+
+            u_val = overrides.get("user")
+            if not u_val or u_val == "••••••••": u_val = self.pushover.get("user", "")
+            ctx["user"] = self.vault.get("user", {}).get(u_val, u_val)
+
+            # 2. Extract and sanitize Pushover API parameters
+            for p in ["device", "sound", "url", "url_title", "priority", "ttl", "tags", "retry", "expire"]:
+                val = overrides.get(p)
+                if val is None or val == "":
+                    val = self.pushover.get(p)
+                if val is not None and val != "":
+                    if p == "url": val = str(val)[:MAX_URL_CHARS]
+                    if p == "url_title": val = str(val)[:MAX_URL_TITLE_CHARS]
+                    ctx[p] = val
+
+            # 3. Resolve Structural Delivery Flags
+            fp = overrides.get("force_plaintext")
+            if fp is None: fp = self.pushover.get("force_plaintext", False)
+            ctx["force_plaintext"] = fp
+
+            route_disable_att = overrides.get("disable_attachments")
+            if route_disable_att is not None:
+                ctx["attachments"] = not route_disable_att
+            else:
+                ctx["attachments"] = self.pushover.get("attachments", True)
+
+        elif method == "smarthost":
+            # 1. Resolve Smarthost Target
+            alias = overrides.get("smarthost_alias")
+            sh_conf = self.smarthost.get("aliases", {}).get(alias)
+
+            if not sh_conf:
+                alias = self.smarthost.get("globals", {}).get("alias")
+                sh_conf = self.smarthost.get("aliases", {}).get(alias, {})
+
+            ctx["_resolved_alias"] = alias
+            ctx["is_valid"] = bool(sh_conf)
+
+            if sh_conf:
+                # Merge Base Configuration
+                ctx.update(sh_conf)
+
+                # Bind Vault Credentials
+                if sh_conf.get("auth"):
+                    ctx["password"] = self.vault.get("smarthost", {}).get(alias, "")
+
+                # 2. Resolve Structural Delivery Flags
+                g_smarthost = self.smarthost.get("globals", {})
+
+                fp = overrides.get("force_plaintext")
+                if fp is None: fp = sh_conf.get("force_plaintext")
+                if fp is None: fp = g_smarthost.get("force_plaintext", False)
+                ctx["force_plaintext"] = fp
+
+                route_disable_att = overrides.get("disable_attachments")
+                if route_disable_att is not None:
+                    ctx["attachments"] = not route_disable_att
+                else:
+                    sh_disable_att = sh_conf.get("disable_attachments")
+                    if sh_disable_att is not None:
+                        ctx["attachments"] = not sh_disable_att
+                    else:
+                        ctx["attachments"] = g_smarthost.get("attachments", True)
+
+        return ctx
+
 def _execute_unified_snapshot(state, config_path):
     """
     Creates a unified backup frame bundling both the config and vault data structures.
