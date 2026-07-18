@@ -172,8 +172,7 @@ openListenerModal(mode, idx=null) {
         this.modals.listener.initOpen('add', { idx: null, ip: '0.0.0.0', port: 25, hostname: '' });
     } else {
         const l = this.smtp.listeners[idx];
-        let ip = '0.0.0.0'; let port = 25;
-        if(l.bind && l.bind.includes(':')) { const parts = l.bind.split(':'); ip = parts[0]; port = parseInt(parts[1]); }
+        const { ip, port } = this.parseBindString(l.bind, 25);
         this.modals.listener.initOpen('edit', {
             idx: idx, ip: ip, port: port, hostname: l.hostname || '',
             starttls: l.starttls === true, proxy_protocol: l.proxy_protocol === true,
@@ -218,8 +217,7 @@ openUiListenerModal(mode, idx=null) {
         this.modals.uiListener.initOpen('add', { idx: null, ip: '0.0.0.0', port: 8443 });
     } else {
         const l = this.uiListeners[idx];
-        let ip = '0.0.0.0'; let port = 8443;
-        if(l.bind && l.bind.includes(':')) { const parts = l.bind.split(':'); ip = parts[0]; port = parseInt(parts[1]); }
+        const { ip, port } = this.parseBindString(l.bind, 8443);
         this.modals.uiListener.initOpen('edit', {
             idx: idx, ip: ip, port: port, https: l.https === true, tls_cert: l.tls_cert || '', tls_key: l.tls_key || ''
         });
@@ -264,7 +262,7 @@ deleteUiListener(idx) {
     }
 
     const targetListener = this.uiListeners[idx];
-    const bindPort = targetListener.bind.includes(':') ? targetListener.bind.split(':')[1] : '8443';
+    const { port: bindPort } = this.parseBindString(targetListener.bind, 8443);
 
     if (parseInt(bindPort) === this.activeUiPort && this.activeUiPort > 0) {
         this.alertModal.title = 'Active Listener';

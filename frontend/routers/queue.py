@@ -9,6 +9,7 @@ from frontend.utils import get_active_config_path
 from core.config import SCRIPT_DIR, UI_CONFIG_FILE, load_clean_json
 from core.queue_store import get_queue_items, retry_queue_item, delete_queue_item, get_queue_item_raw
 from core.utils import safe_async_lifecycle
+from core.json_store import parse_bind_string
 
 router = APIRouter(prefix="/api/queue")
 
@@ -189,11 +190,13 @@ async def proxy_test_payload(request: Request):
         # 3. Randomly select an operational listener based on preference tiers
         selected_listener = random.choice(tls_listeners) if tls_listeners else random.choice(plain_listeners)
 
-        # Safely extract loopback address targets and ports
+        # Secure parsing extraction of loopback address targets and ports
         bind_str = selected_listener.get("bind", "127.0.0.1:25")
-        _, port_str = bind_str.rsplit(":", 1) if ":" in bind_str else ("127.0.0.1", "25")
-        target_port = int(port_str)
+        target_host, target_port = parse_bind_string(bind_str, 25)
         use_starttls = selected_listener.get("starttls", False)
+
+        # Force internal loopback connectivity to bypass outbound proxy routing bugs if array bound to 0.0.0.0 universally
+        connect_host = "127.0.0.1" if target_host in ("0.0.0.0", "") else target_host
 
         # 4. Generate our standardized test email object mapping seamlessly
         msg = build_test_email(data)
@@ -204,7 +207,7 @@ async def proxy_test_payload(request: Request):
             tls_ctx = ssl._create_unverified_context()
 
             smtp_client = aiosmtplib.SMTP(
-                hostname="127.0.0.1",
+                hostname=connect_host,
                 port=target_port,
                 use_tls=False,
                 start_tls=use_starttls,
@@ -218,4 +221,4 @@ async def proxy_test_payload(request: Request):
 
             return JSONResponse({"status": "ok"})
         except Exception as e:
-            return JSONResponse({"error": f"Failed to relay payload through local listener 127.0.0.1:{target_port}: {e}"}, status_code=500)
+            return JSONResponse({"error": f"Failed to relay payload through local listener {connect_host}:{target_port}: {e}"}, status_code=500)

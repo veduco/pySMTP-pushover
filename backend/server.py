@@ -2,7 +2,7 @@ import os
 import uuid
 import ssl
 import hashlib
-from core.json_store import generate_self_signed_certificate
+from core.json_store import generate_self_signed_certificate, parse_bind_string
 
 def file_contains_private_key(filepath):
     try:
@@ -30,8 +30,12 @@ def get_tls_context(listener_conf, fallback_hostname):
 
     if not files_ok:
         hostname = fallback_hostname or str(uuid.uuid4())
+
+        # Eliminate inline split slicing to construct secure internal file strings
         bind_address = listener_conf.get("bind", "0.0.0.0:25")
-        safe_bind = bind_address.replace(":", "_")
+        host, port = parse_bind_string(bind_address, 25)
+        safe_bind = f"{host}_{port}"
+
         cert_file, key_file = generate_self_signed_certificate(hostname, f"smtp_pushover_{safe_bind}")
 
     tls_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)

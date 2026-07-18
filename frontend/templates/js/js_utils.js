@@ -227,3 +227,14 @@ removeTrustProxyCidr(idx) {
     this.ui_trust_proxy_cidrs.splice(idx, 1);
     this.errors.uiTrustProxyCidr = '';
 },
+
+parseBindString(bindStr, defaultPort = 25) {
+    if (!bindStr) return { ip: '0.0.0.0', port: defaultPort };
+    const lastColon = bindStr.lastIndexOf(':');
+    if (lastColon !== -1) {
+        const ip = bindStr.substring(0, lastColon) || '0.0.0.0';
+        const port = parseInt(bindStr.substring(lastColon + 1), 10);
+        return { ip, port: isNaN(port) ? defaultPort : port };
+    }
+    return { ip: bindStr, port: defaultPort };
+},
