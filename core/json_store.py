@@ -82,6 +82,27 @@ def parse_bind_string(bind_str: str, default_port: int = 25):
         return address, int(port)
     return bind_str, default_port
 
+def is_valid_network_target(target: str, allow_cidr: bool = True) -> bool:
+    """
+    Validates if a target string is a valid IPv4/IPv6 address or CIDR block.
+    Centralizes validation logic between frontend UI form bindings and backend access definitions.
+    """
+    if not target:
+        return False
+
+    target = target.strip()
+    if target.lower() in ("localhost", "127.0.0.1", "::1"):
+        return True
+
+    try:
+        if allow_cidr and '/' in target:
+            ipaddress.ip_network(target, strict=False)
+        else:
+            ipaddress.ip_address(target)
+        return True
+    except ValueError:
+        return False
+
 def is_ip_allowed(client_ip: str, allowed_cidrs: list) -> bool:
     """
     Evaluates raw strings or subnet masks (e.g., '192.168.1.5', '10.0.0.0/24', 'localhost').

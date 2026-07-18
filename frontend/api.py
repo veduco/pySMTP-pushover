@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from frontend.state import app_state
 from frontend.routers import queue, ui
 from core.config import UI_CONFIG_FILE, load_clean_json
-from core.json_store import is_ip_allowed
+from core.json_store import is_ip_allowed, is_valid_network_target
 
 # Silence urllib3 warnings against backend self-signed proxy certs
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -88,11 +88,22 @@ async def access_log_middleware(request: Request, call_next):
 
     response = await call_next(request)
     path = request.url.path
-    if path not in ["/healthcheck", "/api/queue", "/api/queue/stream"]:
+    if path not in ["/healthcheck", "/api/queue", "/api/queue/stream", "/api/validate/network"]:
         http_version = request.scope.get("http_version", "1.1")
         query = f"?{request.url.query}" if request.url.query else ""
         logging.info(f'{real_ip} - "{request.method} {path}{query} HTTP/{http_version}" {response.status_code}')
     return response
+
+@app.post("/api/validate/network")
+async def validate_network_target(request: Request):
+    try:
+        data = await request.json()
+        target = data.get("target", "")
+        allow_cidr = data.get("allow_cidr", True)
+        is_valid = is_valid_network_target(target, allow_cidr)
+        return JSONResponse({"valid": is_valid})
+    except Exception:
+        return JSONResponse({"valid": False}, status_code=400)
 
 @app.api_route("/healthcheck", methods=["GET", "HEAD"])
 async def healthcheck_endpoint(request: Request): return {"status": "healthy"}
