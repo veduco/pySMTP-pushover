@@ -8,12 +8,7 @@ getLogLevelColor(level) {
         default: return 'var(--primary-color)';
     }
 },
-isValidIP(ip) {
-    if (ip === 'localhost') return true;
-    const ipv4 = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-    const ipv6 = /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:))$/;
-    return ipv4.test(ip) || ipv6.test(ip);
-},
+
 changeDefaultRoute(e) {
     const val = e.target.value;
     if (val === 'smarthost') {
@@ -33,6 +28,7 @@ changeDefaultRoute(e) {
     }
     this.smtp.default_route = val;
 },
+
 formatTime(epoch) {
     if(!epoch) return "Never";
     const d = new Date(epoch * 1000);
@@ -54,10 +50,12 @@ formatTime(epoch) {
     }
     return this.executeAbsoluteFormat(d);
 },
+
 getFullTime(epoch) {
     if(!epoch) return "";
     return this.executeAbsoluteFormat(new Date(epoch * 1000));
 },
+
 executeAbsoluteFormat(d) {
     const pad = num => String(num).padStart(2, '0');
     const t_str = d.toLocaleString("en-US", { timeZone: this.ui_tz });
@@ -81,6 +79,7 @@ executeAbsoluteFormat(d) {
     }
     return `${yyyy}-${mm}-${dd} ${pad(hh)}:${min}:${ss}`;
 },
+
 checkTimezone() {
     if (this.ui_tz && !this.validTimezones.includes(this.ui_tz)) {
         this.tzError = 'Please select a valid timezone location from the list.';
@@ -89,49 +88,62 @@ checkTimezone() {
     this.tzError = '';
     return true;
 },
+
 clone(targetObj) {
     if (!targetObj) return {};
     return JSON.parse(JSON.stringify(targetObj));
 },
-isValidIPOrCIDR(val) {
-    if (val === 'localhost') return true;
-    // Validates standard IPv4 and IPv4 CIDR blocks
-    const ipv4 = /^(25[0-5]|2[0-4]\d|[01]?\d\d?)\.(25[0-5]|2[0-4]\d|[01]?\d\d?)\.(25[0-5]|2[0-4]\d|[01]?\d\d?)\.(25[0-5]|2[0-4]\d|[01]?\d\d?)(\/([0-9]|[1-2][0-9]|3[0-2]))?$/;
-    // Validates standard IPv6 and IPv6 CIDR blocks
-    const ipv6 = /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:))(\/([0-9]|[1-9][0-9]|1[0-1][0-9]|12[0-8]))?$/;
 
-    return ipv4.test(val) || ipv6.test(val);
+_isValidNetworkTarget(val, allowCidr) {
+    if (val === 'localhost') return true;
+
+    if (allowCidr) {
+        const ipv4 = /^(25[0-5]|2[0-4]\d|[01]?\d\d?)\.(25[0-5]|2[0-4]\d|[01]?\d\d?)\.(25[0-5]|2[0-4]\d|[01]?\d\d?)\.(25[0-5]|2[0-4]\d|[01]?\d\d?)(\/([0-9]|[1-2][0-9]|3[0-2]))?$/;
+        const ipv6 = /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:))(\/([0-9]|[1-9][0-9]|1[0-1][0-9]|12[0-8]))?$/;
+        return ipv4.test(val) || ipv6.test(val);
+    } else {
+        const ipv4 = /^(25[0-5]|2[0-4]\d|[01]?\d\d?)\.(25[0-5]|2[0-4]\d|[01]?\d\d?)\.(25[0-5]|2[0-4]\d|[01]?\d\d?)\.(25[0-5]|2[0-4]\d|[01]?\d\d?)$/;
+        const ipv6 = /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:))$/;
+        return ipv4.test(val) || ipv6.test(val);
+    }
+},
+
+isValidIP(ip) {
+    return this._isValidNetworkTarget(ip, false);
+},
+
+isValidIPOrCIDR(val) {
+    return this._isValidNetworkTarget(val, true);
+},
+
+_validateCidrList(lines) {
+    for (let line of lines) {
+        if (!this._isValidNetworkTarget(line, true)) {
+            return `Invalid IP or CIDR Subnet: ${line}`;
+        }
+    }
+    return '';
 },
 
 validateSmtpCidrs() {
     const lines = this.smtp_cidrs_text.split('\n').map(l => l.trim()).filter(l => l);
-    for (let line of lines) {
-        if (!this.isValidIPOrCIDR(line)) {
-            this.smtpCidrError = `Invalid IP or CIDR Subnet: ${line}`;
-            return false;
-        }
-    }
-    this.smtpCidrError = '';
-    return true;
+    this.smtpCidrError = this._validateCidrList(lines);
+    return !this.smtpCidrError;
 },
+
 validateUiCidrs() {
     const lines = this.ui_allowed_cidrs_text.split('\n').map(l => l.trim()).filter(l => l);
-    for (let line of lines) {
-        if (!this.isValidIPOrCIDR(line)) {
-            this.uiCidrError = `Invalid IP or CIDR Subnet: ${line}`;
-            return false;
-        }
-    }
-    this.uiCidrError = '';
-    return true;
+    this.uiCidrError = this._validateCidrList(lines);
+    return !this.uiCidrError;
 },
+
 addTrustProxyCidr() {
     const val = this.uiTrustProxyCidrInput.trim();
     if (!val) {
         this.uiTrustProxyCidrError = '';
         return;
     }
-    if (!this.isValidIPOrCIDR(val)) {
+    if (!this._isValidNetworkTarget(val, true)) {
         this.uiTrustProxyCidrError = `Invalid IP or CIDR Subnet: ${val}`;
         return;
     }
@@ -144,6 +156,7 @@ addTrustProxyCidr() {
     this.uiTrustProxyCidrInput = '';
     this.uiTrustProxyCidrError = '';
 },
+
 removeTrustProxyCidr(idx) {
     this.ui_trust_proxy_cidrs.splice(idx, 1);
     this.uiTrustProxyCidrError = '';
