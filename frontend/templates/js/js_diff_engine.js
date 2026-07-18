@@ -171,7 +171,19 @@ prepareVaultPayload() {
     });
 },
 
-formatDiffValue(val) {
+formatDiffValue(val, path = '', op = 'replace') {
+    if (op === 'remove') return '[Deleted]';
+
+    // Declarative Vault masking enforcement
+    if (this.isPathSensitive(path)) {
+        const allAliases = [...(this.vaultAppAliases || []), ...(this.vaultUserAliases || [])];
+        const isAlias = typeof val === 'string' && allAliases.includes(val);
+        if (val && val !== '') {
+            return isAlias ? `[Alias] ${val}` : '••••••••';
+        }
+        return 'None';
+    }
+
     if (val === null || val === undefined) return 'None';
     if (typeof val === 'boolean') return val ? 'True' : 'False';
     if (Array.isArray(val) && val.length === 0) return 'None';
@@ -258,27 +270,15 @@ requestSave(formId) {
         }
     }
 
-    // Translate raw generic patches down into the highly contextual UI table variables seamlessly
+    // Consolidated patch routing formatting
     for (const patch of rawPatches) {
-        let displayOld = patch.oldValue;
-        let displayNew = patch.value;
-
-        if (this.isPathSensitive(patch.path)) {
-            const allAliases = [...(this.vaultAppAliases || []), ...(this.vaultUserAliases || [])];
-            const oldIsAlias = typeof displayOld === 'string' && allAliases.includes(displayOld);
-            const newIsAlias = typeof displayNew === 'string' && allAliases.includes(displayNew);
-
-            displayOld = (displayOld && displayOld !== '') ? (oldIsAlias ? `[Alias] ${displayOld}` : '••••••••') : 'None';
-            displayNew = (displayNew && displayNew !== '') ? (newIsAlias ? `[Alias] ${displayNew}` : '••••••••') : 'None';
-        }
-
         this.diffModal.changes.push({
             op: patch.op,
             path: patch.path,
-            key: patch.path, // Ensures backward compatibility with html array looping binds
+            key: patch.path,
             humanLabel: this.translatePatchToHuman(patch),
-            old: this.formatDiffValue(displayOld),
-            new: patch.op === 'remove' ? '[Deleted]' : this.formatDiffValue(displayNew),
+            old: this.formatDiffValue(patch.oldValue, patch.path, 'replace'),
+            new: this.formatDiffValue(patch.value, patch.path, patch.op),
             originalValue: patch.oldValue
         });
     }
@@ -301,6 +301,57 @@ confirmSave() {
     this.diffModal.open = false;
     const f = document.getElementById(this.diffModal.targetForm);
     if (f) htmx.trigger(f, 'submit');
+},
+
+// Declarative mapping schema for UI structural reversions
+_schemaRestoreMaps: {
+    ui: {
+        backend_mode: { prop: 'ui_backend_remote', coerce: v => v === 'remote' },
+        local_config_path: { prop: 'ui_local_config_path', fallback: 'config.json' },
+        remote_url: { prop: 'ui_remote_url', fallback: '' },
+        remote_secret: { prop: 'ui_remote_secret', fallback: '' },
+        remote_verify_tls: { prop: 'ui_remote_verify_tls', coerce: v => v === true },
+        ui_loglevel: { prop: 'ui_loglevel', fallback: 'INFO' },
+        timezone: { prop: 'ui_tz', fallback: 'UTC' },
+        date_format: { prop: 'ui_fmt', fallback: 'YYYY-MM-DD HH:mm:ss' },
+        relative_time: { prop: 'ui_relative', coerce: v => v === true },
+        expand_adv: { prop: 'ui_expand_adv', coerce: v => v === true },
+        trust_proxy: { prop: 'ui_trust_proxy', coerce: v => v === true },
+        trust_proxy_cidrs: { prop: 'ui_trust_proxy_cidrs', isArray: true },
+        allowed_cidrs: { prop: 'ui_allowed_cidrs', isArray: true },
+        vault_sort: { prop: 'ui_vault_sort', fallback: 'name_asc' },
+        smtp_sort: { prop: 'ui_smtp_sort', fallback: 'name_asc' },
+        smarthost_sort: { prop: 'ui_smarthost_sort', fallback: 'alias_asc' }
+    },
+    pushover: {
+        attachments: { prop: 'disable_attachments', target: 'pushGlobals', coerce: v => v === false },
+        '*': { target: 'pushGlobals', fallback: '' }
+    },
+    smarthost_globals: {
+        alias: { prop: 'alias', target: 'smartGlobals', fallback: '' },
+        force_plaintext: { prop: 'force_plaintext', target: 'smartGlobals', coerce: v => v === true },
+        attachments: { prop: 'disable_attachments', target: 'smartGlobals', coerce: v => v === false }
+    }
+},
+
+_applySchemaRestore(domain, key, val) {
+    const mapGroup = this._schemaRestoreMaps[domain];
+    if (!mapGroup) return false;
+
+    let rule = mapGroup[key] || mapGroup['*'];
+    if (!rule) return false;
+
+    const targetObj = rule.target ? this[rule.target] : this;
+    const targetProp = rule.prop || key;
+
+    if (rule.coerce) {
+        targetObj[targetProp] = rule.coerce(val);
+    } else if (rule.isArray) {
+        targetObj[targetProp] = Array.isArray(val) ? this._deepClone(val) : [];
+    } else {
+        targetObj[targetProp] = val !== undefined && val !== null ? val : rule.fallback;
+    }
+    return true;
 },
 
 revertChange(idx) {
@@ -351,38 +402,20 @@ revertChange(idx) {
         isComplexReset = true;
     }
 
-    // 2. Simple Scalar Inverse Patches (Primitive property mapping via target translation)
+    // 2. Simple Scalar Inverse Patches routed via Schema Dict Evaluation
     if (!isComplexReset) {
         const segments = path.split('/').filter(Boolean).map(s => s.replace(/~1/g, '/'));
         const root = segments[0];
         const key = segments[segments.length - 1];
 
         if (root === 'ui') {
-            if (key === 'backend_mode') this.ui_backend_remote = (val === 'remote');
-            else if (key === 'local_config_path') this.ui_local_config_path = val || 'config.json';
-            else if (key === 'remote_url') this.ui_remote_url = val || '';
-            else if (key === 'remote_secret') this.ui_remote_secret = val || '';
-            else if (key === 'remote_verify_tls') this.ui_remote_verify_tls = (val === true);
-            else if (key === 'ui_loglevel') this.ui_loglevel = val || 'INFO';
-            else if (key === 'timezone') this.ui_tz = val || 'UTC';
-            else if (key === 'date_format') this.ui_fmt = val || 'YYYY-MM-DD HH:mm:ss';
-            else if (key === 'relative_time') this.ui_relative = (val === true);
-            else if (key === 'expand_adv') this.ui_expand_adv = (val === true);
-            else if (key === 'trust_proxy') this.ui_trust_proxy = (val === true);
-            else if (key === 'trust_proxy_cidrs') this.ui_trust_proxy_cidrs = Array.isArray(val) ? this._deepClone(val) : [];
-            else if (key === 'allowed_cidrs') this.ui_allowed_cidrs = Array.isArray(val) ? this._deepClone(val) : [];
-            else if (key === 'vault_sort') this.ui_vault_sort = val || 'name_asc';
-            else if (key === 'smtp_sort') this.ui_smtp_sort = val || 'name_asc';
-            else if (key === 'smarthost_sort') this.ui_smarthost_sort = val || 'alias_asc';
+            this._applySchemaRestore('ui', key, val);
         } else if (root === 'smtp') {
             this.smtp[key] = (typeof val === 'object' && val !== null) ? this._deepClone(val) : val;
         } else if (root === 'pushover') {
-            if (key === 'attachments') this.pushGlobals.disable_attachments = (val === false); // Un-invert
-            else this.pushGlobals[key] = val !== undefined ? val : '';
+            this._applySchemaRestore('pushover', key, val);
         } else if (root === 'smarthost' && segments[1] === 'globals') {
-            if (key === 'alias') this.smartGlobals.alias = val || '';
-            if (key === 'force_plaintext') this.smartGlobals.force_plaintext = (val === true);
-            if (key === 'attachments') this.smartGlobals.disable_attachments = (val === false); // Un-invert
+            this._applySchemaRestore('smarthost_globals', key, val);
         }
 
         const patchIndex = this.diffModal.changes.findIndex(c => c.path === path);
@@ -408,28 +441,15 @@ resetTab(tabContext) {
     if (!this.snapshots) return;
     const backup = this._deepClone(this.initialState);
 
+    // Schema-driven hydration mapping clears all raw hardcoded parameter logic
     if (tabContext === 'ui' || tabContext === 'backend') {
         const uiObj = backup.ui || {};
-        this.ui_backend_remote = uiObj.backend_mode === 'remote';
-        this.ui_local_config_path = uiObj.local_config_path || 'config.json';
-        this.ui_remote_url = uiObj.remote_url || '';
-        this.ui_remote_secret = uiObj.remote_secret || '';
-        this.ui_remote_verify_tls = uiObj.remote_verify_tls === true;
-        this.ui_loglevel = uiObj.ui_loglevel || 'INFO';
-        this.ui_tz = uiObj.timezone || 'UTC';
-        this.ui_fmt = uiObj.date_format || 'YYYY-MM-DD HH:mm:ss';
-        this.ui_relative = uiObj.relative_time === true;
-        this.ui_expand_adv = uiObj.expand_adv === true;
-        this.ui_trust_proxy = uiObj.trust_proxy === true;
-        this.ui_trust_proxy_cidrs = this._deepClone(uiObj.trust_proxy_cidrs || []);
+        Object.keys(this._schemaRestoreMaps.ui).forEach(k => this._applySchemaRestore('ui', k, uiObj[k]));
+
+        this.uiListeners = this._deepClone(uiObj.listeners || []);
         this.uiTrustProxyCidrInput = '';
         this.uiTrustProxyCidrError = '';
-        this.ui_vault_sort = uiObj.vault_sort || 'name_asc';
-        this.ui_smtp_sort = uiObj.smtp_sort || 'name_asc';
-        this.ui_smarthost_sort = uiObj.smarthost_sort || 'alias_asc';
-        this.uiListeners = this._deepClone(uiObj.listeners || []);
         this.tzError = false;
-        this.ui_allowed_cidrs = this._deepClone(uiObj.allowed_cidrs || []);
         this.uiCidrInput = '';
         this.uiCidrError = '';
     }
