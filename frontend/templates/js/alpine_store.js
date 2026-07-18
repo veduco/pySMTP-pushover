@@ -85,7 +85,7 @@ document.addEventListener('alpine:init', () => {
 
                 this.smarthosts = this.rawConfig.smarthost?.aliases || {};
                 const sg = this.rawConfig.smarthost?.globals || {};
-                this.smartGlobals = { alias: sg.alias || '', force_plaintext: sg.force_plaintext === true, disable_attachments: sg.disable_attachments === true };
+                this.smartGlobals = { alias: sg.alias || '', force_plaintext: sg.force_plaintext === true, disable_attachments: (sg.attachments === false) };
 
                 const routes = this.rawConfig.routes || {};
 

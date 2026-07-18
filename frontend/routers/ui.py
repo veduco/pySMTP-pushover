@@ -16,10 +16,18 @@ templates = Jinja2Templates(directory=[HTML_DIR, JS_DIR])
 
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    ui_config = load_clean_json(UI_CONFIG_FILE)
-    # Feed the global HTTP client into the ConfigManager wrapper
-    manager = ConfigManager(ui_config, http_client=request.state.http_client)
+    # Load Source of Truth Schema to establish runtime defaults dynamically
+    schema_path = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "..", "core", "schema.json")
+    schema = load_clean_json(schema_path)
+    ui_schema_defaults = schema.get("ui_config", {})
 
+    ui_config = load_clean_json(UI_CONFIG_FILE)
+
+    # Safely merge defaults into actual payload
+    safe_ui_config = {**ui_schema_defaults, **ui_config}
+
+    # Feed the global HTTP client into the ConfigManager wrapper
+    manager = ConfigManager(safe_ui_config, http_client=request.state.http_client)
     config, vault_data, smtp_meta, config_ok = await manager.get_config()
 
     # Safely guarantee the dictionary exists
@@ -36,21 +44,19 @@ async def index(request: Request):
                 epoch_val = obj.get("epoch", 0) if isinstance(obj, dict) else 0
                 safe_vault_meta[vtype][alias] = epoch_val
 
-    safe_ui_config = ui_config.copy()
-
     # Extract the true physical socket port receiving this request behind any proxies
     server_scope = request.scope.get("server")
     active_ui_port = server_scope[1] if server_scope and len(server_scope) > 1 else 0
 
     return templates.TemplateResponse("index.html", {
-        "request": request, "config_json": json.dumps(config), "smtp_meta_json": json.dumps(smtp_meta),
-        "vault_meta_json": json.dumps(safe_vault_meta), "ui_config_json": json.dumps(safe_ui_config),
-        "config_ok": config_ok, "backend_mode": manager.bmode,
-        "ui_expand_adv": safe_ui_config.get("expand_adv", False), "ui_vault_sort": safe_ui_config.get("vault_sort", "name_asc"),
-        "ui_smtp_sort": safe_ui_config.get("smtp_sort", "name_asc"), "ui_smarthost_sort": safe_ui_config.get("smarthost_sort", "alias_asc"),
-        "ui_tz": safe_ui_config.get("timezone", "UTC"), "ui_fmt": safe_ui_config.get("date_format", "YYYY-MM-DD HH:mm:ss"),
-        "ui_relative": safe_ui_config.get("relative_time", True), "ui_loglevel": safe_ui_config.get("ui_loglevel", "INFO"),
-        "ui_trust_proxy": safe_ui_config.get("trust_proxy", True),
+        "request": request,
+        "schema_json": json.dumps(schema),
+        "config_json": json.dumps(config),
+        "smtp_meta_json": json.dumps(smtp_meta),
+        "vault_meta_json": json.dumps(safe_vault_meta),
+        "ui_config_json": json.dumps(safe_ui_config),
+        "config_ok": config_ok,
+        "backend_mode": manager.bmode,
         "active_ui_port": active_ui_port
     })
 
@@ -102,7 +108,7 @@ async def save_ui(
     ui_loglevel: str = Form("INFO"), ui_listeners_json: str = Form("[]"),
     backend_mode: str = Form("local"), remote_url: str = Form(""), remote_secret: str = Form(""),
     local_config_path: str = Form(""), remote_verify_tls: bool = Form(False),
-    ui_allowed_cidrs_text: str = Form(""),
+    ui_allowed_cidrs_json: str = Form("[]"),
     trust_proxy_cidrs_json: str = Form("[]")
 ):
     try: listeners = json.loads(ui_listeners_json)
@@ -111,7 +117,8 @@ async def save_ui(
     try: trust_proxy_cidrs = json.loads(trust_proxy_cidrs_json)
     except Exception: trust_proxy_cidrs = []
 
-    ui_cidrs = [line.strip() for line in ui_allowed_cidrs_text.splitlines() if line.strip()]
+    try: ui_cidrs = json.loads(ui_allowed_cidrs_json)
+    except Exception: ui_cidrs = []
 
     save_json(UI_CONFIG_FILE, {
         "listeners": listeners, "timezone": timezone, "date_format": date_format,

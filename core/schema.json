@@ -1,0 +1,46 @@
+{
+  "gateway_config": {
+    "smtp": {
+      "queue_dir": "data/queue",
+      "max_retry_backoff": 21600,
+      "loglevel": "INFO",
+      "default_route": "pushover",
+      "disable_persistence": false,
+      "max_backups": 50,
+      "listeners": [{"bind": "0.0.0.0:25", "starttls": false, "proxy_protocol": false}],
+      "auth": {},
+      "allowed_cidrs": []
+    },
+    "pushover": {
+      "attachments": true,
+      "force_plaintext": false
+    },
+    "smarthost": {
+      "globals": {
+        "force_plaintext": false,
+        "attachments": true
+      },
+      "aliases": {}
+    },
+    "routes": {}
+  },
+  "ui_config": {
+    "timezone": "UTC",
+    "date_format": "YYYY-MM-DD HH:mm:ss",
+    "relative_time": true,
+    "expand_adv": false,
+    "trust_proxy": false,
+    "vault_sort": "name_asc",
+    "smtp_sort": "name_asc",
+    "smarthost_sort": "alias_asc",
+    "ui_loglevel": "INFO",
+    "backend_mode": "local",
+    "local_config_path": "",
+    "remote_url": "",
+    "remote_secret": "",
+    "remote_verify_tls": false,
+    "allowed_cidrs": [],
+    "trust_proxy_cidrs": [],
+    "listeners": [{"bind": "0.0.0.0:8443", "https": true}]
+  }
+}

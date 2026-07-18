@@ -12,6 +12,8 @@ from core.json_store import *
 # Unified standard in-memory config cache for UI processes
 _UI_CONFIG_CACHE = None
 
+SCHEMA_FILE = os.path.join(SCRIPT_DIR, "schema.json")
+
 def get_cached_ui_config(force_refresh=False):
     """Serves the UI configuration from RAM, falling back to disk read on cache miss."""
     global _UI_CONFIG_CACHE
@@ -117,27 +119,28 @@ def load_config(ignore_missing=False):
     if not os.path.exists(CONFIG_FILE) and not ignore_missing:
         return None
 
+    # Load Source of Truth schema to inject missing default structures
+    schema = load_clean_json(SCHEMA_FILE).get("gateway_config", {})
+
     data = load_clean_json(CONFIG_FILE)
     state = AppState(CONFIG_FILE)
 
-    # Store the pristine disk read into memory immediately
+    # Store the pristine disk read immediately
     state.raw_config = data
 
-    # 1. Normalize and hard-set SMTP Core parameters immediately
+    # 1. Normalize and hard-set SMTP Core parameters immediately from Schema
     state.smtp = data.get("smtp", {})
-    state.smtp["queue_dir"] = state.smtp.get("queue_dir", "data/queue")
-    state.smtp["max_retry_backoff"] = int(state.smtp.get("max_retry_backoff", 21600))
-    state.smtp["loglevel"] = state.smtp.get("loglevel", "INFO")
-    state.smtp["default_route"] = state.smtp.get("default_route", "pushover")
-    state.smtp["listeners"] = state.smtp.get("listeners", [{"bind": "0.0.0.0:25", "starttls": False, "proxy_protocol": False}])
-    state.smtp["auth"] = state.smtp.get("auth", {})
-    state.smtp["max_backups"] = int(state.smtp.get("max_backups", 50))
+    for k, v in schema.get("smtp", {}).items():
+        state.smtp.setdefault(k, v)
 
-    # 2. Extract Pushover and Smarthost structures natively
+    # 2. Extract Pushover and Smarthost structures natively from Schema
     state.pushover = data.get("pushover", {})
+    for k, v in schema.get("pushover", {}).items():
+        state.pushover.setdefault(k, v)
+
     state.smarthost = data.get("smarthost", {})
-    if "globals" not in state.smarthost: state.smarthost["globals"] = {}
-    if "aliases" not in state.smarthost: state.smarthost["aliases"] = {}
+    state.smarthost.setdefault("globals", schema.get("smarthost", {}).get("globals", {}))
+    state.smarthost.setdefault("aliases", schema.get("smarthost", {}).get("aliases", {}))
 
     # 3. Resolve cryptographic vault parameters securely
     v_path = state.smtp.get("vault_file")
@@ -159,7 +162,6 @@ def load_config(ignore_missing=False):
         match_type = route.get("match", "to").lower()
         method = route.get("method", "pushover").lower()
 
-
         is_regex = key.lower().startswith("regex:")
         actual_key = key[6:] if is_regex else key.lower()
 
@@ -172,7 +174,6 @@ def load_config(ignore_missing=False):
         else:
             if match_type in ["to", "both"]: state.mappings["to"][actual_key] = route
             if match_type in ["from", "both"]: state.mappings["from"][actual_key] = route
-
 
     # 5. Schema verification pass successful. Fire unified semantic data backup check.
     _execute_unified_snapshot(state)

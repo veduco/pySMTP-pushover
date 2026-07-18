@@ -183,7 +183,7 @@ class PushoverSMTPHandler:
             else:
                 sh_disable_att = sh_conf.get("disable_attachments")
                 if sh_disable_att is not None: attachments_enabled = not sh_disable_att
-                else: attachments_enabled = not g_smarthost.get("disable_attachments", False)
+                else: attachments_enabled = g_smarthost.get("attachments", True)
 
         return force_pt, attachments_enabled
 

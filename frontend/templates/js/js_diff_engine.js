@@ -75,6 +75,7 @@ translatePatchToHuman(patchItem) {
         'trust_proxy_cidrs': 'Trusted Proxy CIDRs',
         'allowed_cidrs': 'Allowed IPs/CIDRs',
         'disable_attachments': 'Disable Attachments',
+        'attachments': 'Enable Attachments',
         'force_plaintext': 'Force Plaintext'
     };
 
@@ -124,11 +125,18 @@ preparePayload() {
         smtp: this._deepClone(this.smtp),
         pushover: { ...this.pushGlobals },
         smarthost: {
-            globals: { ...this.smartGlobals },
+            globals: {
+                alias: this.smartGlobals.alias || '',
+                force_plaintext: this.smartGlobals.force_plaintext === true,
+                attachments: !this.smartGlobals.disable_attachments // Map UI inverse to Schema
+            },
             aliases: this._deepClone(this.smarthosts)
         },
         routes: {}
     };
+
+    payload.pushover.attachments = !payload.pushover.disable_attachments;
+    delete payload.pushover.disable_attachments;
 
     delete payload.pushover._isTokenAlias; delete payload.pushover._tokenAliasVal; delete payload.pushover._tokenRaw; delete payload.pushover._showToken;
     delete payload.pushover._isUserAlias; delete payload.pushover._userAliasVal; delete payload.pushover._userRaw; delete payload.pushover._showUser;
@@ -366,12 +374,12 @@ revertChange(idx) {
         } else if (root === 'smtp') {
             this.smtp[key] = (typeof val === 'object' && val !== null) ? this._deepClone(val) : val;
         } else if (root === 'pushover') {
-            if (key === 'attachments') this.pushGlobals.disable_attachments = (val === false);
+            if (key === 'attachments') this.pushGlobals.disable_attachments = (val === false); // Un-invert
             else this.pushGlobals[key] = val !== undefined ? val : '';
         } else if (root === 'smarthost' && segments[1] === 'globals') {
             if (key === 'alias') this.smartGlobals.alias = val || '';
             if (key === 'force_plaintext') this.smartGlobals.force_plaintext = (val === true);
-            if (key === 'disable_attachments') this.smartGlobals.disable_attachments = (val === true);
+            if (key === 'attachments') this.smartGlobals.disable_attachments = (val === false); // Un-invert
         }
 
         const patchIndex = this.diffModal.changes.findIndex(c => c.path === path);

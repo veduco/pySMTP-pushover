@@ -17,26 +17,27 @@
     }
 </style>
 
-<form id="ui_form" onsubmit="event.preventDefault();" hx-post="/save/ui" hx-trigger="confirmedSave" hx-target="#status" @htmx:config-request.camel="$event.detail.parameters['ui_listeners_json'] = JSON.stringify(uiListeners);">
-
-    <input type="hidden" name="timezone" :value="ui_tz">
-    <input type="hidden" name="date_format" :value="ui_fmt">
-    <input type="hidden" name="relative_time" :value="ui_relative">
-    <input type="hidden" name="expand_adv" :value="ui_expand_adv">
-    <input type="hidden" name="vault_sort" :value="ui_vault_sort">
-    <input type="hidden" name="smtp_sort" :value="ui_smtp_sort">
-    <input type="hidden" name="smarthost_sort" :value="ui_smarthost_sort">
-    <input type="hidden" name="ui_loglevel" :value="ui_loglevel">
-    <input type="hidden" name="trust_proxy" :value="ui_trust_proxy">
-
-    <input type="hidden" name="backend_mode" :value="ui_backend_remote ? 'remote' : 'local'">
-    <input type="hidden" name="remote_url" :value="ui_remote_url">
-    <input type="hidden" name="remote_secret" :value="ui_remote_secret">
-    <input type="hidden" name="local_config_path" :value="ui_local_config_path">
-    <input type="hidden" name="remote_verify_tls" :value="ui_remote_verify_tls">
-
-    <input type="hidden" name="ui_allowed_cidrs_json" :value="JSON.stringify(ui_allowed_cidrs)">
-    <input type="hidden" name="trust_proxy_cidrs_json" :value="JSON.stringify(ui_trust_proxy_cidrs)">
+<form id="ui_form" onsubmit="event.preventDefault();" hx-post="/save/ui" hx-trigger="confirmedSave" hx-target="#status" @htmx:config-request.camel="
+    Object.assign($event.detail.parameters, {
+        timezone: ui_tz,
+        date_format: ui_fmt,
+        relative_time: ui_relative,
+        expand_adv: ui_expand_adv,
+        vault_sort: ui_vault_sort,
+        smtp_sort: ui_smtp_sort,
+        smarthost_sort: ui_smarthost_sort,
+        ui_loglevel: ui_loglevel,
+        trust_proxy: ui_trust_proxy,
+        backend_mode: ui_backend_remote ? 'remote' : 'local',
+        remote_url: ui_remote_url,
+        remote_secret: ui_remote_secret,
+        local_config_path: ui_local_config_path,
+        remote_verify_tls: ui_remote_verify_tls,
+        ui_allowed_cidrs_json: JSON.stringify(ui_allowed_cidrs),
+        trust_proxy_cidrs_json: JSON.stringify(ui_trust_proxy_cidrs),
+        ui_listeners_json: JSON.stringify(uiListeners)
+    });
+">
 
     <div class="card">
         <h3>Web UI Display Settings</h3>
@@ -55,7 +56,7 @@
 
             <div class="flex-col" style="flex: 1; min-width: 200px; padding-bottom: 2px;">
                 <label>Display Timezone Location</label>
-                <input type="text" name="ui_tz_display" x-model="ui_tz" @blur="checkTimezone()" @input="tzError = ''" :class="tzError ? 'input-invalid' : ''" list="timezone-list" placeholder="Search timezone... e.g. America/New_York" autocomplete="off" style="width: 100%;">
+                <input type="text" x-model="ui_tz" @blur="checkTimezone()" @input="tzError = ''" :class="tzError ? 'input-invalid' : ''" list="timezone-list" placeholder="Search timezone... e.g. America/New_York" autocomplete="off" style="width: 100%;">
                 <span class="validation-error" x-show="tzError" x-text="tzError" style="display: none;"></span>
                 <datalist id="timezone-list">
                     <template x-for="tz in validTimezones" :key="tz"><option :value="tz"></option></template>
@@ -64,7 +65,6 @@
 
             <div class="flex-col" style="flex: 1; min-width: 200px;">
                 <label style="margin-bottom: 0.25rem;">Date Format Syntax</label>
-                <input type="hidden" name="date_format" x-model="ui_fmt">
                 <div class="segment-track" style="width: 100%; display: flex;">
                     <div class="segment-thumb" :style="'width: calc(33.333% - 2px); transform: translateX(' + (Math.max(0, ['YYYY-MM-DD HH:mm:ss','MM/DD/YYYY hh:mm:ss A','DD/MM/YYYY HH:mm:ss'].indexOf(ui_fmt)) * 100) + '%);'"></div>
                     <label class="segment-label compact" :style="ui_fmt === 'YYYY-MM-DD HH:mm:ss' ? 'color: white;' : 'color: var(--text-color); opacity: 0.7;'"><input type="radio" x-model="ui_fmt" value="YYYY-MM-DD HH:mm:ss"> ISO</label>
