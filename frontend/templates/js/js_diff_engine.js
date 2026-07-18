@@ -65,7 +65,8 @@ takeSnapshot() {
         backend_mode: this.ui_backend_remote ? 'remote' : 'local',
         local_config_path: this.ui_local_config_path, remote_url: this.ui_remote_url,
         remote_secret: this.ui_remote_secret, remote_verify_tls: this.ui_remote_verify_tls,
-        allowed_cidrs: JSON.parse(JSON.stringify(this.ui_allowed_cidrs))
+        allowed_cidrs: JSON.parse(JSON.stringify(this.ui_allowed_cidrs)),
+        trust_proxy_cidrs: JSON.parse(JSON.stringify(this.ui_trust_proxy_cidrs))
     };
 
     this.snapshots = {
@@ -82,7 +83,8 @@ takeSnapshot() {
             ui_relative: this.ui_relative, ui_expand_adv: this.ui_expand_adv, ui_trust_proxy: this.ui_trust_proxy,
             ui_vault_sort: this.ui_vault_sort, ui_smtp_sort: this.ui_smtp_sort, ui_smarthost_sort: this.ui_smarthost_sort,
             uiListeners: this.uiListeners,
-            ui_allowed_cidrs: this.ui_allowed_cidrs
+            ui_allowed_cidrs: this.ui_allowed_cidrs,
+            ui_trust_proxy_cidrs: this.ui_trust_proxy_cidrs
         })
     };
     this.initialState = JSON.parse(JSON.stringify({
@@ -109,7 +111,8 @@ requestSave(formId) {
         backend_mode: this.ui_backend_remote ? 'remote' : 'local',
         local_config_path: this.ui_local_config_path, remote_url: this.ui_remote_url,
         remote_secret: this.ui_remote_secret, remote_verify_tls: this.ui_remote_verify_tls,
-        allowed_cidrs: this.ui_allowed_cidrs
+        allowed_cidrs: this.ui_allowed_cidrs,
+        trust_proxy_cidrs: JSON.parse(JSON.stringify(this.ui_trust_proxy_cidrs))
     };
 
     const getDiffs = (obj1, obj2, path = '') => {
@@ -195,6 +198,9 @@ requestSave(formId) {
                             else if (key === 'relative_time') this.ui_relative = (val1 === true);
                             else if (key === 'expand_adv') this.ui_expand_adv = (val1 === true);
                             else if (key === 'trust_proxy') this.ui_trust_proxy = (val1 === true);
+                            else if (key === 'trust_proxy_cidrs') {
+                                this.ui_trust_proxy_cidrs = Array.isArray(val1) ? JSON.parse(JSON.stringify(val1)) : [];
+                            }
                             else if (key === 'allowed_cidrs') {
                                 this.ui_allowed_cidrs = Array.isArray(val1) ? JSON.parse(JSON.stringify(val1)) : [];
                                 this.ui_allowed_cidrs_text = this.ui_allowed_cidrs.join('\n');
@@ -371,6 +377,9 @@ resetTab(tabContext) {
         this.ui_relative = uiObj.relative_time === true;
         this.ui_expand_adv = uiObj.expand_adv === true;
         this.ui_trust_proxy = uiObj.trust_proxy === true;
+        this.ui_trust_proxy_cidrs = JSON.parse(JSON.stringify(uiObj.trust_proxy_cidrs || []));
+        this.uiTrustProxyCidrInput = '';
+        this.uiTrustProxyCidrError = '';
         this.ui_vault_sort = uiObj.vault_sort || 'name_asc';
         this.ui_smtp_sort = uiObj.smtp_sort || 'name_asc';
         this.ui_smarthost_sort = uiObj.smarthost_sort || 'alias_asc';

@@ -64,6 +64,10 @@ ui_allowed_cidrs: {{ ui_config_json | safe }}.allowed_cidrs || [],
 ui_allowed_cidrs_text: ({{ ui_config_json | safe }}.allowed_cidrs || []).join('\n'),
 smtp_cidrs_text: (({{ config_json | safe }} || {}).smtp?.allowed_cidrs || []).join('\n'),
 
+ui_trust_proxy_cidrs: ({{ ui_config_json | safe }}.trust_proxy_cidrs || []),
+uiTrustProxyCidrInput: '',
+uiTrustProxyCidrError: '',
+
 ui_tz: '{{ ui_tz }}', ui_fmt: '{{ ui_fmt }}',
 ui_relative: {{ 'true' if ui_relative else 'false' }},
 ui_expand_adv: {{ 'true' if ui_expand_adv else 'false' }},

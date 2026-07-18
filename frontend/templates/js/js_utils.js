@@ -125,3 +125,26 @@ validateUiCidrs() {
     this.uiCidrError = '';
     return true;
 },
+addTrustProxyCidr() {
+    const val = this.uiTrustProxyCidrInput.trim();
+    if (!val) {
+        this.uiTrustProxyCidrError = '';
+        return;
+    }
+    if (!this.isValidIPOrCIDR(val)) {
+        this.uiTrustProxyCidrError = `Invalid IP or CIDR Subnet: ${val}`;
+        return;
+    }
+    if (this.ui_trust_proxy_cidrs.includes(val)) {
+        this.uiTrustProxyCidrInput = '';
+        this.uiTrustProxyCidrError = '';
+        return;
+    }
+    this.ui_trust_proxy_cidrs.push(val);
+    this.uiTrustProxyCidrInput = '';
+    this.uiTrustProxyCidrError = '';
+},
+removeTrustProxyCidr(idx) {
+    this.ui_trust_proxy_cidrs.splice(idx, 1);
+    this.uiTrustProxyCidrError = '';
+},

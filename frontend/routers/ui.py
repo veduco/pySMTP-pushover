@@ -102,10 +102,14 @@ async def save_ui(
     ui_loglevel: str = Form("INFO"), ui_listeners_json: str = Form("[]"),
     backend_mode: str = Form("local"), remote_url: str = Form(""), remote_secret: str = Form(""),
     local_config_path: str = Form(""), remote_verify_tls: bool = Form(False),
-    ui_allowed_cidrs_text: str = Form("")
+    ui_allowed_cidrs_text: str = Form(""),
+    trust_proxy_cidrs_json: str = Form("[]")
 ):
     try: listeners = json.loads(ui_listeners_json)
     except Exception: listeners = [{"bind": "0.0.0.0:8443", "https": True}]
+
+    try: trust_proxy_cidrs = json.loads(trust_proxy_cidrs_json)
+    except Exception: trust_proxy_cidrs = []
 
     ui_cidrs = [line.strip() for line in ui_allowed_cidrs_text.splitlines() if line.strip()]
 
@@ -116,7 +120,8 @@ async def save_ui(
         "ui_loglevel": ui_loglevel, "backend_mode": backend_mode,
         "remote_url": remote_url, "remote_secret": remote_secret,
         "local_config_path": local_config_path, "remote_verify_tls": remote_verify_tls,
-        "allowed_cidrs": ui_cidrs
+        "allowed_cidrs": ui_cidrs,
+        "trust_proxy_cidrs": trust_proxy_cidrs
     })
 
     if backend_mode == "local" and local_config_path:

@@ -43,8 +43,16 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-def get_real_ip(request: Request, trust_proxy: bool):
-    if not trust_proxy: return request.client.host if request.client else "127.0.0.1"
+def get_real_ip(request: Request, trust_proxy: bool, trust_proxy_cidrs: list):
+    client_ip = request.client.host if request.client else "127.0.0.1"
+
+    if not trust_proxy:
+        return client_ip
+
+    # If the user defined a whitelist, but the connection originates from an untrusted node, immediately drop back to the raw client IP
+    if trust_proxy_cidrs and not is_ip_allowed(client_ip, trust_proxy_cidrs):
+        return client_ip
+
     forwarded = request.headers.get("Forwarded")
     if forwarded:
         for part in forwarded.split(',')[0].split(';'):
@@ -59,7 +67,8 @@ def get_real_ip(request: Request, trust_proxy: bool):
         if val.startswith('['): return val.split(']')[0][1:]
         if val.count(':') == 1: return val.split(':')[0]
         return val
-    return request.client.host if request.client else "127.0.0.1"
+
+    return client_ip
 
 @app.middleware("http")
 async def access_log_middleware(request: Request, call_next):
@@ -68,7 +77,9 @@ async def access_log_middleware(request: Request, call_next):
 
     ui_config = load_clean_json(UI_CONFIG_FILE)
     trust_proxy = ui_config.get("trust_proxy", False)
-    real_ip = get_real_ip(request, trust_proxy)
+    trust_proxy_cidrs = ui_config.get("trust_proxy_cidrs", [])
+
+    real_ip = get_real_ip(request, trust_proxy, trust_proxy_cidrs)
 
     allowed_cidrs = ui_config.get("allowed_cidrs", [])
     if allowed_cidrs and not is_ip_allowed(real_ip, allowed_cidrs):

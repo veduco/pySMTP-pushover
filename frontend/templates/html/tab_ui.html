@@ -36,6 +36,7 @@
     <input type="hidden" name="remote_verify_tls" :value="ui_remote_verify_tls">
 
     <input type="hidden" name="ui_allowed_cidrs_text" :value="ui_allowed_cidrs.join('\n')">
+    <input type="hidden" name="trust_proxy_cidrs_json" :value="JSON.stringify(ui_trust_proxy_cidrs)">
 
     <div class="card">
         <h3>Web UI Display Settings</h3>
@@ -99,7 +100,22 @@
         <div class="flex-row" style="gap: 1.5rem; margin-bottom: 0.5rem;">
             <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="ui_relative"><span class="slider"></span></div> Render Coerced Relative Human Times (e.g. '3 days ago')</label>
             <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="ui_expand_adv"><span class="slider"></span></div> Always Expand Route Settings by Default</label>
-            <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="ui_trust_proxy"><span class="slider"></span></div> Trust Forwarded/X-Forwarded-For Headers (Client IPs)</label>
+            <label class="toggle-label"><div class="toggle-switch"><input type="checkbox" x-model="ui_trust_proxy"><span class="slider"></span></div> Trust Forwarded/X-Forwarded-For Headers</label>
+        </div>
+
+        <div x-show="ui_trust_proxy" x-transition style="margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed var(--border-color);">
+            <label style="font-weight: bold; margin-bottom: 0.35rem; display: block;">Trusted Proxy IP / CIDR Whitelist</label>
+            <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; opacity: 0.7;">Specify the IP addresses of the internal load balancers authorized to forward client IPs. Press <strong>Enter</strong> to add a tag.</p>
+            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.5rem; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 6px; cursor: text; align-items: center;" :class="uiTrustProxyCidrError ? 'input-invalid' : ''" @click="$refs.trustProxyInput.focus()">
+                <template x-for="(cidr, idx) in ui_trust_proxy_cidrs" :key="idx">
+                    <span style="display: inline-flex; align-items: center; gap: 0.3rem; background: var(--primary-color); color: white; padding: 0.2rem 0.5rem; border-radius: 12px; font-size: 0.85rem;">
+                        <span x-text="cidr"></span>
+                        <svg @click.stop="removeTrustProxyCidr(idx)" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; opacity: 0.8;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </span>
+                </template>
+                <input type="text" x-ref="trustProxyInput" x-model="uiTrustProxyCidrInput" @keydown.enter.prevent="addTrustProxyCidr()" @keydown.backspace="if(uiTrustProxyCidrInput === '' && ui_trust_proxy_cidrs.length > 0) removeTrustProxyCidr(ui_trust_proxy_cidrs.length - 1)" placeholder="e.g. 10.0.0.0/8" style="border: none; background: transparent; outline: none; flex: 1; min-width: 120px; font-size: 0.9rem; color: var(--text-color);">
+            </div>
+            <span class="validation-error" x-show="uiTrustProxyCidrError" x-text="uiTrustProxyCidrError" style="display: none;"></span>
         </div>
 
         <div style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
