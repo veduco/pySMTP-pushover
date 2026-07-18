@@ -1,3 +1,4 @@
+{% from "components.html" import empty_table_state %}
 <div class="card">
     <div class="header-controls" style="margin-bottom: 0;">
         <h3>Stuck Queue Messages</h3>
@@ -57,7 +58,9 @@
                     </td>
                 </tr>
             </template>
-            <tr x-show="queueItems.length === 0"><td colspan="8" style="text-align: center; opacity: 0.7; padding: 1.5rem;">No stuck messages in the queue.</td></tr>
+            <template x-if="queueItems.length === 0">
+                {{ empty_table_state(colspan_count=8, message_text="'No stuck messages in the queue.'") }}
+            </template>
         </tbody>
     </table>
 
