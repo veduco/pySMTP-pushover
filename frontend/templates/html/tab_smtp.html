@@ -56,12 +56,9 @@
         <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; opacity: 0.7;">Restrict connection rules on the email receiving sockets by entering allowed IP addresses or CIDR masks. Leave completely blank to allow permissive incoming traffic streams. Press <strong>Enter</strong> to add a tag.</p>
         {{ cidr_input(
             list_model="smtp.allowed_cidrs",
-            input_model="smtpCidrInput",
-            error_model="errors.smtpCidr",
             ref_name="smtpCidrInput",
             placeholder="e.g. 192.168.1.0/24",
-            add_fn="addSmtpCidr",
-            remove_fn="removeSmtpCidr"
+            is_cidr="true"
         ) }}
     </div>
 </div>

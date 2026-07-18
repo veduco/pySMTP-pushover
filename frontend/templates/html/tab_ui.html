@@ -115,12 +115,9 @@
             <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; opacity: 0.7;">Specify the IP addresses of the internal load balancers authorized to forward client IPs. Press <strong>Enter</strong> to add a tag.</p>
             {{ cidr_input(
                 list_model="ui_trust_proxy_cidrs",
-                input_model="uiTrustProxyCidrInput",
-                error_model="errors.uiTrustProxyCidr",
                 ref_name="trustProxyInput",
                 placeholder="e.g. 10.0.0.0/8",
-                add_fn="addTrustProxyCidr",
-                remove_fn="removeTrustProxyCidr"
+                is_cidr="true"
             ) }}
         </div>
 
@@ -129,12 +126,9 @@
             <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; opacity: 0.7;">Restrict access to the web interface by specifying allowed IP addresses or CIDR masks. Leave blank to allow permissive incoming traffic. Press <strong>Enter</strong> to add a tag.</p>
             {{ cidr_input(
                 list_model="ui_allowed_cidrs",
-                input_model="uiCidrInput",
-                error_model="errors.uiCidr",
                 ref_name="uiCidrInput",
                 placeholder="e.g. 192.168.1.0/24",
-                add_fn="addUiCidr",
-                remove_fn="removeUiCidr"
+                is_cidr="true"
             ) }}
         </div>
     </div>

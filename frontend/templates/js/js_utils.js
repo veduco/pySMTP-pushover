@@ -182,52 +182,6 @@ async _validateCidrList(lines) {
     return '';
 },
 
-async _processCidrAdd(targetArray, inputVal) {
-    const val = (inputVal || '').trim();
-    if (!val) return { error: '', clear: true };
-
-    const isValid = await this._isValidNetworkTarget(val, true);
-    if (!isValid) {
-        return { error: `Invalid IP or CIDR Subnet: ${val}`, clear: false };
-    }
-    if (!targetArray.includes(val)) targetArray.push(val);
-    return { error: '', clear: true };
-},
-
-async addUiCidr() {
-    const res = await this._processCidrAdd(this.ui_allowed_cidrs, this.uiCidrInput);
-    this.errors.uiCidr = res.error;
-    if (res.clear) this.uiCidrInput = '';
-},
-
-removeUiCidr(idx) {
-    this.ui_allowed_cidrs.splice(idx, 1);
-    this.errors.uiCidr = '';
-},
-
-async addSmtpCidr() {
-    if (!this.smtp.allowed_cidrs) this.smtp.allowed_cidrs = [];
-    const res = await this._processCidrAdd(this.smtp.allowed_cidrs, this.smtpCidrInput);
-    this.errors.smtpCidr = res.error;
-    if (res.clear) this.smtpCidrInput = '';
-},
-
-removeSmtpCidr(idx) {
-    this.smtp.allowed_cidrs.splice(idx, 1);
-    this.errors.smtpCidr = '';
-},
-
-async addTrustProxyCidr() {
-    const res = await this._processCidrAdd(this.ui_trust_proxy_cidrs, this.uiTrustProxyCidrInput);
-    this.errors.uiTrustProxyCidr = res.error;
-    if (res.clear) this.uiTrustProxyCidrInput = '';
-},
-
-removeTrustProxyCidr(idx) {
-    this.ui_trust_proxy_cidrs.splice(idx, 1);
-    this.errors.uiTrustProxyCidr = '';
-},
-
 parseBindString(bindStr, defaultPort = 25) {
     if (!bindStr) return { ip: '0.0.0.0', port: defaultPort };
     const lastColon = bindStr.lastIndexOf(':');
@@ -237,4 +191,54 @@ parseBindString(bindStr, defaultPort = 25) {
         return { ip, port: isNaN(port) ? defaultPort : port };
     }
     return { ip: bindStr, port: defaultPort };
+},
+
+// Centralized Parametric Alpine Factory Initializer for array fields
+collectionManager(targetArray, isCidrField = true) {
+    return {
+        inputValue: '',
+        errorMessage: '',
+        isLoading: false,
+
+        async add() {
+            this.errorMessage = '';
+            const val = this.inputValue.trim();
+            if (!val) return;
+
+            if (targetArray.includes(val)) {
+                this.errorMessage = 'This item has already been added to the collection whitelists.';
+                return;
+            }
+
+            this.isLoading = true;
+            const valid = await fetch('/api/validate/network', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ target: val, allow_cidr: isCidrField })
+            }).then(res => res.json()).then(data => data.valid).catch(() => false);
+
+            this.isLoading = false;
+
+            if (!valid) {
+                this.errorMessage = isCidrField
+                    ? `Invalid Network Target or Subnet Mask specification: ${val}`
+                    : `Invalid IP Address declaration: ${val}`;
+                return;
+            }
+
+            targetArray.push(val);
+            this.inputValue = '';
+        },
+
+        remove(idx) {
+            if (idx >= 0 && idx < targetArray.length) {
+                targetArray.splice(idx, 1);
+                this.errorMessage = '';
+            }
+        },
+
+        clear() {
+            this.errorMessage = '';
+        }
+    };
 },

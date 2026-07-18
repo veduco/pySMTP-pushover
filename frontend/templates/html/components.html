@@ -8,17 +8,19 @@
 </label>
 {% endmacro %}
 
-{% macro cidr_input(list_model, input_model, error_model, ref_name, placeholder, add_fn, remove_fn) %}
-<div class="tag-pill-box" :class="{{ error_model }} ? 'input-invalid' : ''" @click="$refs.{{ ref_name }}.focus()">
-    <template x-for="(cidr, idx) in ({{ list_model }} || [])" :key="idx">
-        <span class="tag-badge">
-            <span x-text="cidr"></span>
-            <svg @click.stop="{{ remove_fn }}(idx)" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </span>
-    </template>
-    <input type="text" class="tag-input" x-ref="{{ ref_name }}" x-model="{{ input_model }}" @keydown.enter.prevent="{{ add_fn }}()" @keydown.backspace="if({{ input_model }} === '' && {{ list_model }} && {{ list_model }}.length > 0) {{ remove_fn }}({{ list_model }}.length - 1)" placeholder="{{ placeholder }}">
+{% macro cidr_input(list_model, ref_name, placeholder, is_cidr='true') %}
+<div x-data="collectionManager({{ list_model }}, {{ is_cidr }})" style="width: 100%;">
+    <div class="tag-pill-box" :class="errorMessage ? 'input-invalid' : ''" @click="$refs.{{ ref_name }}.focus()">
+        <template x-for="(cidr, idx) in {{ list_model }}" :key="idx">
+            <span class="tag-badge">
+                <span x-text="cidr"></span>
+                <svg @click.stop="remove(idx)" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </span>
+        </template>
+        <input type="text" class="tag-input" x-ref="{{ ref_name }}" x-model="inputValue" @keydown.enter.prevent="add()" @input="clear()" @keydown.backspace="if(inputValue === '' && {{ list_model }}.length > 0) remove({{ list_model }}.length - 1)" placeholder="{{ placeholder }}" :disabled="isLoading">
+    </div>
+    <span class="validation-error" x-show="errorMessage" x-text="errorMessage" style="display: none; color: var(--danger-color); font-weight: bold; margin-top: 0.25rem;"></span>
 </div>
-<span class="validation-error" x-show="{{ error_model }}" x-text="{{ error_model }}" style="display: none;"></span>
 {% endmacro %}
 
 {% macro segment_track(model, options, thumb_style='', track_style='width: 100%; display: flex;', change='') %}
