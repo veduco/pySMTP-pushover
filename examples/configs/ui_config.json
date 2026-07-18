@@ -11,8 +11,16 @@
   "date_format": "YYYY-MM-DD HH:mm:ss",
   "relative_time": true,
   "expand_adv": false,
+  "trust_proxy": false,
   "vault_sort": "name_asc",
   "smtp_sort": "name_asc",
   "smarthost_sort": "alias_asc",
-  "ui_loglevel": "INFO"
+  "ui_loglevel": "INFO",
+  "backend_mode": "local",
+  "local_config_path": "config.json",
+  "remote_url": "",
+  "remote_secret": "",
+  "remote_verify_tls": false,
+  "allowed_cidrs": [],
+  "trust_proxy_cidrs": []
 }

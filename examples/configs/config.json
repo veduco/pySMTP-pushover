@@ -8,10 +8,19 @@
     "max_retry_backoff": 21600,
     "max_backups": 50,
     "loglevel": "INFO",
+    "allowed_cidrs": [],
+    "dedupe_enabled": false,
+    "dedupe_window": "10m",
+    "dedupe_keys": [
+      "sender",
+      "match_reason",
+      "message"
+    ],
     "listeners": [
       {
         "bind": "0.0.0.0:25",
-        "starttls": false
+        "starttls": false,
+        "proxy_protocol": false
       }
     ],
     "auth": {}
@@ -22,8 +31,9 @@
   },
   "smarthost": {
     "globals": {
+      "alias": "",
       "force_plaintext": false,
-      "disable_attachments": false
+      "attachments": true
     },
     "aliases": {}
   },
