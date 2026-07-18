@@ -10,7 +10,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import uvicorn
 from backend.events import broker
-from core.json_store import generate_self_signed_certificate, parse_bind_string, is_ip_allowed
+from core.json_store import generate_self_signed_certificate, parse_bind_string
+from core.security import build_access_middleware
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -25,23 +26,21 @@ app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan
 security = HTTPBearer()
 active_server = None
 
-@app.middleware("http")
-async def access_log_middleware(request: Request, call_next):
+def backend_config_resolver(request: Request):
+    """Dynamically pulls ACL constraints mapped to the live Python core loops."""
     state_ref = getattr(request.app.state, "gateway_state", None)
-    allowed_cidrs = state_ref.smtp.get("allowed_cidrs", []) if state_ref else []
+    return {
+        "allowed_cidrs": state_ref.smtp.get("allowed_cidrs", []) if state_ref else [],
+        "trust_proxy": False,
+        "trust_proxy_cidrs": []
+    }
 
-    ip = request.client.host if request.client else "127.0.0.1"
-
-    if allowed_cidrs and not is_ip_allowed(ip, allowed_cidrs):
-        logging.warning(f"Control API endpoint connection dropped: Client IP {ip} is unauthorized.")
-        return JSONResponse({"error": "Forbidden: Access denied by network policy rules."}, status_code=403)
-
-    response = await call_next(request)
-    path = request.url.path
-    if path not in ["/healthcheck"]:
-        http_version = request.scope.get("http_version", "1.1")
-        logging.info(f'{ip} - "{request.method} {path} HTTP/{http_version}" {response.status_code}')
-    return response
+# Wire up the unified security factory module
+app.middleware("http")(build_access_middleware(
+    app_type="backend",
+    config_resolver=backend_config_resolver,
+    excluded_paths=["/healthcheck"]
+))
 
 async def verify_token(request: Request, creds: HTTPAuthorizationCredentials = Security(security)):
     secret = getattr(request.app.state, "secret", "")

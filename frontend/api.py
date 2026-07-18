@@ -8,7 +8,8 @@ from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from frontend.state import app_state
 from frontend.routers import queue, ui
 from core.config import UI_CONFIG_FILE, load_clean_json
-from core.json_store import is_ip_allowed, is_valid_network_target
+from core.json_store import is_valid_network_target
+from core.security import build_access_middleware
 
 # Silence urllib3 warnings against backend self-signed proxy certs
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -43,56 +44,26 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-def get_real_ip(request: Request, trust_proxy: bool, trust_proxy_cidrs: list):
-    client_ip = request.client.host if request.client else "127.0.0.1"
+def frontend_config_resolver(request: Request):
+    """Dynamically parses the UI file schema structure to extract real-time web panel settings."""
+    ui_config = load_clean_json(UI_CONFIG_FILE)
+    return {
+        "allowed_cidrs": ui_config.get("allowed_cidrs", []),
+        "trust_proxy": ui_config.get("trust_proxy", False),
+        "trust_proxy_cidrs": ui_config.get("trust_proxy_cidrs", [])
+    }
 
-    if not trust_proxy:
-        return client_ip
-
-    # If the user defined a whitelist, but the connection originates from an untrusted node, immediately drop back to the raw client IP
-    if trust_proxy_cidrs and not is_ip_allowed(client_ip, trust_proxy_cidrs):
-        return client_ip
-
-    forwarded = request.headers.get("Forwarded")
-    if forwarded:
-        for part in forwarded.split(',')[0].split(';'):
-            if part.strip().lower().startswith("for="):
-                val = part.strip()[4:].strip('"\'')
-                if val.startswith('['): return val.split(']')[0][1:]
-                if val.count(':') == 1: return val.split(':')[0]
-                return val
-    xff = request.headers.get("X-Forwarded-For")
-    if xff:
-        val = xff.split(',')[0].strip()
-        if val.startswith('['): return val.split(']')[0][1:]
-        if val.count(':') == 1: return val.split(':')[0]
-        return val
-
-    return client_ip
-
-@app.middleware("http")
-async def access_log_middleware(request: Request, call_next):
-    # Bind the specific event loop's client to the transient request state
+def frontend_pre_hook(request: Request):
+    """Binds the specific event loop's HTTP client to the transient request state before dispatch."""
     request.state.http_client = get_http_client()
 
-    ui_config = load_clean_json(UI_CONFIG_FILE)
-    trust_proxy = ui_config.get("trust_proxy", False)
-    trust_proxy_cidrs = ui_config.get("trust_proxy_cidrs", [])
-
-    real_ip = get_real_ip(request, trust_proxy, trust_proxy_cidrs)
-
-    allowed_cidrs = ui_config.get("allowed_cidrs", [])
-    if allowed_cidrs and not is_ip_allowed(real_ip, allowed_cidrs):
-        logging.warning(f"Web UI access connection rejected: Client IP {real_ip} is not whitelisted.")
-        return HTMLResponse("<h1>403 Forbidden</h1><p>Access denied by CIDR policy configuration rules.</p>", status_code=403)
-
-    response = await call_next(request)
-    path = request.url.path
-    if path not in ["/healthcheck", "/api/queue", "/api/queue/stream", "/api/validate/network"]:
-        http_version = request.scope.get("http_version", "1.1")
-        query = f"?{request.url.query}" if request.url.query else ""
-        logging.info(f'{real_ip} - "{request.method} {path}{query} HTTP/{http_version}" {response.status_code}')
-    return response
+# Wire up the unified security factory module
+app.middleware("http")(build_access_middleware(
+    app_type="frontend",
+    config_resolver=frontend_config_resolver,
+    excluded_paths=["/healthcheck", "/api/queue", "/api/queue/stream", "/api/validate/network"],
+    pre_hook=frontend_pre_hook
+))
 
 @app.post("/api/validate/network")
 async def validate_network_target(request: Request):
