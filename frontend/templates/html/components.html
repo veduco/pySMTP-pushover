@@ -9,7 +9,7 @@
 {% endmacro %}
 
 {% macro cidr_input(list_model, ref_name, placeholder, is_cidr='true') %}
-<div x-data="collectionManager({{ list_model }}, {{ is_cidr }})" style="width: 100%;">
+<div x-data="collectionManager('{{ list_model }}', {{ is_cidr }})" style="width: 100%;">
     <div class="tag-pill-box" :class="errorMessage ? 'input-invalid' : ''" @click="$refs.{{ ref_name }}.focus()">
         <template x-for="(cidr, idx) in {{ list_model }}" :key="idx">
             <span class="tag-badge">

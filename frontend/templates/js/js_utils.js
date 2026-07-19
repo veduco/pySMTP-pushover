@@ -183,18 +183,32 @@ parseBindString(bindStr, defaultPort = 25) {
     return { ip: bindStr, port: defaultPort };
 },
 
-// Centralized Parametric Alpine Factory Initializer for array fields
-collectionManager(targetArray, isCidrField = true) {
+collectionManager(arrayPath, isCidrField = true) {
     return {
         inputValue: '',
         errorMessage: '',
         isLoading: false,
 
+        init() {
+            // Drop leftover data when switching tabs safely
+            this.$watch('tab', () => {
+                this.inputValue = '';
+                this.errorMessage = '';
+            });
+        },
+
+        get targetArray() {
+            // Dynamically resolve the live reactive array reference via a string path map[cite: 4]
+            return arrayPath.split('.').reduce((o, i) => o[i], this);
+        },
+
         async add() {
             const val = this.inputValue.trim();
+
             if (!val) return;
 
-            if (targetArray.includes(val)) {
+            // Preserve user context: set the warning, but do NOT clear inputValue destructively
+            if (this.targetArray.includes(val)) {
                 this.errorMessage = 'This item has already been added to the collection whitelists.';
                 return;
             }
@@ -222,13 +236,14 @@ collectionManager(targetArray, isCidrField = true) {
                 return;
             }
 
-            targetArray.push(val);
+            // Push into the fully resolved reactive target element
+            this.targetArray.push(val);
             this.inputValue = '';
         },
 
         remove(idx) {
-            if (idx >= 0 && idx < targetArray.length) {
-                targetArray.splice(idx, 1);
+            if (idx >= 0 && idx < this.targetArray.length) {
+                this.targetArray.splice(idx, 1);
                 this.errorMessage = '';
             }
         },
