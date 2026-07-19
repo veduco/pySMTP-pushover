@@ -488,9 +488,55 @@ class ConfigOrchestrator:
 
     async def save_config(self, parsed_config, vault_parsed=None):
         if self.bmode == "remote":
-            expected_hash = get_deterministic_hash({"config": parsed_config, "vault": vault_parsed or {}})
-            success = await self.fan_out_config(parsed_config, vault_parsed, expected_hash)
-            return "Configuration synchronized to all nodes." if success else "Some hosts failed to sync. Background retries have begun."
+            primary_cfg = next((h for h in self.remote_hosts if f"{h.get('host')}:{h.get('port')}" == self.primary_host), None)
+            if not primary_cfg:
+                raise Exception("Primary Configuration Host is not defined. Please map it in the Backend Config tab.")
+
+            payload = {"config": parsed_config}
+            if vault_parsed: payload["vault"] = vault_parsed
+
+            # 1. Push raw payload to Primary Host
+            url = f"https://{primary_cfg['host']}:{primary_cfg['port']}/api/save"
+            client = self.http_client or HttpClientPool.get_client("frontend", verify_tls=primary_cfg.get("verify_tls", True))
+
+            secrets_to_try = [self._get_host_secret(primary_cfg)]
+            if self.remote_secrets and self.remote_secrets[0] not in secrets_to_try:
+                secrets_to_try.append(self.remote_secrets[0])
+
+            primary_success = False
+            for secret in secrets_to_try:
+                try:
+                    r = await client.post(url, json=payload, headers={"Authorization": f"Bearer {secret}"}, timeout=self.timeout)
+                    if r.status_code == 200:
+                        primary_cfg["sync_status"] = "success"
+                        primary_cfg["expected_hash"] = r.json().get("config_hash", "")
+                        primary_cfg["last_secret_hash"] = get_deterministic_hash({"secret": secret})
+                        primary_success = True
+                        break
+                except Exception: pass
+
+            if not primary_success:
+                primary_cfg["sync_status"] = "failed"
+                save_json(UI_CONFIG_FILE, self.ui_config)
+                clear_ui_config_cache()
+                raise Exception("Failed to commit configuration to the Primary Host.")
+
+            save_json(UI_CONFIG_FILE, self.ui_config)
+            clear_ui_config_cache()
+
+            # 2. Fetch the true, normalized configuration back from the primary (capturing hashed passwords)
+            config, vault, _, ok, primary_hash = await self.get_config()
+            if not ok:
+                raise Exception("Primary committed successfully, but failed to read back the normalized state.")
+
+            # 3. Fan-out the normalized configuration to all replicas safely
+            replicas = [h for h in self.remote_hosts if h != primary_cfg]
+            if replicas:
+                success = await self.fan_out_config(config, vault, primary_hash, specific_hosts=replicas)
+                if not success:
+                    return "Primary synced successfully, but some replicas failed. Background retries have begun."
+
+            return "Configuration synchronized to all nodes."
         else:
             save_unified_config(self.active_path, new_config=parsed_config, new_vault=vault_parsed)
             self.trigger_local_backend_reload()

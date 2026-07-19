@@ -3,14 +3,21 @@ import logging
 import httpx
 import json
 import hashlib
+import copy
 from contextlib import asynccontextmanager
 
 def get_deterministic_hash(data: dict) -> str:
     """Produces a consistent SHA-256 hash of a dictionary by sorting keys and stripping whitespace."""
     if not data:
         return ""
-    # Strip transient metadata before hashing
-    safe_data = {k: v for k, v in data.items() if k not in ("_smtp_meta",)}
+
+    safe_data = copy.deepcopy(data)
+
+    # Deep strip transient tracking blocks to prevent false diff flags from timestamps
+    if "config" in safe_data and isinstance(safe_data["config"], dict):
+        if "smtp" in safe_data["config"] and "_smtp_meta" in safe_data["config"]["smtp"]:
+            del safe_data["config"]["smtp"]["_smtp_meta"]
+
     serialized = json.dumps(safe_data, sort_keys=True, separators=(',', ':'))
     return hashlib.sha256(serialized.encode('utf-8')).hexdigest()
 
