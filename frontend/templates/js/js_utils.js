@@ -172,16 +172,6 @@ async isValidIPOrCIDR(val) {
     return await this._isValidNetworkTarget(val, true);
 },
 
-async _validateCidrList(lines) {
-    for (let line of lines) {
-        const isValid = await this._isValidNetworkTarget(line, true);
-        if (!isValid) {
-            return `Invalid IP or CIDR Subnet: ${line}`;
-        }
-    }
-    return '';
-},
-
 parseBindString(bindStr, defaultPort = 25) {
     if (!bindStr) return { ip: '0.0.0.0', port: defaultPort };
     const lastColon = bindStr.lastIndexOf(':');

@@ -178,9 +178,14 @@ deleteSmarthost(alias) {
 },
 
 // --- NETWORK LISTENER MODAL ACTIONS ---
+
 openListenerModal(mode, idx=null) {
-    if(mode === 'add') {
-        this.modals.listener.initOpen('add', { idx: null, ip: '0.0.0.0', port: 25, hostname: '' });
+    this.modals.listener.error = '';
+    if (mode === 'add') {
+        this.modals.listener.initOpen('add', {
+            idx: null, ip: '', port: 25, hostname: '',
+            starttls: false, proxy_protocol: false, tls_cert_file: '', tls_key_file: ''
+        });
     } else {
         const l = this.smtp.listeners[idx];
         const { ip, port } = this.parseBindString(l.bind, 25);
@@ -192,81 +197,96 @@ openListenerModal(mode, idx=null) {
     }
 },
 
-saveListenerModal() {
-    const f = this.modals.listener.fields;
-    const ip = f.ip.trim() || '0.0.0.0';
-    if (!this.isValidIP(ip)) { this.modals.listener.error = 'Must be a valid IPv4, IPv6, or localhost.'; return; }
-    const port = f.port;
-    if(!port || port < 1 || port > 65535) { this.modals.listener.error = 'Port must be between 1 and 65535.'; return; }
-    const bind = ip + ':' + port;
-
-    const existingIdx = this.smtp.listeners.findIndex(l => l.bind === bind);
-    if (existingIdx !== -1 && (this.modals.listener.mode === 'add' || existingIdx !== f.idx)) {
-        this.modals.listener.error = 'An SMTP listener is already bound to this address and port.';
-        return;
-    }
-
-    const obj = { bind: bind, starttls: f.starttls, proxy_protocol: f.proxy_protocol };
-    if(f.hostname.trim()) obj.hostname = f.hostname.trim();
-    if(f.starttls) {
-        if(f.tls_cert_file.trim()) obj.tls_cert_file = f.tls_cert_file.trim();
-        if(f.tls_key_file.trim()) obj.tls_key_file = f.tls_key_file.trim();
-    }
-
-    if(this.modals.listener.mode === 'add') this.smtp.listeners.push(obj);
-    else this.smtp.listeners[f.idx] = obj;
-    this.modals.listener.open = false;
-},
-
-get canSaveListenerModal() {
-    if (!this.modals.listener.isDirty && this.modals.listener.mode === 'edit') return false;
-    const f = this.modals.listener.fields;
-    if (!f.port || f.port < 1 || f.port > 65535) return false;
-    return this.isValidIP(f.ip.trim() || '0.0.0.0');
-},
-
 openUiListenerModal(mode, idx=null) {
-    if(mode === 'add') {
-        this.modals.uiListener.initOpen('add', { idx: null, ip: '0.0.0.0', port: 8443 });
+    this.modals.uiListener.error = '';
+    if (mode === 'add') {
+        this.modals.uiListener.initOpen('add', {
+            idx: null, ip: '', port: 8443,
+            https: true, tls_cert: '', tls_key: ''
+        });
     } else {
         const l = this.uiListeners[idx];
         const { ip, port } = this.parseBindString(l.bind, 8443);
         this.modals.uiListener.initOpen('edit', {
-            idx: idx, ip: ip, port: port, https: l.https === true, tls_cert: l.tls_cert || '', tls_key: l.tls_key || ''
+            idx: idx, ip: ip, port: port,
+            https: l.https === true, tls_cert: l.tls_cert || '', tls_key: l.tls_key || ''
         });
     }
 },
 
-saveUiListenerModal() {
-    const f = this.modals.uiListener.fields;
-    const ip = f.ip.trim() || '0.0.0.0';
-    if (!this.isValidIP(ip)) { this.modals.uiListener.error = 'Must be a valid IPv4, IPv6, or localhost.'; return; }
-    const port = f.port;
-    if(!port || port < 1 || port > 65535) { this.modals.uiListener.error = 'Port must be between 1 and 65535.'; return; }
-    const bind = ip + ':' + port;
+// --- GENERALIZED LISTENER HELPERS ---
 
-    const existingIdx = this.uiListeners.findIndex(l => l.bind === bind);
-    if (existingIdx !== -1 && (this.modals.uiListener.mode === 'add' || existingIdx !== f.idx)) {
-        this.modals.uiListener.error = 'A UI listener is already bound to this address and port.';
+async _saveGenericListener(modalKey, targetArray, typeName) {
+    const m = this.modals[modalKey];
+    const f = m.fields;
+    m.error = '';
+
+    const ip = f.ip.trim() || '0.0.0.0';
+
+    // Await the centralized Core API network bounds check correctly
+    const isValid = await this.isValidIP(ip);
+    if (!isValid) { m.error = 'Must be a valid IPv4, IPv6, or localhost.'; return; }
+
+    const port = f.port;
+    if(!port || port < 1 || port > 65535) { m.error = 'Port must be between 1 and 65535.'; return; }
+
+    const bind = ip + ':' + port;
+    const existingIdx = targetArray.findIndex(l => l.bind === bind);
+
+    if (existingIdx !== -1 && (m.mode === 'add' || existingIdx !== f.idx)) {
+        m.error = `A ${typeName} listener is already bound to this address and port.`;
         return;
     }
 
-    const obj = { bind: bind, https: f.https };
-    if(f.https) {
-        if(f.tls_cert.trim()) obj.tls_cert = f.tls_cert.trim();
-        if(f.tls_key.trim()) obj.tls_key = f.tls_key.trim();
+    const obj = { bind: bind };
+
+    // Evaluate modal-specific fields safely
+    if (modalKey === 'listener') {
+        obj.starttls = f.starttls;
+        obj.proxy_protocol = f.proxy_protocol;
+        if(f.hostname.trim()) obj.hostname = f.hostname.trim();
+        if(f.starttls) {
+            if(f.tls_cert_file.trim()) obj.tls_cert_file = f.tls_cert_file.trim();
+            if(f.tls_key_file.trim()) obj.tls_key_file = f.tls_key_file.trim();
+        }
+    } else {
+        obj.https = f.https;
+        if(f.https) {
+            if(f.tls_cert.trim()) obj.tls_cert = f.tls_cert.trim();
+            if(f.tls_key.trim()) obj.tls_key = f.tls_key.trim();
+        }
     }
 
-    if(this.modals.uiListener.mode === 'add') this.uiListeners.push(obj);
-    else this.uiListeners[f.idx] = obj;
-    this.modals.uiListener.open = false;
+    if(m.mode === 'add') { targetArray.push(obj); } else { targetArray[f.idx] = obj; }
+    m.open = false;
+},
+
+_canSaveGenericListener(modalKey) {
+    const m = this.modals[modalKey];
+    if (!m.isDirty && m.mode === 'edit') return false;
+
+    if (!m.fields.port || m.fields.port < 1 || m.fields.port > 65535) return false;
+
+    // Explicit network boundary verification is intentionally deferred to the API save wrapper
+    return true;
+},
+
+// --- IMPLEMENTATION WRAPPERS ---
+
+async saveListenerModal() {
+    await this._saveGenericListener('listener', this.smtp.listeners, 'SMTP');
+},
+
+async saveUiListenerModal() {
+    await this._saveGenericListener('uiListener', this.uiListeners, 'UI');
+},
+
+get canSaveListenerModal() {
+    return this._canSaveGenericListener('listener');
 },
 
 get canSaveUiListenerModal() {
-    if (!this.modals.uiListener.isDirty && this.modals.uiListener.mode === 'edit') return false;
-    const f = this.modals.uiListener.fields;
-    if (!f.port || f.port < 1 || f.port > 65535) return false;
-    return this.isValidIP(f.ip.trim() || '0.0.0.0');
+    return this._canSaveGenericListener('uiListener');
 },
 
 deleteUiListener(idx) {
@@ -286,6 +306,7 @@ deleteUiListener(idx) {
         this.alertModal.open = true;
         return;
     }
+
     this.uiListeners.splice(idx, 1);
 },
 
