@@ -1,4 +1,5 @@
 {% include "base.html" %}
+{% from "components.html" import tab_save_actions %}
 
 <style>
     .spin { animation: spin 1.2s linear infinite; }
@@ -58,9 +59,8 @@
                 </div>
             </template>
 
-            <div x-show="['routes', 'pushover', 'smarthost', 'server'].includes(tab) && configOk" style="margin-top: 1.5rem; display: flex; gap: 1rem;">
-                <button type="button" @click="requestSave('app_form')" :disabled="!canSaveActiveTab" style="font-size: 1.1rem; padding: 1rem;">Save Configuration</button>
-                <button type="button" class="warning" @click="resetTab(tab)" :disabled="!hasActiveTabChanges" style="font-size: 1.1rem; padding: 1rem;">Discard Changes</button>
+            <div x-show="['routes', 'pushover', 'smarthost', 'server'].includes(tab) && configOk" style="display: none;">
+                {{ tab_save_actions(save_click="requestSave('app_form')", save_disabled="!canSaveActiveTab", discard_click="resetTab(tab)", discard_disabled="!hasActiveTabChanges") }}
             </div>
         </form>
 

@@ -1,3 +1,4 @@
+{% from "components.html" import tab_save_actions %}
 <div class="card">
     <div class="table-header-row" style="margin-top: 0;">
         <h3>Active Link Summary</h3>
@@ -60,8 +61,5 @@
     <input type="hidden" name="remote_secret" :value="ui_remote_secret">
     <input type="hidden" name="remote_verify_tls" :value="ui_remote_verify_tls">
 
-    <div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
-        <button type="button" @click="requestSave('backend_form')" :disabled="!hasBackendChanges" style="font-size: 1.1rem; padding: 1rem;">Save Context & Reconnect</button>
-        <button type="button" class="warning" @click="resetTab('backend')" :disabled="!hasBackendChanges" style="font-size: 1.1rem; padding: 1rem;">Discard Changes</button>
-    </div>
+    {{ tab_save_actions(save_click="requestSave('backend_form')", save_disabled="!hasBackendChanges", discard_click="resetTab('backend')", discard_disabled="!hasBackendChanges", save_text="Save Context & Reconnect") }}
 </form>

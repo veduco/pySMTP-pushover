@@ -90,3 +90,38 @@
     </td>
 </tr>
 {% endmacro %}
+
+{% macro btn_edit(click, title='Edit') %}
+<button type="button" class="outline icon-btn" @click="{{ click }}" title="{{ title }}">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+</button>
+{% endmacro %}
+
+{% macro btn_delete(click, title='Delete') %}
+<button type="button" class="outline danger icon-btn" @click="{{ click }}" title="{{ title }}">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+</button>
+{% endmacro %}
+
+{% macro btn_clear(click, disabled_expr, title='Reset Fields') %}
+<button type="button" class="outline warning icon-btn" @click="{{ click }}" :disabled="{{ disabled_expr }}" title="{{ title }}">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"></path><path d="M22 21H7"></path><path d="m5 11 9 9"></path></svg>
+</button>
+{% endmacro %}
+
+{% macro modal_footer(clear_click, clear_disabled, cancel_click, save_click, save_disabled, save_text='Save Changes') %}
+<div style="display: flex; gap: 1rem; justify-content: space-between; align-items: center; margin-top: 1.5rem;">
+    {{ btn_clear(click=clear_click, disabled_expr=clear_disabled) }}
+    <div style="display: flex; gap: 1rem;">
+        <button type="button" class="outline" @click="{{ cancel_click }}">Cancel</button>
+        <button type="button" @click="{{ save_click }}" :disabled="{{ save_disabled }}">{{ save_text }}</button>
+    </div>
+</div>
+{% endmacro %}
+
+{% macro tab_save_actions(save_click, save_disabled, discard_click, discard_disabled, save_text='Save Configuration') %}
+<div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
+    <button type="button" @click="{{ save_click }}" :disabled="{{ save_disabled }}" style="font-size: 1.1rem; padding: 1rem;">{{ save_text }}</button>
+    <button type="button" class="warning" @click="{{ discard_click }}" :disabled="{{ discard_disabled }}" style="font-size: 1.1rem; padding: 1rem;">Discard Changes</button>
+</div>
+{% endmacro %}
