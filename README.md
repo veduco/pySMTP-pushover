@@ -11,6 +11,26 @@ The platform features a high-performance backend mail engine coupled with a slee
 
 ---
 
+## 🏗️ Architectural Topology
+
+```text
+[Inbound Infrastructure Mail] ──> [Backend Core Server (aiosmtpd)] ──> [Deduplication Ring & Queue (data/queue)]
+                                                                                           │
+                                                              Secured JSON API Proxy Loops │
+                                                                                           ▼
+[Interactive Telemetry Dashboard] <── [Frontend Web Proxy Panel] <── [Control API REST Engine (FastAPI/Uvicorn)]
+     (Alpine.js Store / SSE)              (FastAPI / Jinja2)             [ Token-Auth / Ephemeral tmpfs TLS ]
+
+```
+
+* **Inbound Mail Processing**: Handled by the backend core utilizing an asynchronous `aiosmtpd` process frame.
+* **Persistence & Deduplication**: Filtered through sliding-window alert contracts and temporary queue buffers inside `data/queue`.
+* **Control API Interface**: Exposes a token-authenticated FastAPI configuration layer wrapped inside memory-isolated asset contexts.
+* **Frontend Web Proxy**: Coordinates proxy requests over secure client loops using unified Jinja2 and microservice routers.
+* **Telemetry Dashboard**: Dispatches dynamic async state events through an explicit single-page Alpine.js data loop.
+
+---
+
 ## 🌐 Distributed Split-Host Architecture
 
 For secure enterprise environments, this platform natively supports a fully decoupled **Split Implementation**. You can run the mail core on an internal network zone (Host A) and host the web control interface inside an isolated management network segment or external DMZ zone (Host B).
@@ -18,6 +38,7 @@ For secure enterprise environments, this platform natively supports a fully deco
 Communication between the standalone nodes flows exclusively out of Host B into Host A over a single token-authenticated HTTPS connection targeted at the Control API.
 
 ### Host A: Backend Mail Core & API Daemon
+
 This node receives inbound SMTP notifications from your infrastructure, deduplicates tracking frames, and handles background delivery worker pools.
 
 ```text
@@ -59,7 +80,16 @@ This node exposes the administrative environment web console. It maintains zero 
 │       └── ui.py           # HTML view engines and htmx save response controllers
 │   └── templates/
 │       ├── html/           # Shared Jinja2 markup pages and modular form macro cards
-│       └── js/             # Alpine.js state engines, delta engines, and component models
+│       └── js/             # Centralized store engines, utilities, and components
+│           ├── alpine_store.js     # Master Alpine store lifecycle architecture
+│           ├── js_api.js           # External API data injector rules
+│           ├── js_base_modal.js    # Polymorphic schema base structural generator
+│           ├── js_computed.js      # Filter state variables and sorting maps
+│           ├── js_diff_engine.js   # Client configuration patch delta analyzer
+│           ├── js_modal_actions.js # Unified modal transaction actions (dry-compiled)
+│           ├── js_modal_eml.js     # Diagnostic stream binary MIME reader
+│           ├── js_state.js         # Reactive UI model initial values
+│           └── js_utils.js         # Parametric collectionManager and time helpers
 ├── core/                   # Common primitives (Shared across both Host A and Host B)
 │   ├── constants.py
 │   ├── json_store.py
@@ -67,7 +97,6 @@ This node exposes the administrative environment web console. It maintains zero 
 │   ├── schema.json         # Used to provision declarative modal contexts dynamically
 │   └── utils.py
 └── ui_config.json          # Panel parameters (Must be set to "backend_mode": "remote")
-
 ```
 
 > **Data Flow Split Enforcement:** When configured in split remote mode, `config.json` and `vault.json` are maintained exclusively on **Host A**. **Host B** handles its own standalone network boundaries using `ui_config.json`, which holds the security credentials and remote address pointers (`remote_url`, `remote_secret`) necessary to manage the backend node safely across the wire.
@@ -207,6 +236,11 @@ The gateway relies on three independent files to coordinate system boundaries. B
     "auth": {
       "charlie": "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918",
       "rover": "37747f2841d83a1a5c4d320b9911e3b5df54b1d6e15dfb167a9c873fc4bb8a81"
+    },
+    "api": {
+      "enabled": true,
+      "bind": "127.0.0.1:6443",
+      "secret": "your_secure_bearer_token_here"
     }
   },
   "pushover": {
@@ -276,7 +310,10 @@ The gateway relies on three independent files to coordinate system boundaries. B
   "smarthost_sort": "alias_asc",
   "ui_loglevel": "INFO",
   "backend_mode": "local",
-  "local_config_path": "config.json"
+  "local_config_path": "config.json",
+  "remote_url": "https://127.0.0.1:6443",
+  "remote_secret": "your_secure_bearer_token_here",
+  "remote_verify_tls": false
 }
 ```
 
