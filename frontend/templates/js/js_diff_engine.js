@@ -55,6 +55,10 @@ _generatePatches(obj1, obj2, path = '') {
 
 translatePatchToHuman(patchItem) {
     const path = patchItem.path || '';
+
+    // Natively intercept mapping order alterations
+    if (path === '/route_mappings_order') return 'Route Mapping Execution Order';
+
     const segments = path.split('/').filter(Boolean).map(s => s.replace(/~1/g, '/'));
 
     const labelMap = {
@@ -79,9 +83,41 @@ translatePatchToHuman(patchItem) {
         'force_plaintext': 'Force Plaintext',
         'dedupe_enabled': 'Deduplication Status',
         'dedupe_window': 'Deduplication Cache Window',
-        'dedupe_keys': 'Deduplication Keys'
+        'dedupe_keys': 'Deduplication Keys',
+        '_key': 'Target Address / Pattern',
+        '_isRegex': 'Regex Enabled',
+        'match': 'Match Target',
+        'method': 'Routing Method',
+        'smarthost_alias': 'Smarthost Alias',
+        'priority': 'Priority',
+        'device': 'Target Device',
+        'sound': 'Alert Sound',
+        'url': 'Supplementary URL',
+        'url_title': 'URL Title',
+        'retry': 'Retry Interval',
+        'expire': 'Expiration Time',
+        'token': 'App Token',
+        'user': 'User Key'
     };
 
+    if (segments[0] === 'route_mappings' && segments[1]) {
+        const uid = segments[1];
+        const field = segments[2] || 'Configuration';
+
+        // Extract the correct human-readable route string, prioritizing the original state for labels
+        let oldMap = null;
+        if (this.snapshots && this.snapshots.routes) {
+            const oldArray = JSON.parse(this.snapshots.routes);
+            oldMap = oldArray.find(m => m._uid === uid);
+        }
+        const newMap = this.mappings.find(m => m._uid === uid);
+
+        const targetMap = oldMap || newMap || {};
+        const routeKey = targetMap._isRegex ? `regex:${targetMap._key || ''}` : (targetMap._key || '');
+
+        const mappedField = labelMap[field] || field;
+        return `Route Mapping Rule [${routeKey}] -> ${mappedField}`;
+    }
     if (segments[0] === 'routes' && segments[1]) {
         const field = segments[2] || 'Configuration';
         return `Route Mapping Rule [${segments[1]}] -> ${labelMap[field] || field}`;
@@ -174,6 +210,8 @@ prepareVaultPayload() {
 formatDiffValue(val, path = '', op = 'replace') {
     if (op === 'remove') return '[Deleted]';
 
+    // Allow tracking order elements to bypass stringification blocks safely
+    if (path === '/route_mappings_order') return val;
     // Declarative Vault masking enforcement
     if (this.isPathSensitive(path)) {
         const allAliases = [...(this.vaultAppAliases || []), ...(this.vaultUserAliases || [])];
@@ -204,7 +242,7 @@ takeSnapshot() {
     this.rawUiConfig = this._buildUiStatePayload();
 
     this.snapshots = {
-        routes: JSON.stringify(this.mappings.map(({_uid, _showToken, _showUser, _tokenAliasVal, _tokenRaw, _userAliasVal, _userRaw, ...rest}) => rest)),
+        routes: JSON.stringify(this.mappings.map(({_showToken, _showUser, _showAdv, _tokenAliasVal, _tokenRaw, _userAliasVal, _userRaw, ...rest}) => rest)),
         pushover: JSON.stringify({ pushGlobals: this.pushGlobals, vaultApp: this.vaultApp, vaultUser: this.vaultUser }),
         smarthost: JSON.stringify({ smarthosts: this.smarthosts, smartGlobals: this.smartGlobals, vaultSmarthost: this.vaultSmarthost }),
         server: JSON.stringify(this.smtp),
@@ -244,7 +282,27 @@ requestSave(formId) {
         rawPatches.push(...this._generatePatches(oldUiListeners, newUiListeners, '/uiListeners'));
     } else {
         if (this.tab === 'routes') {
-            rawPatches.push(...this._generatePatches(this.rawConfig.routes || {}, newConfig.routes || {}, '/routes'));
+            // Diff internal mapping configurations natively via hidden UIDs
+            const oldMappings = JSON.parse(this.snapshots.routes || '[]');
+            const newMappings = this.mappings.map(({_showToken, _showUser, _showAdv, _tokenAliasVal, _tokenRaw, _userAliasVal, _userRaw, ...rest}) => rest);
+
+            const oldMappingsDict = Object.fromEntries(oldMappings.map(m => [m._uid, m]));
+            const newMappingsDict = Object.fromEntries(newMappings.map(m => [m._uid, m]));
+
+            rawPatches.push(...this._generatePatches(oldMappingsDict, newMappingsDict, '/route_mappings'));
+
+            // Capture positional ordering changes explicitly
+            const oldOrder = oldMappings.map(m => m._uid).join(',');
+            const newOrder = newMappings.map(m => m._uid).join(',');
+            if (oldOrder !== newOrder) {
+                rawPatches.push({
+                    op: 'replace',
+                    path: '/route_mappings_order',
+                    value: 'Reordered',
+                    oldValue: 'Original Order'
+                });
+            }
+
         } else if (this.tab === 'pushover') {
             rawPatches.push(...this._generatePatches(this.rawConfig.pushover || {}, newConfig.pushover || {}, '/pushover'));
 
@@ -395,6 +453,10 @@ revertChange(idx) {
     } else if (path.startsWith('/uiListeners')) {
         this.uiListeners = this._deepClone(JSON.parse(this.snapshots.ui).uiListeners || []);
         this.diffModal.changes = this.diffModal.changes.filter(c => !c.path.startsWith('/uiListeners'));
+        isComplexReset = true;
+    } else if (path.startsWith('/route_mappings') || path === '/route_mappings_order') {
+        this.resetTab('routes');
+        this.diffModal.changes = this.diffModal.changes.filter(c => !c.path.startsWith('/route_mappings') && c.path !== '/route_mappings_order');
         isComplexReset = true;
     } else if (path.startsWith('/routes')) {
         this.resetTab('routes');

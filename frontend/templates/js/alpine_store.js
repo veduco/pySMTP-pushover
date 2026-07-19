@@ -16,7 +16,7 @@ const GatewayStore = {
         if (!ctx.snapshots) return false;
         switch(tab) {
             case 'routes':
-                return ctx.snapshots.routes !== JSON.stringify(ctx.mappings.map(({_uid, _showToken, _showUser, _tokenAliasVal, _tokenRaw, _userAliasVal, _userRaw, ...rest}) => rest));
+                return ctx.snapshots.routes !== JSON.stringify(ctx.mappings.map(({_showToken, _showUser, _showAdv, _tokenAliasVal, _tokenRaw, _userAliasVal, _userRaw, ...rest}) => rest));
             case 'pushover':
                 return ctx.snapshots.pushover !== JSON.stringify({ pushGlobals: ctx.pushGlobals, vaultApp: ctx.vaultApp, vaultUser: ctx.vaultUser });
             case 'smarthost':
