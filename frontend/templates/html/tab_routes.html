@@ -24,14 +24,18 @@
     <template x-for="(map, idx) in mappings" :key="map._uid">
         <div class="card route-card"
              :class="{ 'drag-over': dragHover === idx }"
-             draggable="true"
+             :draggable="dragHandleIdx === idx"
              @dragstart="draggedRouteIdx = idx; $event.dataTransfer.effectAllowed = 'move';"
              @dragenter.prevent="dragHover = idx"
              @dragover.prevent="$event.dataTransfer.dropEffect = 'move'"
              @dragleave.prevent="if(dragHover === idx) dragHover = null;"
-             @drop.prevent="dragHover = null; reorderRoute(draggedRouteIdx, idx)">
+             @drop.prevent="dragHover = null; dragHandleIdx = null; reorderRoute(draggedRouteIdx, idx)"
+             @dragend="dragHandleIdx = null; draggedRouteIdx = null;">
 
-            <div style="cursor: grab; color: var(--text-color); opacity: 0.4; margin-right: 1rem; margin-top: 1.8rem; flex: 0 0 auto;" title="Drag to reorder">
+            <div style="cursor: grab; color: var(--text-color); opacity: 0.4; margin-right: 1rem; margin-top: 1.8rem; flex: 0 0 auto;"
+                 @mouseenter="dragHandleIdx = idx"
+                 @mouseleave="if(draggedRouteIdx !== idx) dragHandleIdx = null"
+                 title="Drag to reorder">
                 <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
             </div>
 
@@ -119,8 +123,8 @@
                             </div>
 
                             <div class="flex-row" x-show="map.priority == 2" style="margin-bottom: 1rem;">
-                                <div style="flex: 0 0 auto;"><label>Retry (sec)</label><input type="number" x-model.number="map.retry" min="30" style="width: 120px;"></div>
-                                <div style="flex: 0 0 auto;"><label>Expire (sec)</label><input type="number" x-model.number="map.expire" max="10800" style="width: 120px;"></div>
+                                <div style="flex: 0 0 auto;"><label>Retry (sec)</label><input type="decimal" x-model.number="map.retry" min="30" style="width: 120px;"></div>
+                                <div style="flex: 0 0 auto;"><label>Expire (sec)</label><input type="decimal" x-model.number="map.expire" max="10800" style="width: 120px;"></div>
                             </div>
 
                             <div class="flex-row" style="margin-bottom: 0.5rem;"><div class="flex-col" style="flex: 1; min-width: 200px;"><label>Supplementary URL</label><input type="text" x-model="map.url" placeholder="Inherit Global" maxlength="512" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;"></div></div>

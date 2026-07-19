@@ -18,6 +18,7 @@ activeUiPort: {{ active_ui_port | default(0) }},
 
 dragHover: null,
 draggedRouteIdx: null,
+dragHandleIdx: null,
 
 defaultTestPayload: {
     from: '', to: '', type: 'multipart',
