@@ -191,7 +191,6 @@ collectionManager(targetArray, isCidrField = true) {
         isLoading: false,
 
         async add() {
-            this.errorMessage = '';
             const val = this.inputValue.trim();
             if (!val) return;
 
@@ -201,11 +200,18 @@ collectionManager(targetArray, isCidrField = true) {
             }
 
             this.isLoading = true;
+            this.errorMessage = '';
+
             const valid = await fetch('/api/validate/network', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ target: val, allow_cidr: isCidrField })
             }).then(res => res.json()).then(data => data.valid).catch(() => false);
+
+            if (this.inputValue.trim() !== val) {
+                this.isLoading = false;
+                return;
+            }
 
             this.isLoading = false;
 

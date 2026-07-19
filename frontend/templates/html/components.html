@@ -17,7 +17,7 @@
                 <svg @click.stop="remove(idx)" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </span>
         </template>
-        <input type="text" class="tag-input" x-ref="{{ ref_name }}" x-model="inputValue" @keydown.enter.prevent="add()" @input="clear()" @keydown.backspace="if(inputValue === '' && {{ list_model }}.length > 0) remove({{ list_model }}.length - 1)" placeholder="{{ placeholder }}" :disabled="isLoading">
+        <input type="text" class="tag-input" x-ref="{{ ref_name }}" x-model="inputValue" enterkeyhint="done" @keydown.enter.prevent.stop="add()" @keyup.enter.prevent.stop="add()" @blur="add()" @input="clear()" @keydown.backspace="if(inputValue === '' && {{ list_model }}.length > 0) remove({{ list_model }}.length - 1)" placeholder="{{ placeholder }}" :readonly="isLoading">
     </div>
     <span class="validation-error" x-show="errorMessage" x-text="errorMessage" style="display: none; color: var(--danger-color); font-weight: bold; margin-top: 0.25rem;"></span>
 </div>
