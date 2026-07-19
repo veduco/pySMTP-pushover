@@ -39,9 +39,9 @@
     "ui_loglevel": "INFO",
     "backend_mode": "local",
     "local_config_path": "",
-    "remote_url": "",
-    "remote_secret": "",
-    "remote_verify_tls": false,
+    "primary_host": "",
+    "remote_hosts": [],
+    "remote_secrets": [],
     "allowed_cidrs": [],
     "trust_proxy_cidrs": [],
     "listeners": [{"bind": "0.0.0.0:8443", "https": true}]

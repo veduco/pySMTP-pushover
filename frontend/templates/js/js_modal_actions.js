@@ -310,30 +310,74 @@ deleteUiListener(idx) {
     this.uiListeners.splice(idx, 1);
 },
 
-// --- LINK EDIT MODAL ACTIONS ---
-openLinkModal() {
-    this.modals.link.initOpen('edit', {
-        backend_remote: this.ui_backend_remote, local_config_path: this.ui_local_config_path,
-        remote_url: this.ui_remote_url, remote_secret: '', remote_verify_tls: this.ui_remote_verify_tls
-    });
+// --- HOST NODE MODAL ACTIONS ---
+openHostModal(mode, idx=null) {
+    this.modals.host.error = '';
+    if (mode === 'add') {
+        this.modals.host.initOpen('add', { idx: null, alias: '', host: '', port: 6443, verify_tls: true });
+    } else {
+        const h = this.ui_remote_hosts[idx];
+        this.modals.host.initOpen('edit', { idx: idx, alias: h.alias || '', host: h.host, port: h.port, verify_tls: h.verify_tls === true });
+    }
 },
 
-saveLinkModal() {
-    const f = this.modals.link.fields;
-    this.ui_backend_remote = f.backend_remote;
-    this.ui_local_config_path = f.local_config_path.trim();
-    this.ui_remote_url = f.remote_url.trim();
-    if (f.remote_secret.trim()) this.ui_remote_secret = f.remote_secret.trim();
-    this.ui_remote_verify_tls = f.remote_verify_tls;
-    this.modals.link.open = false;
+async saveHostModal() {
+    this.modals.host.error = '';
+    const f = this.modals.host.fields;
+
+    const host = f.host.trim();
+    if (!host) { this.modals.host.error = 'Hostname or IP is required.'; return; }
+
+    const isValid = await this.isValidIP(host) || /^[a-zA-Z0-9.-]+$/.test(host);
+    if (!isValid) { this.modals.host.error = 'Invalid Hostname or IP format.'; return; }
+
+    const port = parseInt(f.port);
+    if(!port || port < 1 || port > 65535) { this.modals.host.error = 'Port must be an integer between 1 and 65535.'; return; }
+
+    const hostStr = host + ":" + port;
+    const existingIdx = this.ui_remote_hosts.findIndex(h => (h.host + ":" + h.port) === hostStr);
+
+    if (existingIdx !== -1 && (this.modals.host.mode === 'add' || existingIdx !== f.idx)) {
+        this.modals.host.error = 'A remote endpoint matching this address and port already exists.';
+        return;
+    }
+
+    const alias = f.alias ? f.alias.trim() : '';
+
+    const obj = { alias: alias, host: host, port: port, verify_tls: f.verify_tls, sync_status: 'pending', last_secret_hash: '', expected_hash: '' };
+
+    if (this.modals.host.mode === 'add') {
+        this.ui_remote_hosts.push(obj);
+    } else {
+        // Preserve prior state trackers when editing securely
+        obj.sync_status = this.ui_remote_hosts[f.idx].sync_status || 'pending';
+        obj.last_secret_hash = this.ui_remote_hosts[f.idx].last_secret_hash || '';
+        obj.expected_hash = this.ui_remote_hosts[f.idx].expected_hash || '';
+        this.ui_remote_hosts[f.idx] = obj;
+    }
+    this.modals.host.open = false;
 },
 
-get canSaveLinkModal() {
-    if (!this.modals.link.isDirty) return false;
-    const f = this.modals.link.fields;
-    if (f.backend_remote) {
-        if (!f.remote_url.trim()) return false;
-        if (!f.remote_secret.trim() && (!this.ui_remote_secret || this.ui_remote_secret === '')) return false;
-    } else { if (!f.local_config_path.trim()) return false; }
-    return true;
+get canSaveHostModal() {
+    const f = this.modals.host.fields;
+    if (!f.host.trim() || !f.port || f.port < 1 || f.port > 65535) return false;
+    return this.modals.host.isDirty || this.modals.host.mode === 'add';
+},
+
+deleteHost(idx) {
+    const target = this.ui_remote_hosts[idx];
+    const hostStr = target.host + ":" + target.port;
+
+    if (this.ui_primary_host === hostStr) {
+        this.alertModal.title = 'Cannot Remove Primary Host';
+        this.alertModal.message = 'This node is actively set as your designated Source of Truth context. Please reassign the primary pointer to another node before deleting this entry.';
+        this.alertModal.open = true;
+        return;
+    }
+    this.ui_remote_hosts.splice(idx, 1);
+},
+
+// --- SECRET MODAL ACTIONS ---
+openSecretModal() {
+    this.modals.secret.initOpen('edit', { value: '' });
 },

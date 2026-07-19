@@ -18,6 +18,16 @@ setListenerSort(col) {
     else { this.listenerSortCol = col; this.listenerSortDir = 1; }
 },
 
+setUiListenerSort(col) {
+    if(this.uiListenerSortCol === col) { this.uiListenerSortDir = this.uiListenerSortDir === 1 ? -1 : 1; }
+    else { this.uiListenerSortCol = col; this.uiListenerSortDir = 1; }
+},
+
+setUiHostSort(col) {
+    if(this.uiHostSortCol === col) { this.uiHostSortDir = this.uiHostSortDir === 1 ? -1 : 1; }
+    else { this.uiHostSortCol = col; this.uiHostSortDir = 1; }
+},
+
 get sortedVaultApp() {
     return this._genericSort(this.vaultApp, this.vaultSortCol, this.vaultSortDir);
 },
@@ -57,9 +67,11 @@ get sortedListeners() {
     return this._genericSort(mapped, this.listenerSortCol, this.listenerSortDir);
 },
 
-setUiListenerSort(col) {
-    if(this.uiListenerSortCol === col) { this.uiListenerSortDir = this.uiListenerSortDir === 1 ? -1 : 1; }
-    else { this.uiListenerSortCol = col; this.uiListenerSortDir = 1; }
+get sortedUiHosts() {
+    const mapped = (this.ui_remote_hosts || []).map((h, i) => ({ ...h, _idx: i }));
+    return this._genericSort(mapped, this.uiHostSortCol, this.uiHostSortDir, {
+        address: (h) => 'https://' + h.host + ':' + h.port
+    });
 },
 
 // Proxy tracking properties to centralized Flux store

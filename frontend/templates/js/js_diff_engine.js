@@ -17,9 +17,9 @@ _buildUiStatePayload() {
         listeners: this._deepClone(this.uiListeners || []),
         backend_mode: this.ui_backend_remote ? 'remote' : 'local',
         local_config_path: this.ui_local_config_path,
-        remote_url: this.ui_remote_url,
-        remote_secret: this.ui_remote_secret,
-        remote_verify_tls: this.ui_remote_verify_tls,
+        primary_host: this.ui_primary_host,
+        remote_hosts: this._deepClone(this.ui_remote_hosts || []),
+        remote_secrets: this._deepClone(this.ui_remote_secrets || []),
         allowed_cidrs: this._deepClone(this.ui_allowed_cidrs || []),
         trust_proxy_cidrs: this._deepClone(this.ui_trust_proxy_cidrs || [])
     };
@@ -30,6 +30,9 @@ _generatePatches(obj1, obj2, path = '') {
     const allKeys = new Set([...Object.keys(obj1 || {}), ...Object.keys(obj2 || {})]);
 
     for (const key of allKeys) {
+        // Strip transient background synchronization pointers from the diff evaluator
+        if (['sync_status', 'last_secret_hash', 'expected_hash'].includes(key)) continue;
+
         const val1 = obj1?.[key];
         const val2 = obj2?.[key];
         const escapedKey = key.replace(/\//g, '~1'); // JSON Pointer escaping
@@ -70,6 +73,7 @@ translatePatchToHuman(patchItem) {
         'proxy_protocol': 'PROXY v2',
         'backend_mode': 'Backend Engine Mode',
         'local_config_path': 'Local Config Path',
+        'primary_host': 'Primary Configuration Host',
         'remote_url': 'Remote API URL',
         'remote_secret': 'Remote API Secret',
         'remote_verify_tls': 'Verify Remote TLS',
@@ -133,6 +137,10 @@ translatePatchToHuman(patchItem) {
     if (segments[0] === 'smarthost' && segments[1] === 'aliases' && segments[2]) {
         const field = segments[3] || 'Configuration';
         return `Smarthost [${segments[2]}] -> ${labelMap[field] || field}`;
+    }
+    if (segments[0] === 'remoteHosts' && segments[1]) {
+        const field = segments[2] || 'Configuration';
+        return `Remote Sync Node [${segments[1]}] -> ${labelMap[field] || field}`;
     }
     if (segments[0] === 'vaultApp' && segments[1]) {
         return `App Token Vault [${segments[1]}]`;
@@ -212,6 +220,21 @@ formatDiffValue(val, path = '', op = 'replace') {
 
     // Allow tracking order elements to bypass stringification blocks safely
     if (path === '/route_mappings_order') return val;
+
+    // Intercept the primary_host pointer to resolve the human-friendly alias dynamically
+    if (path === '/ui/primary_host' && typeof val === 'string' && val !== '') {
+        // Cross-reference current live list and the unmodified snapshot safely
+        let foundHost = this.ui_remote_hosts.find(h => (h.host + ':' + h.port) === val);
+        if (!foundHost && this.snapshots && this.snapshots.backend) {
+            const oldBackend = JSON.parse(this.snapshots.backend);
+            foundHost = (oldBackend.remote_hosts || []).find(h => (h.host + ':' + h.port) === val);
+        }
+        if (foundHost && foundHost.alias && foundHost.alias.trim() !== '') {
+            return `${foundHost.alias} [${val}]`;
+        }
+        return val;
+    }
+
     // Declarative Vault masking enforcement
     if (this.isPathSensitive(path)) {
         const allAliases = [...(this.vaultAppAliases || []), ...(this.vaultUserAliases || [])];
@@ -248,7 +271,7 @@ takeSnapshot() {
         server: JSON.stringify(this.smtp),
         backend: JSON.stringify({
             backend_remote: this.ui_backend_remote, local_config_path: this.ui_local_config_path,
-            remote_url: this.ui_remote_url, remote_secret: this.ui_remote_secret, remote_verify_tls: this.ui_remote_verify_tls
+            primary_host: this.ui_primary_host, remote_hosts: this.ui_remote_hosts
         }),
         ui: JSON.stringify(this._buildUiStatePayload())
     };
@@ -273,13 +296,18 @@ requestSave(formId) {
     let rawPatches = [];
 
     if (formId === 'backend_form' || formId === 'ui_form') {
-        const oldUi = { ...this.rawUiConfig }; delete oldUi.listeners;
-        const newUiObj = { ...newUi }; delete newUiObj.listeners;
+        const oldUi = { ...this.rawUiConfig }; delete oldUi.listeners; delete oldUi.remote_hosts;
+        const newUiObj = { ...newUi }; delete newUiObj.listeners; delete newUiObj.remote_hosts;
         rawPatches.push(...this._generatePatches(oldUi, newUiObj, '/ui'));
 
         const oldUiListeners = Object.fromEntries((this.rawUiConfig.listeners || []).map(x => [x.bind, x]));
         const newUiListeners = Object.fromEntries((newUi.listeners || []).map(x => [x.bind, x]));
         rawPatches.push(...this._generatePatches(oldUiListeners, newUiListeners, '/uiListeners'));
+
+        const oldHosts = Object.fromEntries((this.rawUiConfig.remote_hosts || []).map(x => [x.host + ":" + x.port, x]));
+        const newHosts = Object.fromEntries((newUi.remote_hosts || []).map(x => [x.host + ":" + x.port, x]));
+        rawPatches.push(...this._generatePatches(oldHosts, newHosts, '/remoteHosts'));
+
     } else {
         if (this.tab === 'routes') {
             // Diff internal mapping configurations natively via hidden UIDs
@@ -370,8 +398,7 @@ _schemaRestoreMaps: {
     ui: {
         backend_mode: { prop: 'ui_backend_remote', coerce: v => v === 'remote' },
         local_config_path: { prop: 'ui_local_config_path', fallback: 'config.json' },
-        remote_url: { prop: 'ui_remote_url', fallback: '' },
-        remote_secret: { prop: 'ui_remote_secret', fallback: '' },
+        primary_host: { prop: 'ui_primary_host', fallback: '' },
         remote_verify_tls: { prop: 'ui_remote_verify_tls', coerce: v => v === true },
         ui_loglevel: { prop: 'ui_loglevel', fallback: 'INFO' },
         timezone: { prop: 'ui_tz', fallback: 'UTC' },
@@ -458,6 +485,10 @@ revertChange(idx) {
         this.uiListeners = this._deepClone(JSON.parse(this.snapshots.ui).uiListeners || []);
         this.diffModal.changes = this.diffModal.changes.filter(c => !c.path.startsWith('/uiListeners'));
         isComplexReset = true;
+    } else if (path.startsWith('/remoteHosts')) {
+        this.ui_remote_hosts = this._deepClone(JSON.parse(this.snapshots.backend).remote_hosts || []);
+        this.diffModal.changes = this.diffModal.changes.filter(c => !c.path.startsWith('/remoteHosts'));
+        isComplexReset = true;
     } else if (path.startsWith('/route_mappings') || path === '/route_mappings_order') {
         this.resetTab('routes');
         this.diffModal.changes = this.diffModal.changes.filter(c => !c.path.startsWith('/route_mappings') && c.path !== '/route_mappings_order');
@@ -513,6 +544,8 @@ resetTab(tabContext) {
         Object.keys(this._schemaRestoreMaps.ui).forEach(k => this._applySchemaRestore('ui', k, uiObj[k]));
 
         this.uiListeners = this._deepClone(uiObj.listeners || []);
+        this.ui_remote_hosts = this._deepClone(uiObj.remote_hosts || []);
+        this.ui_primary_host = uiObj.primary_host || '';
         this.uiTrustProxyCidrInput = '';
         this.errors.uiTrustProxyCidr = '';
         this.errors.tz = '';

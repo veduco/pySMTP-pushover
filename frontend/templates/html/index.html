@@ -6,7 +6,7 @@
     @keyframes spin { 100% { transform: rotate(360deg); } }
 </style>
 
-<body x-data="gatewaySettings()" @reconnect-link.window="performReconnect()">
+<body x-data="gatewaySettings()" @reconnect-link.window="performReconnect()" @reload-page.window="window.location.reload()">
 
     <div x-show="isReconnecting" class="modal-overlay" style="display: none; z-index: 9999; flex-direction: column; justify-content: center; align-items: center; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(4px);" x-transition.opacity.duration.300ms>
         <svg viewBox="0 0 24 24" width="48" height="48" stroke="var(--primary-color)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="spin">
@@ -85,7 +85,8 @@
         <div x-show="tab === 'ui'">{% include "tab_ui.html" %}</div>
 
         <div id="status"></div>
-        {% include "modals/modal_link_edit.html" %}
+        {% include "modals/modal_host.html" %}
+        {% include "modals/modal_secret.html" %}
         {% include "modals/modal_edit.html" %}
         {% include "modals/modal_vault.html" %}
         {% include "modals/modal_smtp_user.html" %}

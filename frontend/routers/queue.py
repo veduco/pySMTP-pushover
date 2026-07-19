@@ -8,10 +8,25 @@ from frontend.state import app_state
 from frontend.utils import get_active_config_path
 from core.config import SCRIPT_DIR, UI_CONFIG_FILE, load_clean_json
 from core.queue_store import get_queue_items, retry_queue_item, delete_queue_item, get_queue_item_raw
-from core.utils import safe_async_lifecycle
+from core.utils import safe_async_lifecycle, get_deterministic_hash
 from core.json_store import parse_bind_string
 
 router = APIRouter(prefix="/api/queue")
+
+def _get_primary_host_details(ui_config):
+    primary = ui_config.get("primary_host", "")
+    for h in ui_config.get("remote_hosts", []):
+        if f"{h.get('host')}:{h.get('port')}" == primary:
+            # Resolve the correct secret natively via the hash mapping
+            secrets = ui_config.get("remote_secrets", [])
+            sec = secrets[0] if secrets else ""
+            target_hash = h.get("last_secret_hash")
+            for s in secrets:
+                if get_deterministic_hash({"secret": s}) == target_hash:
+                    sec = s
+                    break
+            return f"https://{h['host']}:{h['port']}", h.get("verify_tls", True), sec
+    return "", True, ""
 
 @router.get("/stream")
 async def queue_stream(request: Request):
@@ -19,14 +34,12 @@ async def queue_stream(request: Request):
     bmode = ui_config.get("backend_mode", "local")
 
     if bmode == "remote":
-        url = ui_config.get("remote_url", "")
-        sec = ui_config.get("remote_secret", "")
+        url, _, sec = _get_primary_host_details(ui_config)
         client = request.state.http_client
 
         async def event_proxy():
             async with safe_async_lifecycle("Remote API Proxy"):
-                # Explicitly override the default client timeout for the keepalive SSE connection stream
-                async with client.stream("GET", f"{url.rstrip('/')}/api/stream", headers={"Authorization": f"Bearer {sec}"}, timeout=None) as response:
+                async with client.stream("GET", f"{url}/api/stream", headers={"Authorization": f"Bearer {sec}"}, timeout=None) as response:
                     if response.status_code != 200:
                         yield f"data: {json.dumps({'action': 'error', 'message': f'Upstream gateway returned HTTP {response.status_code}'})}\n\n"
                         return
@@ -55,68 +68,40 @@ async def queue_stream(request: Request):
 @router.get("")
 async def get_queue(request: Request):
     ui_config = load_clean_json(UI_CONFIG_FILE)
-    bmode = ui_config.get("backend_mode", "local")
-
-    if bmode == "remote":
-        url = ui_config.get("remote_url", "")
-        sec = ui_config.get("remote_secret", "")
-        client = request.state.http_client
+    if ui_config.get("backend_mode", "local") == "remote":
+        url, _, sec = _get_primary_host_details(ui_config)
         try:
-            r = await client.get(
-                f"{url.rstrip('/')}/api/queue",
-                headers={"Authorization": f"Bearer {sec}"},
-                timeout=5.0
-            )
-            if r.status_code == 200:
-                return JSONResponse(r.json())
+            r = await request.state.http_client.get(f"{url}/api/queue", headers={"Authorization": f"Bearer {sec}"}, timeout=5.0)
+            if r.status_code == 200: return JSONResponse(r.json())
         except Exception: pass
         return JSONResponse([])
     else:
         config = load_clean_json(get_active_config_path())
         q_path = os.path.normpath(os.path.join(SCRIPT_DIR, config.get("smtp", {}).get("queue_dir", "queue")))
-        items = get_queue_items(q_path)
-        return JSONResponse(items)
+        return JSONResponse(get_queue_items(q_path))
 
 @router.get("/{item_id}/eml")
 async def proxy_get_queue_item_eml(request: Request, item_id: str):
     ui_config = load_clean_json(UI_CONFIG_FILE)
-    bmode = ui_config.get("backend_mode", "local")
-
-    if bmode == "remote":
-        url = ui_config.get("remote_url", "")
-        sec = ui_config.get("remote_secret", "")
-        client = request.state.http_client
+    if ui_config.get("backend_mode", "local") == "remote":
+        url, _, sec = _get_primary_host_details(ui_config)
         try:
-            r = await client.get(
-                f"{url.rstrip('/')}/api/queue/{item_id}/eml",
-                headers={"Authorization": f"Bearer {sec}"},
-                timeout=5.0
-            )
-            if r.status_code == 200:
-                return JSONResponse(r.json())
+            r = await request.state.http_client.get(f"{url}/api/queue/{item_id}/eml", headers={"Authorization": f"Bearer {sec}"}, timeout=5.0)
+            if r.status_code == 200: return JSONResponse(r.json())
         except Exception: pass
         return JSONResponse({"raw_eml_base64": ""})
     else:
         config = load_clean_json(get_active_config_path())
         q_path = os.path.normpath(os.path.join(SCRIPT_DIR, config.get("smtp", {}).get("queue_dir", "queue")))
-        raw_b64 = get_queue_item_raw(q_path, item_id)
-        return JSONResponse({"raw_eml_base64": raw_b64})
+        return JSONResponse({"raw_eml_base64": get_queue_item_raw(q_path, item_id)})
 
 @router.post("/{item_id}/retry")
 async def proxy_retry_queue_item(request: Request, item_id: str):
     ui_config = load_clean_json(UI_CONFIG_FILE)
-    bmode = ui_config.get("backend_mode", "local")
-
-    if bmode == "remote":
-        url = ui_config.get("remote_url", "")
-        sec = ui_config.get("remote_secret", "")
-        client = request.state.http_client
+    if ui_config.get("backend_mode", "local") == "remote":
+        url, _, sec = _get_primary_host_details(ui_config)
         try:
-            await client.post(
-                f"{url.rstrip('/')}/api/queue/{item_id}/retry",
-                headers={"Authorization": f"Bearer {sec}"},
-                timeout=5.0
-            )
+            await request.state.http_client.post(f"{url}/api/queue/{item_id}/retry", headers={"Authorization": f"Bearer {sec}"}, timeout=5.0)
         except Exception: pass
         return JSONResponse({"status": "ok"})
     else:
@@ -128,18 +113,10 @@ async def proxy_retry_queue_item(request: Request, item_id: str):
 @router.delete("/{item_id}")
 async def proxy_delete_queue_item(request: Request, item_id: str):
     ui_config = load_clean_json(UI_CONFIG_FILE)
-    bmode = ui_config.get("backend_mode", "local")
-
-    if bmode == "remote":
-        url = ui_config.get("remote_url", "")
-        sec = ui_config.get("remote_secret", "")
-        client = request.state.http_client
+    if ui_config.get("backend_mode", "local") == "remote":
+        url, _, sec = _get_primary_host_details(ui_config)
         try:
-            await client.delete(
-                f"{url.rstrip('/')}/api/queue/{item_id}",
-                headers={"Authorization": f"Bearer {sec}"},
-                timeout=5.0
-            )
+            await request.state.http_client.delete(f"{url}/api/queue/{item_id}", headers={"Authorization": f"Bearer {sec}"}, timeout=5.0)
         except Exception: pass
         return JSONResponse({"status": "ok"})
     else:
@@ -152,19 +129,10 @@ async def proxy_delete_queue_item(request: Request, item_id: str):
 async def proxy_test_payload(request: Request):
     data = await request.json()
     ui_config = load_clean_json(UI_CONFIG_FILE)
-    bmode = ui_config.get("backend_mode", "local")
-
-    if bmode == "remote":
-        url = ui_config.get("remote_url", "")
-        sec = ui_config.get("remote_secret", "")
-        client = request.state.http_client
+    if ui_config.get("backend_mode", "local") == "remote":
+        url, _, sec = _get_primary_host_details(ui_config)
         try:
-            r = await client.post(
-                f"{url.rstrip('/')}/api/test",
-                json=data,
-                headers={"Authorization": f"Bearer {sec}"},
-                timeout=5.0
-            )
+            r = await request.state.http_client.post(f"{url}/api/test", json=data, headers={"Authorization": f"Bearer {sec}"}, timeout=5.0)
             if r.status_code != 200:
                 return JSONResponse({"error": f"Backend returned {r.status_code}"}, status_code=400)
         except Exception as e:
@@ -176,49 +144,27 @@ async def proxy_test_payload(request: Request):
         import aiosmtplib
         from backend.mail_parser import build_test_email
 
-        # 1. Parse your locally running gateway configuration parameters
         config = load_clean_json(get_active_config_path())
         listeners = config.get("smtp", {}).get("listeners", [])
+        if not listeners: return JSONResponse({"error": "No SMTP listeners configured on the gateway core to route through."}, status_code=400)
 
-        if not listeners:
-            return JSONResponse({"error": "No SMTP listeners configured on the gateway core to route through."}, status_code=400)
-
-        # 2. Filter listeners and apply sorting preferences (STARTTLS prioritized)
         tls_listeners = [l for l in listeners if l.get("starttls")]
         plain_listeners = [l for l in listeners if not l.get("starttls")]
-
-        # 3. Randomly select an operational listener based on preference tiers
         selected_listener = random.choice(tls_listeners) if tls_listeners else random.choice(plain_listeners)
 
-        # Secure parsing extraction of loopback address targets and ports
         bind_str = selected_listener.get("bind", "127.0.0.1:25")
         target_host, target_port = parse_bind_string(bind_str, 25)
         use_starttls = selected_listener.get("starttls", False)
-
-        # Force internal loopback connectivity to bypass outbound proxy routing bugs if array bound to 0.0.0.0 universally
         connect_host = "127.0.0.1" if target_host in ("0.0.0.0", "") else target_host
 
-        # 4. Generate our standardized test email object mapping seamlessly
         msg = build_test_email(data)
 
-        # 5. Connect and relay directly through the active loopback socket
         try:
-            # Enforce unverified context relaxation rule so self-signed certs never drop connections
             tls_ctx = ssl._create_unverified_context()
-
-            smtp_client = aiosmtplib.SMTP(
-                hostname=connect_host,
-                port=target_port,
-                use_tls=False,
-                start_tls=use_starttls,
-                tls_context=tls_ctx if use_starttls else None,
-                timeout=5
-            )
-
+            smtp_client = aiosmtplib.SMTP(hostname=connect_host, port=target_port, use_tls=False, start_tls=use_starttls, tls_context=tls_ctx if use_starttls else None, timeout=5)
             await smtp_client.connect()
             await smtp_client.send_message(msg)
             await smtp_client.quit()
-
             return JSONResponse({"status": "ok"})
         except Exception as e:
             return JSONResponse({"error": f"Failed to relay payload through local listener {connect_host}:{target_port}: {e}"}, status_code=500)

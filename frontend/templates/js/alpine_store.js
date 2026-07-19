@@ -25,8 +25,10 @@ const GatewayStore = {
                 return ctx.snapshots.server !== JSON.stringify(ctx.smtp);
             case 'backend':
                 return ctx.snapshots.backend !== JSON.stringify({
-                    backend_remote: ctx.ui_backend_remote, local_config_path: ctx.ui_local_config_path,
-                    remote_url: ctx.ui_remote_url, remote_secret: ctx.ui_remote_secret, remote_verify_tls: ctx.ui_remote_verify_tls
+                    backend_remote: ctx.ui_backend_remote,
+                    local_config_path: ctx.ui_local_config_path,
+                    primary_host: ctx.ui_primary_host,
+                    remote_hosts: ctx.ui_remote_hosts
                 });
             case 'ui':
                 return ctx.snapshots.ui !== JSON.stringify(ctx._buildUiStatePayload());
@@ -76,9 +78,9 @@ document.addEventListener('alpine:init', () => {
         init() {
             this.testPayload = { ...this.defaultTestPayload, ...this.testPayload };
             this.ui_local_config_path = this.rawUiConfig.local_config_path || 'config.json';
-            this.ui_remote_url = this.rawUiConfig.remote_url || '';
-            this.ui_remote_secret = this.rawUiConfig.remote_secret || '';
-            this.ui_remote_verify_tls = this.rawUiConfig.remote_verify_tls === true;
+            this.ui_primary_host = this.rawUiConfig.primary_host || '';
+            this.ui_remote_hosts = this.rawUiConfig.remote_hosts || [];
+            this.ui_remote_secrets = this.rawUiConfig.remote_secrets || [];
 
             this.$watch('theme', val => { localStorage.setItem('theme', val); document.documentElement.setAttribute('data-theme', val); });
 

@@ -12,7 +12,7 @@ import uvicorn
 from backend.events import broker
 from core.json_store import parse_bind_string
 from core.security import create_secure_app, TLSManager
-from core.utils import safe_async_lifecycle
+from core.utils import safe_async_lifecycle, get_deterministic_hash
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -83,18 +83,19 @@ async def api_get_config(request: Request):
     """Serves entirely from the live in-memory AppState parameters with zero disk I/O."""
     state = request.app.state.gateway_state
 
-    # Deep copy prevents ANY mutation leaks back into the live running state
     config = copy.deepcopy(state.raw_config)
     vault = copy.deepcopy(state.raw_vault)
 
-    # Safely blank out the API secret so it is not exposed in the frontend DOM
+    c_hash = get_deterministic_hash({"config": config, "vault": vault})
+
     if "smtp" in config and "api" in config["smtp"] and "secret" in config["smtp"]["api"]:
         config["smtp"]["api"]["secret"] = ""
 
     return JSONResponse({
         "config": config,
         "vault": vault,
-        "smtp_meta": state.smtp.get("_smtp_meta", {})
+        "smtp_meta": state.smtp.get("_smtp_meta", {}),
+        "config_hash": c_hash
     })
 
 @app.post("/api/save", dependencies=[Depends(verify_token)])
@@ -103,13 +104,14 @@ async def api_save_config(request: Request):
         from core.config import CONFIG_FILE, save_unified_config
         data = await request.json()
 
-        # Delegate all payload normalization, secret hashing, and diff evaluation to the core engine
         save_unified_config(CONFIG_FILE, new_config=data.get("config"), new_vault=data.get("vault"))
+
+        c_hash = get_deterministic_hash({"config": data.get("config", {}), "vault": data.get("vault", {})})
 
         request.app.state.mappings_reload_event.set()
         broker.publish("CONFIG_RELOADED", None)
 
-        return JSONResponse({"status": "saved"})
+        return JSONResponse({"status": "saved", "config_hash": c_hash})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 

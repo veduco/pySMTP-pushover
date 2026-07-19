@@ -1,0 +1,19 @@
+{% from "components.html" import modal_frame, toggle, modal_footer, remote_host_block %}
+
+{% call modal_frame(open_model="modals.host.open", title_text="modals.host.mode === 'add' ? 'Add Remote Node' : 'Modify Node Context'") %}
+
+    <div class="form-group" style="margin-bottom: 1.5rem;">
+        <label>Node Alias</label>
+        <input type="text" x-model="modals.host.fields.alias" placeholder="Optional. e.g. US-East Gateway" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+    </div>
+
+    {{ remote_host_block(host_model="modals.host.fields.host", port_model="modals.host.fields.port") }}
+
+    <div class="flex-row">
+        {{ toggle(model="modals.host.fields.verify_tls", label="Verify Remote TLS Certificate") }}
+    </div>
+
+    <div x-show="modals.host.error" class="danger" style="color: var(--danger-color); font-weight: bold; margin-top: 1rem; font-size: 0.9rem;" x-text="modals.host.error"></div>
+
+    {{ modal_footer(clear_click="modals.host.clear()", clear_disabled="!modals.host.isDirty", cancel_click="modals.host.open = false", save_click="saveHostModal()", save_disabled="!canSaveHostModal", save_text="Apply Node") }}
+{% endcall %}

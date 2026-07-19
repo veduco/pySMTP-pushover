@@ -1,50 +1,95 @@
-{% from "components.html" import tab_save_actions %}
+{% from "components.html" import toggle, tab_save_actions, btn_edit, btn_delete %}
 <div class="card">
-    <div class="table-header-row" style="margin-top: 0;">
-        <h3>Active Link Summary</h3>
-        <button type="button" class="outline icon-btn" @click="openLinkModal()" title="Modify Connection Parameters">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-            </svg>
-        </button>
+    <div class="table-header-row" style="margin-top: 0; margin-bottom: 1.5rem;">
+        <h3>Global Architecture Mode</h3>
     </div>
-    <p>Current runtime linking parameters established by the frontend web engine process environment scope.</p>
 
-    <table>
-        <tbody>
-            <tr>
-                <td style="width: 35%;"><strong>Link Processing Mode</strong></td>
-                <td>
-                    <span x-show="!ui_backend_remote" style="font-weight: bold; color: var(--primary-color);">Local Daemon (Direct Filesystem Mapping)</span>
-                    <span x-show="ui_backend_remote" style="font-weight: bold; color: #10b981;">Remote Gateway (Control API Microservice)</span>
-                </td>
-            </tr>
-            <tr x-show="!ui_backend_remote">
-                <td><strong>Local Configuration File Path</strong></td>
-                <td><code x-text="ui_local_config_path"></code></td>
-            </tr>
-            <tr x-show="ui_backend_remote">
-                <td><strong>Control API Address</strong></td>
-                <td><code x-text="ui_remote_url || 'Not Set'"></code></td>
-            </tr>
-            <tr x-show="ui_backend_remote">
-                <td><strong>Verify TLS Certificate for Remote API</strong></td>
-                <td style="vertical-align: middle;">
-                    <svg x-show="ui_remote_verify_tls" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle;"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    <svg x-show="!ui_remote_verify_tls" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#ef4444" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                    <span style="margin-left: 0.25rem; vertical-align: middle;" x-text="ui_remote_verify_tls ? 'Enabled' : 'Disabled'"></span>
-                </td>
-            </tr>
-            <tr x-show="ui_backend_remote">
-                <td><strong>API Bearer Secret</strong></td>
-                <td><span style="font-family: monospace; opacity: 0.5;">••••••••••••••••••••••••••••••••</span></td>
-            </tr>
-        </tbody>
-    </table>
+    <div class="flex-row" style="margin-bottom: 1rem; align-items: center;">
+        {{ toggle(model="ui_backend_remote", label="Enable Distributed Decoupled Proxy Architecture") }}
+    </div>
+
+    <div x-show="!ui_backend_remote" x-transition>
+        <div class="form-group">
+            <label>Local Configuration File Path</label>
+            <input type="text" x-model="ui_local_config_path" placeholder="/opt/smtp-pushover/config.json" autocomplete="off" style="width: 100%;">
+        </div>
+    </div>
+
+    <div x-show="ui_backend_remote" x-transition>
+        <div class="flex-row" style="margin-bottom: 1.5rem;">
+            <div style="flex: 0 0 auto; max-width: 100%;">
+                <label>Primary Configuration Host</label>
+                <select x-model="ui_primary_host" style="width: max-content; max-width: 100%; display: block; padding-right: 2rem;">
+                    <option value="">-- Select Source of Truth Node --</option>
+                    <template x-for="h in ui_remote_hosts" :key="h.host + ':' + h.port">
+                        <option :value="h.host + ':' + h.port" x-text="h.alias ? h.alias : 'https://' + h.host + ':' + h.port" :selected="ui_primary_host === (h.host + ':' + h.port)"></option>
+                    </template>
+                </select>
+                <span style="display: block; font-size: 0.8rem; opacity: 0.7; margin-top: 0.5rem;">UI reads map configurations exclusively from this active node.</span>
+            </div>
+        </div>
+
+        <div class="table-header-row" style="margin-top: 2rem;">
+            <h4>Remote Synchronization Nodes</h4>
+            <button type="button" class="outline success icon-btn" @click="openHostModal('add')" title="Add Remote Endpoint">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </button>
+            <div style="margin-left: auto;">
+                <button type="button" class="outline warning" @click="openSecretModal()">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                    Rotate Global API Secret
+                </button>
+            </div>
+        </div>
+
+        <div style="overflow-x: auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th class="table-sort" style="width: auto;" @click="setUiHostSort('alias')">Alias <span style="font-size: 0.8em;" x-show="uiHostSortCol==='alias'" x-text="uiHostSortDir===1 ? '▲' : '▼'"></span></th>
+                        <th class="table-sort" style="width: auto;" @click="setUiHostSort('address')">Target Address <span style="font-size: 0.8em;" x-show="uiHostSortCol==='address'" x-text="uiHostSortDir===1 ? '▲' : '▼'"></span></th>
+                        <th class="table-col-min">Verify TLS</th>
+                        <th class="table-col-min">Sync Status</th>
+                        <th class="table-col-min">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="h in sortedUiHosts" :key="h._idx">
+                        <tr>
+                            <td x-text="h.alias || '-'"></td>
+                            <td>
+                                <strong x-text="'https://' + h.host + ':' + h.port"></strong>
+                                <span x-show="ui_primary_host === (h.host + ':' + h.port)" style="font-size: 0.7rem; background: var(--primary-color); color: white; padding: 2px 6px; border-radius: 12px; margin-left: 0.5rem; vertical-align: top;">PRIMARY</span>
+                            </td>
+                            <td class="table-col-min" style="text-align: center; vertical-align: middle;">
+                                <svg x-show="h.verify_tls === true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: 0 auto;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                <svg x-show="h.verify_tls !== true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: 0 auto;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                            </td>
+                            <td class="table-col-min" style="text-align: center; vertical-align: middle; font-weight: bold;">
+                                <span x-show="h.sync_status === 'success'" style="color: var(--success-color);">Success</span>
+                                <span x-show="h.sync_status === 'pending'" style="color: var(--warning-color);">Pending</span>
+                                <span x-show="h.sync_status === 'failed'" style="color: var(--danger-color);">Failed</span>
+                                <span x-show="!h.sync_status" style="opacity: 0.5;">Unknown</span>
+                            </td>
+                            <td class="table-col-min">
+                                <div style="display: flex; gap: 0.5rem;">
+                                    {{ btn_edit("openHostModal('edit', h._idx)", "Modify Endpoint") }}
+                                    {{ btn_delete("deleteHost(h._idx)", "Remove Node") }}
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 
-<form id="backend_form" hx-post="/save/ui" hx-trigger="confirmedSave" hx-target="#status" @htmx:config-request.camel="$event.detail.parameters['ui_listeners_json'] = JSON.stringify(uiListeners);">
+<form id="backend_form" hx-post="/save/ui" hx-trigger="confirmedSave" hx-target="#status" @htmx:config-request.camel="
+    $event.detail.parameters['ui_listeners_json'] = JSON.stringify(uiListeners);
+    $event.detail.parameters['remote_hosts_json'] = JSON.stringify(ui_remote_hosts);
+    $event.detail.parameters['remote_secrets_json'] = JSON.stringify(ui_remote_secrets);
+">
     <input type="hidden" name="timezone" :value="ui_tz">
     <input type="hidden" name="date_format" :value="ui_fmt">
     <input type="hidden" name="relative_time" :value="ui_relative">
@@ -57,9 +102,7 @@
 
     <input type="hidden" name="backend_mode" :value="ui_backend_remote ? 'remote' : 'local'">
     <input type="hidden" name="local_config_path" :value="ui_local_config_path">
-    <input type="hidden" name="remote_url" :value="ui_remote_url">
-    <input type="hidden" name="remote_secret" :value="ui_remote_secret">
-    <input type="hidden" name="remote_verify_tls" :value="ui_remote_verify_tls">
+    <input type="hidden" name="primary_host" :value="ui_primary_host">
 
-    {{ tab_save_actions(save_click="requestSave('backend_form')", save_disabled="!hasBackendChanges", discard_click="resetTab('backend')", discard_disabled="!hasBackendChanges", save_text="Save Context & Reconnect") }}
+    {{ tab_save_actions(save_click="requestSave('backend_form')", save_disabled="!hasBackendChanges", discard_click="resetTab('backend')", discard_disabled="!hasBackendChanges", save_text="Save Architecture Context") }}
 </form>

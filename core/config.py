@@ -4,10 +4,13 @@ import time
 import shutil
 import json
 import hashlib
+import asyncio
+import logging
 
 # Facade: Expose separated components to maintain legacy import contracts
 from core.constants import *
 from core.json_store import *
+from core.utils import HttpClientPool, get_deterministic_hash
 
 # Unified standard in-memory config cache for UI processes
 _UI_CONFIG_CACHE = None
@@ -356,65 +359,74 @@ class ConfigOrchestrator:
     def __init__(self, ui_config: dict, http_client=None):
         self.ui_config = ui_config
         self.bmode = ui_config.get("backend_mode", "local")
-        self.url = ui_config.get("remote_url", "")
-        self.sec = ui_config.get("remote_secret", "")
+        self.primary_host = ui_config.get("primary_host", "")
+        self.remote_hosts = ui_config.get("remote_hosts", [])
+        self.remote_secrets = ui_config.get("remote_secrets", [])
+
         self.http_client = http_client
         self.timeout = 5.0
         self.active_path = self.ui_config.get("local_config_path") or CONFIG_FILE
 
     def trigger_local_backend_reload(self):
-        """Dispatches an unconditional systemic reload payload to the active python core loop."""
         import signal
-        if not os.path.exists(SMTP_PID_FILE):
-            return
+        if not os.path.exists(SMTP_PID_FILE): return
         try:
             with open(SMTP_PID_FILE, 'r') as f:
                 pid = int(f.read().strip())
             os.kill(pid, signal.SIGUSR2)
-        except Exception:
-            pass
+        except Exception: pass
 
     @staticmethod
     def parse_duration_to_seconds(duration_str: str) -> int:
-        """
-        Converts compound alpha-numeric duration formats (e.g. '12h30m2s', '45s', '10m')
-        down into pure standalone integer seconds. Returns 600 (10m) default fallback on missing match.
-        """
-        if not duration_str:
-            return 600
+        if not duration_str: return 600
         pattern = re.compile(r'^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$')
         match = pattern.match(str(duration_str).strip().lower())
-        if not match:
-            return 600
+        if not match: return 600
         hours = int(match.group(1)) if match.group(1) else 0
         minutes = int(match.group(2)) if match.group(2) else 0
         seconds = int(match.group(3)) if match.group(3) else 0
         total = (hours * 3600) + (minutes * 60) + seconds
         return total if total > 0 else 600
 
+    def _get_host_secret(self, host_cfg):
+        """Resolves the last known working secret via deterministic hash mapping."""
+        target_hash = host_cfg.get("last_secret_hash")
+        if not self.remote_secrets: return ""
+        if not target_hash: return self.remote_secrets[0]
+
+        for s in self.remote_secrets:
+            if get_deterministic_hash({"secret": s}) == target_hash:
+                return s
+        return self.remote_secrets[0]
+
     async def get_config(self):
-        """Fetches the configuration state securely from the active deployment target."""
-        config = {}
-        vault_data = {"app": {}, "user": {}, "smarthost": {}}
-        smtp_meta = {}
-        config_ok = False
+        config, vault_data, smtp_meta = {}, {"app": {}, "user": {}, "smarthost": {}}, {}
+        config_ok, current_hash = False, ""
 
         if self.bmode == "remote":
-            if self.http_client:
+            primary_cfg = next((h for h in self.remote_hosts if f"{h.get('host')}:{h.get('port')}" == self.primary_host), None)
+            if primary_cfg:
+                client = self.http_client or HttpClientPool.get_client("frontend", verify_tls=primary_cfg.get("verify_tls", True))
+                secret = self._get_host_secret(primary_cfg)
+                url = f"https://{primary_cfg['host']}:{primary_cfg['port']}/api/config"
                 try:
-                    r = await self.http_client.get(
-                        f"{self.url.rstrip('/')}/api/config",
-                        headers={"Authorization": f"Bearer {self.sec}"},
-                        timeout=self.timeout
-                    )
+                    r = await client.get(url, headers={"Authorization": f"Bearer {secret}"}, timeout=self.timeout)
                     if r.status_code == 200:
                         data = r.json()
                         config = data.get("config", {})
                         vault_data = data.get("vault", {})
                         smtp_meta = data.get("smtp_meta", {})
+                        current_hash = data.get("config_hash", "")
+
+                        # Sync status back to success if we connected
+                        primary_cfg["sync_status"] = "success"
+                        primary_cfg["last_secret_hash"] = get_deterministic_hash({"secret": secret})
+                        save_json(UI_CONFIG_FILE, self.ui_config)
+                        clear_ui_config_cache()
+
                         config_ok = True
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.error(f"Failed to fetch config from primary host {url}: {e}")
         else:
             try:
                 parsed = load_config(ignore_missing=True, config_path=self.active_path)
@@ -422,28 +434,63 @@ class ConfigOrchestrator:
                     config = load_clean_json(self.active_path)
                     vault_data = load_vault_safe(parsed.vault_file)
                     smtp_meta = config.get("smtp", {}).get("_smtp_meta", {})
+                    current_hash = get_deterministic_hash({"config": config, "vault": vault_data})
                     config_ok = True
-            except Exception:
-                pass
+            except Exception: pass
 
-        return config, vault_data, smtp_meta, config_ok
+        return config, vault_data, smtp_meta, config_ok, current_hash
+
+    async def _push_to_host(self, host_cfg, payload, expected_hash):
+        url = f"https://{host_cfg['host']}:{host_cfg['port']}/api/save"
+        client = self.http_client or HttpClientPool.get_client("frontend", verify_tls=host_cfg.get("verify_tls", True))
+
+        # Attempt loop: Try last known good secret, then fallback to newest secret if unauthorized
+        secrets_to_try = [self._get_host_secret(host_cfg)]
+        if self.remote_secrets and self.remote_secrets[0] not in secrets_to_try:
+            secrets_to_try.append(self.remote_secrets[0])
+
+        for secret in secrets_to_try:
+            try:
+                r = await client.post(url, json=payload, headers={"Authorization": f"Bearer {secret}"}, timeout=self.timeout)
+                if r.status_code == 200:
+                    returned_hash = r.json().get("config_hash", "")
+                    if returned_hash == expected_hash:
+                        host_cfg["sync_status"] = "success"
+                        host_cfg["expected_hash"] = expected_hash
+                        host_cfg["last_secret_hash"] = get_deterministic_hash({"secret": secret})
+                        return True
+            except Exception: pass
+
+        host_cfg["sync_status"] = "failed"
+        host_cfg["expected_hash"] = expected_hash
+        return False
+
+    async def fan_out_config(self, parsed_config, vault_parsed, expected_hash, specific_hosts=None):
+        """Pushes configurations to remote instances and handles granular host synchronization updates."""
+        payload = {"config": parsed_config}
+        if vault_parsed: payload["vault"] = vault_parsed
+
+        targets = specific_hosts if specific_hosts is not None else self.remote_hosts
+        tasks = [self._push_to_host(h, payload, expected_hash) for h in targets]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Purge unused secrets to reduce memory bloat securely
+        active_hashes = {h.get("last_secret_hash") for h in self.remote_hosts}
+        new_secrets = []
+        for s in self.remote_secrets:
+            if get_deterministic_hash({"secret": s}) in active_hashes or (self.remote_secrets and s == self.remote_secrets[0]):
+                new_secrets.append(s)
+        self.ui_config["remote_secrets"] = new_secrets
+
+        save_json(UI_CONFIG_FILE, self.ui_config)
+        clear_ui_config_cache()
+        return all(res is True for res in results)
 
     async def save_config(self, parsed_config, vault_parsed=None):
-        """Pushes the updated configuration payload to the target and issues automatic reload signals."""
         if self.bmode == "remote":
-            payload = {"config": parsed_config}
-            if vault_parsed:
-                payload["vault"] = vault_parsed
-
-            if self.http_client:
-                await self.http_client.post(
-                    f"{self.url.rstrip('/')}/api/save",
-                    json=payload,
-                    headers={"Authorization": f"Bearer {self.sec}"},
-                    timeout=self.timeout
-                )
-
-            return "Configuration successfully synchronized with the remote gateway daemon."
+            expected_hash = get_deterministic_hash({"config": parsed_config, "vault": vault_parsed or {}})
+            success = await self.fan_out_config(parsed_config, vault_parsed, expected_hash)
+            return "Configuration synchronized to all nodes." if success else "Some hosts failed to sync. Background retries have begun."
         else:
             save_unified_config(self.active_path, new_config=parsed_config, new_vault=vault_parsed)
             self.trigger_local_backend_reload()

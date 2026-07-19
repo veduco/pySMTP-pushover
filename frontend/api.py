@@ -15,11 +15,24 @@ from core.utils import HttpClientPool
 # Silence urllib3 warnings against backend self-signed proxy certs
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+background_task = None
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manages application startup and loop-aware HTTP client teardown limits seamlessly."""
     app_state["active_servers"] = app_state.get("active_servers", 0) + 1
     app_state["shutdown"] = False
+
+    async def sync_loop():
+        from frontend.utils import background_sync_worker
+        while not app_state["shutdown"]:
+            await asyncio.sleep(30)
+            await background_sync_worker()
+
+    global background_task
+    if app_state["active_servers"] == 1:
+        background_task = asyncio.create_task(sync_loop())
+
     try:
         yield
     finally:
@@ -27,6 +40,8 @@ async def lifespan(app: FastAPI):
         # Only tear down the global stream state if ALL server threads have exited/crashed
         if app_state["active_servers"] <= 0:
             app_state["shutdown"] = True
+            if background_task:
+                background_task.cancel()
             await HttpClientPool.close_all()
 
 def frontend_config_resolver(request: Request):

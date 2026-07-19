@@ -1,7 +1,18 @@
 import asyncio
 import logging
 import httpx
+import json
+import hashlib
 from contextlib import asynccontextmanager
+
+def get_deterministic_hash(data: dict) -> str:
+    """Produces a consistent SHA-256 hash of a dictionary by sorting keys and stripping whitespace."""
+    if not data:
+        return ""
+    # Strip transient metadata before hashing
+    safe_data = {k: v for k, v in data.items() if k not in ("_smtp_meta",)}
+    serialized = json.dumps(safe_data, sort_keys=True, separators=(',', ':'))
+    return hashlib.sha256(serialized.encode('utf-8')).hexdigest()
 
 @asynccontextmanager
 async def safe_async_lifecycle(context_name: str = "Stream"):
@@ -21,7 +32,7 @@ class HttpClientPool:
     @classmethod
     def get_client(cls, pool_type: str = "default", verify_tls: bool = True, timeout: float = 15.0) -> httpx.AsyncClient:
         loop = asyncio.get_running_loop()
-        key = (loop, pool_type)
+        key = (loop, pool_type, verify_tls)
 
         if key not in cls._clients:
             if pool_type == "pushover":

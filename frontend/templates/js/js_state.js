@@ -7,10 +7,9 @@ ui_backend_remote: {{ 'true' if backend_mode == 'remote' else 'false' }},
 ui_trust_proxy: ({{ ui_config_json | safe }}.trust_proxy === true),
 
 ui_local_config_path: '',
-ui_remote_url: '',
-ui_remote_secret: '',
-ui_remote_verify_tls: false,
-showRemoteSecret: false,
+ui_primary_host: '',
+ui_remote_hosts: [],
+ui_remote_secrets: [],
 sseSource: null,
 
 isReconnecting: false,
@@ -85,6 +84,7 @@ smarthostSortCol: 'alias', smarthostSortDir: 1,
 
 smtpListenerSortCol: 'bind', smtpListenerSortDir: 1,
 uiListenerSortCol: 'bind', uiListenerSortDir: 1,
+uiHostSortCol: 'alias', uiHostSortDir: 1,
 
 diffModal: { open: false, changes: [], targetForm: '' },
 alertModal: { open: false, title: '', message: '' },
@@ -97,5 +97,6 @@ modals: {
     listener: new GatewayModal(schemaSource, 'gateway_config.smtp.listeners', { idx: null, ip: '0.0.0.0', port: 25 }),
     uiListener: new GatewayModal(schemaSource, 'ui_config.listeners', { idx: null, ip: '0.0.0.0', port: 8443 }),
     smarthost: new GatewayModal(schemaSource, 'gateway_config.smarthost.aliases', { oldAlias: '', alias: '', auth: false, username: '', password: '' }),
-    link: new GatewayModal(schemaSource, '', { backend_remote: false, local_config_path: '', remote_url: '', remote_secret: '', remote_verify_tls: false })
+    host: new GatewayModal(schemaSource, '', { idx: null, alias: '', host: '', port: 6443, verify_tls: true }),
+    secret: new GatewayModal(schemaSource, '', { value: '' })
 },

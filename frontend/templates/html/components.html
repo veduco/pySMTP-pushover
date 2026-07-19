@@ -36,6 +36,25 @@
 </div>
 {% endmacro %}
 
+{% macro remote_host_block(host_model, port_model) %}
+<div style="display: flex; align-items: stretch; gap: 0.5rem; margin-bottom: 1.5rem;">
+    <div style="flex: 0 0 auto; display: flex; align-items: flex-end;">
+        <div style="padding: 0.6rem 0.75rem; background: var(--secondary-bg); border: 1px solid var(--border-color); border-radius: 6px; font-weight: bold; color: var(--text-color); opacity: 0.8; box-sizing: border-box; font-size: 0.9rem; line-height: 1.25;">https://</div>
+    </div>
+    <div style="flex: 2; min-width: 0;">
+        <label>Hostname or IP</label>
+        <input type="text" x-model="{{ host_model }}" inputmode="decimal" placeholder="192.168.1.10" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+    </div>
+    <div style="flex: 0 0 auto; display: flex; align-items: flex-end;">
+        <div style="padding: 0.6rem 0.25rem; font-weight: bold; color: var(--text-color); opacity: 0.8; box-sizing: border-box; line-height: 1.25;">:</div>
+    </div>
+    <div style="flex: 1; min-width: 0;">
+        <label>Port</label>
+        <input type="number" x-model.number="{{ port_model }}" inputmode="numeric" pattern="[0-9]*" style="width: 100%;" oninput="if(this.value.length > 5) this.value = this.value.slice(0, 5);" min="1" max="65535">
+    </div>
+</div>
+{% endmacro %}
+
 {% macro listener_security_toggle(model, label_text) %}
 <div style="margin-bottom: 1.5rem;">
     <label class="hover-scale" style="margin: 0; display: inline-flex; width: max-content; align-items: center; gap: 0.5rem; cursor: pointer;">
@@ -109,12 +128,16 @@
 </button>
 {% endmacro %}
 
-{% macro modal_footer(clear_click, clear_disabled, cancel_click, save_click, save_disabled, save_text='Save Changes') %}
+{% macro modal_footer(clear_click='', clear_disabled='', cancel_click='', save_click='', save_disabled='', save_text='Save Changes', save_class='') %}
 <div style="display: flex; gap: 1rem; justify-content: space-between; align-items: center; margin-top: 1.5rem;">
+    {% if clear_click %}
     {{ btn_clear(click=clear_click, disabled_expr=clear_disabled) }}
+    {% else %}
+    <div></div>
+    {% endif %}
     <div style="display: flex; gap: 1rem;">
         <button type="button" class="outline" @click="{{ cancel_click }}">Cancel</button>
-        <button type="button" @click="{{ save_click }}" :disabled="{{ save_disabled }}">{{ save_text }}</button>
+        <button {% if save_click %}type="button" @click="{{ save_click }}"{% else %}type="submit"{% endif %} {% if save_class %}class="{{ save_class }}"{% endif %} :disabled="{{ save_disabled }}">{{ save_text }}</button>
     </div>
 </div>
 {% endmacro %}
