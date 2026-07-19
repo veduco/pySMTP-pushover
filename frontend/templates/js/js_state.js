@@ -1,5 +1,6 @@
 theme: localStorage.getItem('theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
 tab: localStorage.getItem('activeTab') || 'routes',
+mobileMenuOpen: false,
 
 configOk: {{ 'true' if config_ok else 'false' }},
 ui_backend_remote: {{ 'true' if backend_mode == 'remote' else 'false' }},
