@@ -19,7 +19,7 @@ from backend.control_api import start_control_api, stop_control_api
 from backend.events import broker
 
 # Added centralized primitive for string parsing
-from core.json_store import parse_bind_string
+from core.utils import parse_bind_string
 
 def get_smtp_factory(handler, eff_hostname, tls_context, authenticator, proxy_protocol=False):
     """

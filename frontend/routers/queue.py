@@ -8,8 +8,7 @@ from frontend.state import app_state
 from frontend.utils import get_active_config_path
 from core.config import SCRIPT_DIR, UI_CONFIG_FILE, load_clean_json, ConfigOrchestrator
 from core.queue_store import get_queue_items, retry_queue_item, delete_queue_item, get_queue_item_raw
-from core.utils import safe_async_lifecycle
-from core.json_store import parse_bind_string
+from core.utils import safe_async_lifecycle, parse_bind_string
 
 router = APIRouter(prefix="/api/queue")
 

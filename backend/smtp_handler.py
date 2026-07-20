@@ -12,7 +12,7 @@ from aiosmtpd.smtp import SMTP
 
 from core.config import ConfigOrchestrator
 from backend.mail_parser import parse_email_content
-from core.json_store import is_ip_allowed
+from core.utils import is_ip_allowed
 
 try:
     from passlib.hash import sha256_crypt, sha512_crypt, md5_crypt

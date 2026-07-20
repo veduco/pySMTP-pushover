@@ -15,7 +15,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 
-from core.json_store import is_ip_allowed, parse_bind_string
+from core.utils import is_ip_allowed, parse_bind_string
 
 class TLSManager:
     """Centralized Cryptographic Asset Assurance Wrapper."""

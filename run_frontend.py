@@ -17,7 +17,7 @@ if SCRIPT_DIR not in sys.path:
 
 from core.config import load_clean_json, save_json, UI_CONFIG_FILE, clear_ui_config_cache, get_cached_ui_config
 from core.logger import SuppressUvicornNoiseFilter, apply_logging_level
-from core.json_store import parse_bind_string
+from core.utils import parse_bind_string
 from frontend.api import app
 from frontend.utils import generate_ui_cert
 

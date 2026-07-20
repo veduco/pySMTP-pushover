@@ -8,9 +8,8 @@ from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from frontend.state import app_state
 from frontend.routers import queue, ui
 from core.config import UI_CONFIG_FILE, load_clean_json
-from core.json_store import is_valid_network_target
+from core.utils import is_valid_network_target, HttpClientPool
 from core.security import create_secure_app
-from core.utils import HttpClientPool
 
 # Silence urllib3 warnings against backend self-signed proxy certs
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
