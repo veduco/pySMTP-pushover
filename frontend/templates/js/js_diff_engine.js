@@ -586,35 +586,3 @@ resetTab(tabContext) {
         this.errors.dedupeWindow = '';
     }
 },
-
-reorderRoute(oldIdx, newIdx) {
-    if (oldIdx === newIdx || oldIdx === null) return;
-    const item = this.mappings.splice(oldIdx, 1)[0];
-    this.mappings.splice(newIdx, 0, item);
-    this.draggedRouteIdx = null;
-},
-
-toggleAlias(obj, field) {
-    const flag = field === 'token' ? '_isTokenAlias' : '_isUserAlias';
-    const raw = field === 'token' ? '_tokenRaw' : '_userRaw';
-    const alias = field === 'token' ? '_tokenAliasVal' : '_userAliasVal';
-    if (obj[flag]) {
-        obj[alias] = obj[field] || '';
-        obj[field] = obj[raw] || '';
-        obj[flag] = false;
-    } else {
-        obj[raw] = obj[field] || '';
-        obj[field] = obj[alias] || '';
-        obj[flag] = true;
-    }
-},
-
-addMapping() {
-    this.mappings.push({
-        _uid: Date.now().toString(36) + Math.random().toString(36).substr(2),
-        _key: '', match: 'to', method: 'pushover', token: '', user: '', _isRegex: false,
-        _isTokenAlias: true, _isUserAlias: true,
-        _tokenAliasVal: '', _tokenRaw: '', _userAliasVal: '', _userRaw: '', smarthost_alias: '',
-        _showToken: false, _showUser: false, _showAdv: this.ui_expand_adv, disable_attachments: false, force_plaintext: false
-    });
-},
