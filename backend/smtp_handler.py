@@ -127,30 +127,35 @@ class PushoverSMTPHandler:
 
         return routes_to_trigger
 
-    def _apply_fallbacks(self, routes_to_trigger):
+    def _apply_fallbacks(self, routes_to_trigger, sender, recipients):
         if not routes_to_trigger:
             def_route = self.state.smtp.get("default_route", "pushover")
 
+            # Format clean addresses for the log output
+            log_from = sender if sender else "Unknown"
+            log_to = ", ".join(recipients) if recipients else "Unknown"
+            base_log_msg = f"No explicit mappings matched [To: {log_to}, From: {log_from}]"
+
             if def_route == "pushover":
                 if self.state.pushover.get("user") and self.state.pushover.get("token"):
-                    logging.info("No explicit mappings matched. Falling back to global Pushover catch-all.")
+                    logging.info(f"{base_log_msg}. Falling back to global Pushover catch-all.")
                     r = self.state.pushover.copy()
                     r["_match_reason"] = "Global Default Route"
                     routes_to_trigger.append(r)
                 else:
-                    logging.info("No explicit mappings matched and no global Pushover catch-all defined. Ignoring message.")
+                    logging.info(f"{base_log_msg}. No global Pushover catch-all defined. Ignoring message.")
 
             elif def_route == "smarthost":
                 sh_alias = self.state.smarthost.get("globals", {}).get("alias")
                 if sh_alias and sh_alias in self.state.smarthost.get("aliases", {}):
-                    logging.info("No explicit mappings matched. Falling back to global Smarthost catch-all.")
+                    logging.info(f"{base_log_msg}. Falling back to global Smarthost catch-all.")
                     g = self.state.smarthost.get("globals", {}).copy()
                     g["method"] = "smarthost"
                     g["smarthost_alias"] = sh_alias
                     g["_match_reason"] = "Global Default Route"
                     routes_to_trigger.append(g)
                 else:
-                    logging.info("No explicit mappings matched and global Smarthost alias is invalid. Ignoring message.")
+                    logging.info(f"{base_log_msg}. Global Smarthost alias is invalid. Ignoring message.")
 
         return routes_to_trigger
 
@@ -312,7 +317,7 @@ class PushoverSMTPHandler:
             routes = self._match_explicit_routes(sender, recipients)
 
             # 3. Apply global fallbacks if no explicit routes matched
-            routes = self._apply_fallbacks(routes)
+            routes = self._apply_fallbacks(routes, sender, recipients)
 
             # 4. Deduplicate identical destinations
             unique_routes = self._deduplicate_routes(routes)
