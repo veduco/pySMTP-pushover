@@ -444,6 +444,11 @@ revertChange(idx) {
     const val = item.originalValue;
     let isComplexReset = false;
 
+    // Helper to dynamically strip patches matching specific prefixes
+    const clearPatches = (...prefixes) => {
+        this.diffModal.changes = this.diffModal.changes.filter(c => !prefixes.some(p => c.path.startsWith(p)));
+    };
+
     // 1. Structural Inverse Patches (Arrays / Matrix Objects / Dynamic UI tables)
     if (path.startsWith('/smarthost/aliases') || path.startsWith('/vaultSmarthost')) {
         const segments = path.split('/').filter(Boolean).map(s => s.replace(/~1/g, '/'));
@@ -466,31 +471,31 @@ revertChange(idx) {
         }
     } else if (path.startsWith('/vaultApp')) {
         this.vaultApp = this.clone(JSON.parse(this.snapshots.pushover).vaultApp);
-        this.diffModal.changes = this.diffModal.changes.filter(c => !c.path.startsWith('/vaultApp'));
+        clearPatches('/vaultApp');
         isComplexReset = true;
     } else if (path.startsWith('/vaultUser')) {
         this.vaultUser = this.clone(JSON.parse(this.snapshots.pushover).vaultUser);
-        this.diffModal.changes = this.diffModal.changes.filter(c => !c.path.startsWith('/vaultUser'));
+        clearPatches('/vaultUser');
         isComplexReset = true;
     } else if (path.startsWith('/smtpListeners')) {
         this.smtp.listeners = this.clone(JSON.parse(this.snapshots.server).listeners || []);
-        this.diffModal.changes = this.diffModal.changes.filter(c => !c.path.startsWith('/smtpListeners'));
+        clearPatches('/smtpListeners');
         isComplexReset = true;
     } else if (path.startsWith('/uiListeners')) {
         this.uiListeners = this.clone(JSON.parse(this.snapshots.ui).uiListeners || []);
-        this.diffModal.changes = this.diffModal.changes.filter(c => !c.path.startsWith('/uiListeners'));
+        clearPatches('/uiListeners');
         isComplexReset = true;
     } else if (path.startsWith('/remoteHosts')) {
         this.ui_remote_hosts = this.clone(JSON.parse(this.snapshots.backend).remote_hosts || []);
-        this.diffModal.changes = this.diffModal.changes.filter(c => !c.path.startsWith('/remoteHosts'));
+        clearPatches('/remoteHosts');
         isComplexReset = true;
     } else if (path.startsWith('/route_mappings') || path === '/route_mappings_order') {
         this.resetTab('routes');
-        this.diffModal.changes = this.diffModal.changes.filter(c => !c.path.startsWith('/route_mappings') && c.path !== '/route_mappings_order');
+        clearPatches('/route_mappings'); // Automatically covers /route_mappings_order
         isComplexReset = true;
     } else if (path.startsWith('/routes')) {
         this.resetTab('routes');
-        this.diffModal.changes = this.diffModal.changes.filter(c => !c.path.startsWith('/routes'));
+        clearPatches('/routes');
         isComplexReset = true;
     }
 
