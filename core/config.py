@@ -399,6 +399,13 @@ class ConfigOrchestrator:
                 return s
         return self.remote_secrets[0]
 
+    def get_primary_target_ctx(self):
+        """Resolves and returns the target baseline URL and Bearer Token for the primary node."""
+        primary_cfg = next((h for h in self.remote_hosts if f"{h.get('host')}:{h.get('port')}" == self.primary_host), None)
+        if not primary_cfg:
+            return "", ""
+        return f"https://{primary_cfg['host']}:{primary_cfg['port']}", self._get_host_secret(primary_cfg)
+
     async def get_config(self):
         config, vault_data, smtp_meta = {}, {"app": {}, "user": {}, "smarthost": {}}, {}
         config_ok, current_hash = False, ""

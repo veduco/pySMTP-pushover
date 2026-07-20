@@ -6,27 +6,12 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from frontend.state import app_state
 from frontend.utils import get_active_config_path
-from core.config import SCRIPT_DIR, UI_CONFIG_FILE, load_clean_json
+from core.config import SCRIPT_DIR, UI_CONFIG_FILE, load_clean_json, ConfigOrchestrator
 from core.queue_store import get_queue_items, retry_queue_item, delete_queue_item, get_queue_item_raw
-from core.utils import safe_async_lifecycle, get_deterministic_hash
+from core.utils import safe_async_lifecycle
 from core.json_store import parse_bind_string
 
 router = APIRouter(prefix="/api/queue")
-
-def _get_primary_host_details(ui_config):
-    primary = ui_config.get("primary_host", "")
-    for h in ui_config.get("remote_hosts", []):
-        if f"{h.get('host')}:{h.get('port')}" == primary:
-            # Resolve the correct secret natively via the hash mapping
-            secrets = ui_config.get("remote_secrets", [])
-            sec = secrets[0] if secrets else ""
-            target_hash = h.get("last_secret_hash")
-            for s in secrets:
-                if get_deterministic_hash({"secret": s}) == target_hash:
-                    sec = s
-                    break
-            return f"https://{h['host']}:{h['port']}", h.get("verify_tls", True), sec
-    return "", True, ""
 
 @router.get("/stream")
 async def queue_stream(request: Request):
@@ -34,7 +19,8 @@ async def queue_stream(request: Request):
     bmode = ui_config.get("backend_mode", "local")
 
     if bmode == "remote":
-        url, _, sec = _get_primary_host_details(ui_config)
+        orch = ConfigOrchestrator(ui_config)
+        url, sec = orch.get_primary_target_ctx()
         client = request.state.http_client
 
         async def event_proxy():
@@ -69,7 +55,8 @@ async def queue_stream(request: Request):
 async def get_queue(request: Request):
     ui_config = load_clean_json(UI_CONFIG_FILE)
     if ui_config.get("backend_mode", "local") == "remote":
-        url, _, sec = _get_primary_host_details(ui_config)
+        orch = ConfigOrchestrator(ui_config)
+        url, sec = orch.get_primary_target_ctx()
         try:
             r = await request.state.http_client.get(f"{url}/api/queue", headers={"Authorization": f"Bearer {sec}"}, timeout=5.0)
             if r.status_code == 200: return JSONResponse(r.json())
@@ -84,7 +71,8 @@ async def get_queue(request: Request):
 async def proxy_get_queue_item_eml(request: Request, item_id: str):
     ui_config = load_clean_json(UI_CONFIG_FILE)
     if ui_config.get("backend_mode", "local") == "remote":
-        url, _, sec = _get_primary_host_details(ui_config)
+        orch = ConfigOrchestrator(ui_config)
+        url, sec = orch.get_primary_target_ctx()
         try:
             r = await request.state.http_client.get(f"{url}/api/queue/{item_id}/eml", headers={"Authorization": f"Bearer {sec}"}, timeout=5.0)
             if r.status_code == 200: return JSONResponse(r.json())
@@ -99,7 +87,8 @@ async def proxy_get_queue_item_eml(request: Request, item_id: str):
 async def proxy_retry_queue_item(request: Request, item_id: str):
     ui_config = load_clean_json(UI_CONFIG_FILE)
     if ui_config.get("backend_mode", "local") == "remote":
-        url, _, sec = _get_primary_host_details(ui_config)
+        orch = ConfigOrchestrator(ui_config)
+        url, sec = orch.get_primary_target_ctx()
         try:
             await request.state.http_client.post(f"{url}/api/queue/{item_id}/retry", headers={"Authorization": f"Bearer {sec}"}, timeout=5.0)
         except Exception: pass
@@ -114,7 +103,8 @@ async def proxy_retry_queue_item(request: Request, item_id: str):
 async def proxy_delete_queue_item(request: Request, item_id: str):
     ui_config = load_clean_json(UI_CONFIG_FILE)
     if ui_config.get("backend_mode", "local") == "remote":
-        url, _, sec = _get_primary_host_details(ui_config)
+        orch = ConfigOrchestrator(ui_config)
+        url, sec = orch.get_primary_target_ctx()
         try:
             await request.state.http_client.delete(f"{url}/api/queue/{item_id}", headers={"Authorization": f"Bearer {sec}"}, timeout=5.0)
         except Exception: pass
@@ -130,7 +120,8 @@ async def proxy_test_payload(request: Request):
     data = await request.json()
     ui_config = load_clean_json(UI_CONFIG_FILE)
     if ui_config.get("backend_mode", "local") == "remote":
-        url, _, sec = _get_primary_host_details(ui_config)
+        orch = ConfigOrchestrator(ui_config)
+        url, sec = orch.get_primary_target_ctx()
         try:
             r = await request.state.http_client.post(f"{url}/api/test", json=data, headers={"Authorization": f"Bearer {sec}"}, timeout=5.0)
             if r.status_code != 200:
