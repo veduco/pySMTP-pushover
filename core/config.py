@@ -534,6 +534,10 @@ class ConfigOrchestrator:
             if not ok:
                 raise Exception("Primary committed successfully, but failed to read back the normalized state.")
 
+            # Re-align the primary's expected hash with the post-normalized true state
+            primary_cfg["expected_hash"] = primary_hash
+            save_json(UI_CONFIG_FILE, self.ui_config)
+
             # 3. Fan-out the normalized configuration to all replicas safely
             replicas = [h for h in self.remote_hosts if h != primary_cfg]
             if replicas:
