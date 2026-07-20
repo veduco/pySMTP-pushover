@@ -100,7 +100,7 @@
 <div class="card" style="margin-bottom: 1.5rem;">
     <div class="table-header-row" style="margin-top: 0;">
         <h3 style="display: flex; align-items: center; gap: 0.75rem; margin: 0;">SMTP Authentication Users
-            <button type="button" class="outline success icon-btn" @click="openSmtpUserModal()" title="Add User" style="padding: 0.2rem 0.4rem;">
+            <button type="button" class="outline success icon-btn" @click="modals.smtpUser.openModal()" title="Add User" style="padding: 0.2rem 0.4rem;">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </button>
         </h3>
@@ -122,14 +122,14 @@
                         <td class="table-col-min" x-text="formatTime(u.epoch)"></td>
                         <td>
                             <div style="display: flex; gap: 0.5rem;">
-                                {{ btn_edit("openEditModal('smtp', u.name)", "Change Password") }}
-                                {{ btn_delete("deleteSmtpUser(u.name)", "Delete User") }}
+                                {{ btn_edit("modals.edit.openModal('smtp', u.name)", "Change Password") }}
+                                {{ btn_delete("modals.smtpUser.delete(u.name)", "Delete User") }}
                             </div>
                         </td>
                     </tr>
                 </template>
                 <template x-if="sortedSmtpAuth.length === 0">
-                    {{ empty_table_state(colspan_count=3, message_text="'No configured SMTP users.'", action_click="openSmtpUserModal()", action_text="Provision New SMTP Account") }}
+                    {{ empty_table_state(colspan_count=3, message_text="'No configured SMTP users.'", action_click="modals.smtpUser.openModal()", action_text="Provision New SMTP Account") }}
                 </template>
             </tbody>
         </table>
@@ -139,7 +139,7 @@
 <div class="card">
     <div class="table-header-row" style="margin-top: 0;">
         <h3 style="display: flex; align-items: center; gap: 0.75rem; margin: 0;">SMTP Listeners
-            <button type="button" class="outline success icon-btn" @click="openListenerModal('add')" title="Add Listener" style="padding: 0.2rem 0.4rem;">
+            <button type="button" class="outline success icon-btn" @click="modals.listener.openModal('add')" title="Add Listener" style="padding: 0.2rem 0.4rem;">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </button>
         </h3>
@@ -179,14 +179,14 @@
                         <td x-text="l.tls_key_file || '-'"></td>
                         <td>
                             <div style="display: flex; gap: 0.5rem;">
-                                {{ btn_edit("openListenerModal('edit', l._idx)", "Edit Listener") }}
+                                {{ btn_edit("modals.listener.openModal('edit', l._idx)", "Edit Listener") }}
                                 {{ btn_delete("smtp.listeners.splice(l._idx, 1)", "Delete Listener") }}
                             </div>
                         </td>
                     </tr>
                 </template>
                 <template x-if="sortedSmtpListeners.length === 0">
-                    {{ empty_table_state(colspan_count=7, message_text="'No configured SMTP listeners.'", action_click="openListenerModal('add')", action_text="Add Binding Socket Now") }}
+                    {{ empty_table_state(colspan_count=7, message_text="'No configured SMTP listeners.'", action_click="modals.listener.openModal('add')", action_text="Add Binding Socket Now") }}
                 </template>
             </tbody>
         </table>

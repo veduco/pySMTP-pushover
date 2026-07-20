@@ -71,12 +71,23 @@ document.addEventListener('alpine:init', () => {
         {% include "js_utils.js" %}
         {% include "js_diff_engine.js" %}
         {% include "js_api.js" %}
-
-        {% include "js_modal_actions.js" %}
         {% include "js_modal_eml.js" %}
 
         init() {
             this.testPayload = { ...this.defaultTestPayload, ...this.testPayload };
+
+            // Initialize the OOP Modal Controllers
+            this.modals = {
+                vault: new VaultModal(this, schemaSource, '', { type: 'app', name: '', token: '' }),
+                smtpUser: new SmtpUserModal(this, schemaSource, '', { name: '', password: '' }),
+                edit: new EditModal(this, schemaSource, '', { type: '', subType: '', name: '', value: '' }),
+                listener: new ListenerModal(this, 'smtp', schemaSource, 'gateway_config.smtp.listeners', { idx: null, ip: '0.0.0.0', port: 25 }),
+                uiListener: new ListenerModal(this, 'ui', schemaSource, 'ui_config.listeners', { idx: null, ip: '0.0.0.0', port: 8443 }),
+                smarthost: new SmarthostModal(this, schemaSource, 'gateway_config.smarthost.aliases', { oldAlias: '', alias: '', auth: false, username: '', password: '' }),
+                host: new HostModal(this, schemaSource, '', { idx: null, alias: '', host: '', port: 6443, verify_tls: true }),
+                secret: new SecretModal(this, schemaSource, '', { value: '' })
+            };
+
             this.ui_local_config_path = this.rawUiConfig.local_config_path || 'config.json';
             this.ui_primary_host = this.rawUiConfig.primary_host || '';
             this.ui_remote_hosts = this.rawUiConfig.remote_hosts || [];

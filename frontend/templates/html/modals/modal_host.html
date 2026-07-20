@@ -15,5 +15,5 @@
 
     <div x-show="modals.host.error" class="danger" style="color: var(--danger-color); font-weight: bold; margin-top: 1rem; font-size: 0.9rem;" x-text="modals.host.error"></div>
 
-    {{ modal_footer(clear_click="modals.host.clear()", clear_disabled="!modals.host.isDirty", cancel_click="modals.host.open = false", save_click="saveHostModal()", save_disabled="!canSaveHostModal", save_text="Apply Node") }}
+    {{ modal_footer(clear_click="modals.host.clear()", clear_disabled="!modals.host.isDirty", cancel_click="modals.host.open = false", save_click="modals.host.save()", save_disabled="!modals.host.canSave", save_text="Apply Node") }}
 {% endcall %}

@@ -12,5 +12,5 @@
 
     <div x-show="modals.smtpUser.error" class="danger" style="color: var(--danger-color); font-weight: bold; margin-top: 1rem; font-size: 0.9rem;" x-text="modals.smtpUser.error"></div>
 
-    {{ modal_footer(clear_click="modals.smtpUser.clear()", clear_disabled="!modals.smtpUser.isDirty", cancel_click="modals.smtpUser.open = false", save_click="saveSmtpUserModal()", save_disabled="!canSaveSmtpUserModal", save_text="Save") }}
+    {{ modal_footer(clear_click="modals.smtpUser.clear()", clear_disabled="!modals.smtpUser.isDirty", cancel_click="modals.smtpUser.open = false", save_click="modals.smtpUser.save()", save_disabled="!modals.smtpUser.canSave", save_text="Save") }}
 {% endcall %}

@@ -136,7 +136,7 @@
     <div class="card">
         <div class="table-header-row" style="margin-top: 0;">
             <h3>UI Listeners</h3>
-            <button type="button" class="outline success icon-btn" @click="openUiListenerModal('add')" title="Add UI Listener">
+            <button type="button" class="outline success icon-btn" @click="modals.uiListener.openModal('add')" title="Add UI Listener">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="12" y1="5" x2="12" y2="19"></line>
                     <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -173,8 +173,8 @@
                         <td x-text="l.tls_key || '-'"></td>
                         <td class="table-col-min">
                             <div style="display: flex; gap: 0.5rem;">
-                                {{ btn_edit("openUiListenerModal('edit', l._idx)", "Modify Listener") }}
-                                {{ btn_delete("deleteUiListener(l._idx)", "Remove Listener") }}
+                                {{ btn_edit("modals.uiListener.openModal('edit', l._idx)", "Modify Listener") }}
+                                {{ btn_delete("modals.uiListener.delete(l._idx)", "Remove Listener") }}
                             </div>
                         </td>
                     </tr>

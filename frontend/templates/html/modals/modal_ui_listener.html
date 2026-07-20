@@ -12,5 +12,5 @@
     </div>
     <span class="validation-error" x-show="modals.uiListener.error" x-text="modals.uiListener.error"></span>
 
-    {{ modal_footer(clear_click="modals.uiListener.clear()", clear_disabled="!modals.uiListener.isDirty", cancel_click="modals.uiListener.open = false", save_click="saveUiListenerModal()", save_disabled="!canSaveUiListenerModal") }}
+    {{ modal_footer(clear_click="modals.uiListener.clear()", clear_disabled="!modals.uiListener.isDirty", cancel_click="modals.uiListener.open = false", save_click="modals.uiListener.save()", save_disabled="!modals.uiListener.canSave") }}
 {% endcall %}

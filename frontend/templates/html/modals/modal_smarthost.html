@@ -63,5 +63,5 @@
 
     <div x-show="modals.smarthost.error" class="danger" style="color: var(--danger-color); font-weight: bold; margin-top: 1rem; font-size: 0.9rem;" x-text="modals.smarthost.error"></div>
 
-    {{ modal_footer(clear_click="modals.smarthost.clear()", clear_disabled="!modals.smarthost.isDirty", cancel_click="modals.smarthost.open = false", save_click="saveSmarthostModal()", save_disabled="!canSaveSmarthostModal") }}
+    {{ modal_footer(clear_click="modals.smarthost.clear()", clear_disabled="!modals.smarthost.isDirty", cancel_click="modals.smarthost.open = false", save_click="modals.smarthost.save()", save_disabled="!modals.smarthost.canSave") }}
 {% endcall %}

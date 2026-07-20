@@ -6,5 +6,5 @@
         {{ secret_input(value_model="modals.edit.fields.value", show_model="modals.edit.showToken", placeholder_text="Enter new hidden value...", dynamic_max_length="modals.edit.fields.type === 'vault' ? 30 : 256") }}
     </div>
 
-    {{ modal_footer(clear_click="modals.edit.clear()", clear_disabled="!modals.edit.isDirty", cancel_click="modals.edit.open = false", save_click="saveEditModal()", save_disabled="!canSaveEditModal") }}
+    {{ modal_footer(clear_click="modals.edit.clear()", clear_disabled="!modals.edit.isDirty", cancel_click="modals.edit.open = false", save_click="modals.edit.save()", save_disabled="!modals.edit.canSave") }}
 {% endcall %}

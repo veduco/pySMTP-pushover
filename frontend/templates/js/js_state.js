@@ -89,14 +89,5 @@ uiHostSortCol: 'alias', uiHostSortDir: 1,
 diffModal: { open: false, changes: [], targetForm: '' },
 alertModal: { open: false, title: '', message: '' },
 
-// Bootstrapped Polymorphic Modal Component Engine Bindings
-modals: {
-    vault: new GatewayModal(schemaSource, '', { type: 'app', name: '', token: '' }),
-    smtpUser: new GatewayModal(schemaSource, '', { name: '', password: '' }),
-    edit: new GatewayModal(schemaSource, '', { type: '', subType: '', name: '', value: '' }),
-    listener: new GatewayModal(schemaSource, 'gateway_config.smtp.listeners', { idx: null, ip: '0.0.0.0', port: 25 }),
-    uiListener: new GatewayModal(schemaSource, 'ui_config.listeners', { idx: null, ip: '0.0.0.0', port: 8443 }),
-    smarthost: new GatewayModal(schemaSource, 'gateway_config.smarthost.aliases', { oldAlias: '', alias: '', auth: false, username: '', password: '' }),
-    host: new GatewayModal(schemaSource, '', { idx: null, alias: '', host: '', port: 6443, verify_tls: true }),
-    secret: new GatewayModal(schemaSource, '', { value: '' })
-},
+// Bootstrapped Polymorphic Modal Component Engine Bindings will be injected on init
+modals: null,

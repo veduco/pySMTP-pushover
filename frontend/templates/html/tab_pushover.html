@@ -68,7 +68,7 @@
 
     <div class="table-header-row">
         <h4>App Token Aliases</h4>
-        <button type="button" class="outline success icon-btn" @click="openVaultModal('app')" title="Add App Token">
+        <button type="button" class="outline success icon-btn" @click="modals.vault.openModal('app')" title="Add App Token">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19"></line>
                 <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -91,14 +91,14 @@
                     <td class="table-col-min"><span class="time-display" x-text="formatTime(v.epoch)" :title="getFullTime(v.epoch)"></span></td>
                     <td class="table-col-min">
                         <div style="display: flex; gap: 0.5rem;">
-                            {{ btn_edit("openEditModal('vault', v.name, 'app')", "Modify Secret") }}
-                            {{ btn_delete("deleteVaultToken('app', v.name)", "Delete Alias") }}
+                            {{ btn_edit("modals.edit.openModal('vault', v.name, 'app')", "Modify Secret") }}
+                            {{ btn_delete("modals.vault.delete('app', v.name)", "Delete Alias") }}
                         </div>
                     </td>
                 </tr>
             </template>
             <template x-if="vaultApp.length === 0">
-                {{ empty_table_state(colspan_count=3, message_text="'No configured application tokens.'", action_click="openVaultModal('app')", action_text="Provision App Token Now") }}
+                {{ empty_table_state(colspan_count=3, message_text="'No configured application tokens.'", action_click="modals.vault.openModal('app')", action_text="Provision App Token Now") }}
             </template>
         </tbody>
     </table>
@@ -107,7 +107,7 @@
 
     <div class="table-header-row">
         <h4>User Key Aliases</h4>
-        <button type="button" class="outline success icon-btn" @click="openVaultModal('user')" title="Add User Key">
+        <button type="button" class="outline success icon-btn" @click="modals.vault.openModal('user')" title="Add User Key">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19"></line>
                 <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -130,14 +130,14 @@
                     <td class="table-col-min"><span class="time-display" x-text="formatTime(v.epoch)" :title="getFullTime(v.epoch)"></span></td>
                     <td class="table-col-min">
                         <div style="display: flex; gap: 0.5rem;">
-                            {{ btn_edit("openEditModal('vault', v.name, 'user')", "Modify Secret") }}
-                            {{ btn_delete("deleteVaultToken('user', v.name)", "Delete Alias") }}
+                            {{ btn_edit("modals.edit.openModal('vault', v.name, 'user')", "Modify Secret") }}
+                            {{ btn_delete("modals.vault.delete('user', v.name)", "Delete Alias") }}
                         </div>
                     </td>
                 </tr>
             </template>
             <template x-if="vaultUser.length === 0">
-                {{ empty_table_state(colspan_count=3, message_text="'No configured user keys.'", action_click="openVaultModal('user')", action_text="Provision User Key Now") }}
+                {{ empty_table_state(colspan_count=3, message_text="'No configured user keys.'", action_click="modals.vault.openModal('user')", action_text="Provision User Key Now") }}
             </template>
         </tbody>
     </table>

@@ -12,5 +12,5 @@
 
     <div x-show="modals.vault.error" class="danger" style="color: var(--danger-color); font-weight: bold; margin-top: 1rem; font-size: 0.9rem;" x-text="modals.vault.error"></div>
 
-    {{ modal_footer(clear_click="modals.vault.clear()", clear_disabled="!modals.vault.isDirty", cancel_click="modals.vault.open = false", save_click="saveVaultModal()", save_disabled="!canSaveVaultModal", save_text="Save") }}
+    {{ modal_footer(clear_click="modals.vault.clear()", clear_disabled="!modals.vault.isDirty", cancel_click="modals.vault.open = false", save_click="modals.vault.save()", save_disabled="!modals.vault.canSave", save_text="Save") }}
 {% endcall %}

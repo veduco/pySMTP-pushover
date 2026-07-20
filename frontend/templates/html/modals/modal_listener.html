@@ -28,5 +28,5 @@
 
     <div x-show="modals.listener.error" class="danger" style="color: var(--danger-color); font-weight: bold; margin-top: 1rem; font-size: 0.9rem;" x-text="modals.listener.error"></div>
 
-    {{ modal_footer(clear_click="modals.listener.clear()", clear_disabled="!modals.listener.isDirty", cancel_click="modals.listener.open = false", save_click="saveListenerModal()", save_disabled="!canSaveListenerModal") }}
+    {{ modal_footer(clear_click="modals.listener.clear()", clear_disabled="!modals.listener.isDirty", cancel_click="modals.listener.open = false", save_click="modals.listener.save()", save_disabled="!modals.listener.canSave") }}
 {% endcall %}
