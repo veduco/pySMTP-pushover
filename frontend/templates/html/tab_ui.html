@@ -30,10 +30,10 @@
         ui_loglevel: ui_loglevel,
         trust_proxy: ui_trust_proxy,
         backend_mode: ui_backend_remote ? 'remote' : 'local',
-        remote_url: ui_remote_url,
-        remote_secret: ui_remote_secret,
         local_config_path: ui_local_config_path,
-        remote_verify_tls: ui_remote_verify_tls,
+        primary_host: ui_primary_host,
+        remote_hosts_json: JSON.stringify(ui_remote_hosts),
+        remote_secrets_json: JSON.stringify(ui_remote_secrets),
         ui_allowed_cidrs_json: JSON.stringify(ui_allowed_cidrs),
         trust_proxy_cidrs_json: JSON.stringify(ui_trust_proxy_cidrs),
         ui_listeners_json: JSON.stringify(uiListeners)
