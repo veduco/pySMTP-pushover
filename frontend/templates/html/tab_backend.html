@@ -1,4 +1,4 @@
-{% from "components.html" import toggle, tab_save_actions, btn_edit, btn_delete %}
+{% from "components.html" import toggle, tab_save_actions, btn_edit, btn_delete, status_icon %}
 <div class="card">
     <div class="table-header-row" style="margin-top: 0; margin-bottom: 1.5rem;">
         <h3>Global Architecture Mode</h3>
@@ -62,8 +62,7 @@
                                 <span x-show="ui_primary_host === (h.host + ':' + h.port)" style="font-size: 0.7rem; background: var(--primary-color); color: white; padding: 2px 6px; border-radius: 12px; margin-left: 0.5rem; vertical-align: top;">PRIMARY</span>
                             </td>
                             <td class="table-col-min" style="text-align: center; vertical-align: middle;">
-                                <svg x-show="h.verify_tls === true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: 0 auto;"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                <svg x-show="h.verify_tls !== true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: 0 auto;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                {{ status_icon('h.verify_tls === true') }}
                             </td>
                             <td class="table-col-min" style="text-align: center; vertical-align: middle; font-weight: bold;">
                                 <span x-show="h.sync_status === 'success'" style="color: var(--success-color);">Success</span>
