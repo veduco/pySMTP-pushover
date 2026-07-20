@@ -148,12 +148,14 @@ async def save_ui(
     if backend_mode == "local" and local_config_path:
         os.environ["GATEWAY_CONFIG"] = local_config_path
 
-    # Only nuke the Python network sockets if the binding interfaces were physically altered
+# Only nuke the Python network sockets if the binding interfaces were physically altered
     if old_listeners != listeners:
         os.kill(os.getpid(), signal.SIGUSR1)
         trigger = "reconnectLink"
         msg = "UI network listeners altered. Restarting service sockets..."
     else:
+        # Dispatch a soft-reload signal to notify all Uvicorn worker threads to flush their configuration cache
+        os.kill(os.getpid(), signal.SIGUSR2)
         trigger = "reloadPage"
         msg = "Context updated successfully. Refreshing view..."
 
