@@ -343,6 +343,10 @@ def save_unified_config(config_path, new_config=None, new_vault=None):
                 normalized_vault[vtype] = new_vault.get(vtype, {})
 
         for alias, tok in new_vault.get("smarthost", {}).items():
+            # Extract token if it arrives as a normalized dictionary from a fan-out sync
+            if isinstance(tok, dict):
+                tok = tok.get("token", "")
+
             if not tok or tok == "••••••••":
                 tok = vault_data.get("smarthost", {}).get(alias, {}).get("token", "")
             normalized_vault["smarthost"][alias] = {"token": tok, "epoch": int(time.time())}
