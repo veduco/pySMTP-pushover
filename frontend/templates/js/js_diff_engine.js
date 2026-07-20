@@ -1,8 +1,3 @@
-_deepClone(obj) {
-    if (obj === undefined) return undefined;
-    return JSON.parse(JSON.stringify(obj));
-},
-
 _buildUiStatePayload() {
     return {
         timezone: this.ui_tz,
@@ -14,14 +9,14 @@ _buildUiStatePayload() {
         smtp_sort: this.ui_smtp_sort,
         smarthost_sort: this.ui_smarthost_sort,
         ui_loglevel: this.ui_loglevel,
-        listeners: this._deepClone(this.uiListeners || []),
+        listeners: this.clone(this.uiListeners || []),
         backend_mode: this.ui_backend_remote ? 'remote' : 'local',
         local_config_path: this.ui_local_config_path,
         primary_host: this.ui_primary_host,
-        remote_hosts: this._deepClone(this.ui_remote_hosts || []),
-        remote_secrets: this._deepClone(this.ui_remote_secrets || []),
-        allowed_cidrs: this._deepClone(this.ui_allowed_cidrs || []),
-        trust_proxy_cidrs: this._deepClone(this.ui_trust_proxy_cidrs || [])
+        remote_hosts: this.clone(this.ui_remote_hosts || []),
+        remote_secrets: this.clone(this.ui_remote_secrets || []),
+        allowed_cidrs: this.clone(this.ui_allowed_cidrs || []),
+        trust_proxy_cidrs: this.clone(this.ui_trust_proxy_cidrs || [])
     };
 },
 
@@ -47,8 +42,8 @@ _generatePatches(obj1, obj2, path = '') {
                 patches.push({
                     op: val1 === undefined ? 'add' : (val2 === undefined ? 'remove' : 'replace'),
                     path: currentPath,
-                    value: val2 !== undefined ? this._deepClone(val2) : undefined,
-                    oldValue: val1 !== undefined ? this._deepClone(val1) : undefined
+                    value: val2 !== undefined ? this.clone(val2) : undefined,
+                    oldValue: val1 !== undefined ? this.clone(val1) : undefined
                 });
             }
         }
@@ -169,7 +164,7 @@ isPathSensitive(path) {
 
 preparePayload() {
     const payload = {
-        smtp: this._deepClone(this.smtp),
+        smtp: this.clone(this.smtp),
         pushover: { ...this.pushGlobals },
         smarthost: {
             globals: {
@@ -177,7 +172,7 @@ preparePayload() {
                 force_plaintext: this.smartGlobals.force_plaintext === true,
                 attachments: !this.smartGlobals.disable_attachments // Map UI inverse to Schema
             },
-            aliases: this._deepClone(this.smarthosts)
+            aliases: this.clone(this.smarthosts)
         },
         routes: {}
     };
@@ -275,7 +270,7 @@ takeSnapshot() {
         }),
         ui: JSON.stringify(this._buildUiStatePayload())
     };
-    this.initialState = this._deepClone({
+    this.initialState = this.clone({
         ui: this.rawUiConfig,
         routes: { mappings: this.mappings },
         pushover: { pushGlobals: this.pushGlobals },
@@ -436,7 +431,7 @@ _applySchemaRestore(domain, key, val) {
     if (rule.coerce) {
         targetObj[targetProp] = rule.coerce(val);
     } else if (rule.isArray) {
-        targetObj[targetProp] = Array.isArray(val) ? this._deepClone(val) : [];
+        targetObj[targetProp] = Array.isArray(val) ? this.clone(val) : [];
     } else {
         targetObj[targetProp] = val !== undefined && val !== null ? val : rule.fallback;
     }
@@ -456,10 +451,10 @@ revertChange(idx) {
         if (shAlias) {
             const shObj = JSON.parse(this.snapshots.smarthost);
 
-            if (shObj.smarthosts[shAlias]) this.smarthosts[shAlias] = this._deepClone(shObj.smarthosts[shAlias]);
+            if (shObj.smarthosts[shAlias]) this.smarthosts[shAlias] = this.clone(shObj.smarthosts[shAlias]);
             else delete this.smarthosts[shAlias];
 
-            if (shObj.vaultSmarthost[shAlias]) this.vaultSmarthost[shAlias] = this._deepClone(shObj.vaultSmarthost[shAlias]);
+            if (shObj.vaultSmarthost[shAlias]) this.vaultSmarthost[shAlias] = this.clone(shObj.vaultSmarthost[shAlias]);
             else delete this.vaultSmarthost[shAlias];
 
             this.diffModal.changes = this.diffModal.changes.filter(c => {
@@ -470,23 +465,23 @@ revertChange(idx) {
             isComplexReset = true;
         }
     } else if (path.startsWith('/vaultApp')) {
-        this.vaultApp = this._deepClone(JSON.parse(this.snapshots.pushover).vaultApp);
+        this.vaultApp = this.clone(JSON.parse(this.snapshots.pushover).vaultApp);
         this.diffModal.changes = this.diffModal.changes.filter(c => !c.path.startsWith('/vaultApp'));
         isComplexReset = true;
     } else if (path.startsWith('/vaultUser')) {
-        this.vaultUser = this._deepClone(JSON.parse(this.snapshots.pushover).vaultUser);
+        this.vaultUser = this.clone(JSON.parse(this.snapshots.pushover).vaultUser);
         this.diffModal.changes = this.diffModal.changes.filter(c => !c.path.startsWith('/vaultUser'));
         isComplexReset = true;
     } else if (path.startsWith('/smtpListeners')) {
-        this.smtp.listeners = this._deepClone(JSON.parse(this.snapshots.server).listeners || []);
+        this.smtp.listeners = this.clone(JSON.parse(this.snapshots.server).listeners || []);
         this.diffModal.changes = this.diffModal.changes.filter(c => !c.path.startsWith('/smtpListeners'));
         isComplexReset = true;
     } else if (path.startsWith('/uiListeners')) {
-        this.uiListeners = this._deepClone(JSON.parse(this.snapshots.ui).uiListeners || []);
+        this.uiListeners = this.clone(JSON.parse(this.snapshots.ui).uiListeners || []);
         this.diffModal.changes = this.diffModal.changes.filter(c => !c.path.startsWith('/uiListeners'));
         isComplexReset = true;
     } else if (path.startsWith('/remoteHosts')) {
-        this.ui_remote_hosts = this._deepClone(JSON.parse(this.snapshots.backend).remote_hosts || []);
+        this.ui_remote_hosts = this.clone(JSON.parse(this.snapshots.backend).remote_hosts || []);
         this.diffModal.changes = this.diffModal.changes.filter(c => !c.path.startsWith('/remoteHosts'));
         isComplexReset = true;
     } else if (path.startsWith('/route_mappings') || path === '/route_mappings_order') {
@@ -508,7 +503,7 @@ revertChange(idx) {
         if (root === 'ui') {
             this._applySchemaRestore('ui', key, val);
         } else if (root === 'smtp') {
-            this.smtp[key] = (typeof val === 'object' && val !== null) ? this._deepClone(val) : val;
+            this.smtp[key] = (typeof val === 'object' && val !== null) ? this.clone(val) : val;
         } else if (root === 'pushover') {
             this._applySchemaRestore('pushover', key, val);
         } else if (root === 'smarthost' && segments[1] === 'globals') {
@@ -536,15 +531,15 @@ discardAllChanges() {
 
 resetTab(tabContext) {
     if (!this.snapshots) return;
-    const backup = this._deepClone(this.initialState);
+    const backup = this.clone(this.initialState);
 
     // Schema-driven hydration mapping clears all raw hardcoded parameter logic
     if (tabContext === 'ui' || tabContext === 'backend') {
         const uiObj = backup.ui || {};
         Object.keys(this._schemaRestoreMaps.ui).forEach(k => this._applySchemaRestore('ui', k, uiObj[k]));
 
-        this.uiListeners = this._deepClone(uiObj.listeners || []);
-        this.ui_remote_hosts = this._deepClone(uiObj.remote_hosts || []);
+        this.uiListeners = this.clone(uiObj.listeners || []);
+        this.ui_remote_hosts = this.clone(uiObj.remote_hosts || []);
         this.ui_primary_host = uiObj.primary_host || '';
         this.uiTrustProxyCidrInput = '';
         this.errors.uiTrustProxyCidr = '';
@@ -554,26 +549,26 @@ resetTab(tabContext) {
     }
 
     if (tabContext === 'pushover') {
-        this.pushGlobals = this._deepClone(backup.pushover.pushGlobals);
-        this.vaultApp = this._deepClone(backup.vault.vaultApp);
-        this.vaultUser = this._deepClone(backup.vault.vaultUser);
+        this.pushGlobals = this.clone(backup.pushover.pushGlobals);
+        this.vaultApp = this.clone(backup.vault.vaultApp);
+        this.vaultUser = this.clone(backup.vault.vaultUser);
         this.vaultAppAliases = this.vaultApp.map(x => x.name);
         this.vaultUserAliases = this.vaultUser.map(x => x.name);
     }
 
     if (tabContext === 'routes') {
-        this.mappings = this._deepClone(backup.routes.mappings);
+        this.mappings = this.clone(backup.routes.mappings);
     }
 
     if (tabContext === 'smarthost') {
-        this.smarthosts = this._deepClone(backup.smarthost.smarthosts);
-        this.smartGlobals = this._deepClone(backup.smarthost.smartGlobals);
-        this.vaultSmarthost = this._deepClone(backup.vault.vaultSmarthost);
+        this.smarthosts = this.clone(backup.smarthost.smarthosts);
+        this.smartGlobals = this.clone(backup.smarthost.smartGlobals);
+        this.vaultSmarthost = this.clone(backup.vault.vaultSmarthost);
     }
 
     if (tabContext === 'server') {
-        this.smtp = this._deepClone(backup.server.smtp);
-        this.smtp_meta = this._deepClone(backup.server.smtp_meta);
+        this.smtp = this.clone(backup.server.smtp);
+        this.smtp_meta = this.clone(backup.server.smtp_meta);
         this.smtpCidrInput = '';
         this.errors.smtpCidr = '';
         this.errors.dedupeWindow = '';
