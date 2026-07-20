@@ -288,74 +288,81 @@ requestSave(formId) {
     const newVault = JSON.parse(this.prepareVaultPayload());
     const newUi = this._buildUiStatePayload();
 
-    let rawPatches = [];
+    const diffStrategies = {
+        ui: () => {
+            const patches = [];
+            const oldUi = { ...this.rawUiConfig }; delete oldUi.listeners; delete oldUi.remote_hosts;
+            const newUiObj = { ...newUi }; delete newUiObj.listeners; delete newUiObj.remote_hosts;
+            patches.push(...this._generatePatches(oldUi, newUiObj, '/ui'));
 
-    if (formId === 'backend_form' || formId === 'ui_form') {
-        const oldUi = { ...this.rawUiConfig }; delete oldUi.listeners; delete oldUi.remote_hosts;
-        const newUiObj = { ...newUi }; delete newUiObj.listeners; delete newUiObj.remote_hosts;
-        rawPatches.push(...this._generatePatches(oldUi, newUiObj, '/ui'));
+            const oldUiListeners = Object.fromEntries((this.rawUiConfig.listeners || []).map(x => [x.bind, x]));
+            const newUiListeners = Object.fromEntries((newUi.listeners || []).map(x => [x.bind, x]));
+            patches.push(...this._generatePatches(oldUiListeners, newUiListeners, '/uiListeners'));
 
-        const oldUiListeners = Object.fromEntries((this.rawUiConfig.listeners || []).map(x => [x.bind, x]));
-        const newUiListeners = Object.fromEntries((newUi.listeners || []).map(x => [x.bind, x]));
-        rawPatches.push(...this._generatePatches(oldUiListeners, newUiListeners, '/uiListeners'));
-
-        const oldHosts = Object.fromEntries((this.rawUiConfig.remote_hosts || []).map(x => [x.host + ":" + x.port, x]));
-        const newHosts = Object.fromEntries((newUi.remote_hosts || []).map(x => [x.host + ":" + x.port, x]));
-        rawPatches.push(...this._generatePatches(oldHosts, newHosts, '/remoteHosts'));
-
-    } else {
-        if (this.tab === 'routes') {
-            // Diff internal mapping configurations natively via hidden UIDs
+            const oldHosts = Object.fromEntries((this.rawUiConfig.remote_hosts || []).map(x => [x.host + ":" + x.port, x]));
+            const newHosts = Object.fromEntries((newUi.remote_hosts || []).map(x => [x.host + ":" + x.port, x]));
+            patches.push(...this._generatePatches(oldHosts, newHosts, '/remoteHosts'));
+            return patches;
+        },
+        routes: () => {
+            const patches = [];
             const oldMappings = JSON.parse(this.snapshots.routes || '[]');
             const newMappings = this.mappings.map(({_showToken, _showUser, _showAdv, _tokenAliasVal, _tokenRaw, _userAliasVal, _userRaw, ...rest}) => rest);
 
             const oldMappingsDict = Object.fromEntries(oldMappings.map(m => [m._uid, m]));
             const newMappingsDict = Object.fromEntries(newMappings.map(m => [m._uid, m]));
+            patches.push(...this._generatePatches(oldMappingsDict, newMappingsDict, '/route_mappings'));
 
-            rawPatches.push(...this._generatePatches(oldMappingsDict, newMappingsDict, '/route_mappings'));
-
-            // Capture positional ordering changes explicitly by filtering out non-shared elements first
             const oldUids = oldMappings.map(m => m._uid);
             const newUids = newMappings.map(m => m._uid);
-
             const oldSharedOrder = oldUids.filter(uid => newUids.includes(uid)).join(',');
             const newSharedOrder = newUids.filter(uid => oldUids.includes(uid)).join(',');
 
             if (oldSharedOrder !== newSharedOrder) {
-                rawPatches.push({
+                patches.push({
                     op: 'replace',
                     path: '/route_mappings_order',
                     value: 'Reordered',
                     oldValue: 'Original Order'
                 });
             }
-
-        } else if (this.tab === 'pushover') {
-            rawPatches.push(...this._generatePatches(this.rawConfig.pushover || {}, newConfig.pushover || {}, '/pushover'));
+            return patches;
+        },
+        pushover: () => {
+            const patches = [];
+            patches.push(...this._generatePatches(this.rawConfig.pushover || {}, newConfig.pushover || {}, '/pushover'));
 
             const oldVaultApp = Object.fromEntries((this.rawVault.app || []).map(x => [x.name, x]));
             const newVaultApp = Object.fromEntries((newVault.app || []).map(x => [x.name, x]));
-            rawPatches.push(...this._generatePatches(oldVaultApp, newVaultApp, '/vaultApp'));
+            patches.push(...this._generatePatches(oldVaultApp, newVaultApp, '/vaultApp'));
 
             const oldVaultUser = Object.fromEntries((this.rawVault.user || []).map(x => [x.name, x]));
             const newVaultUser = Object.fromEntries((newVault.user || []).map(x => [x.name, x]));
-            rawPatches.push(...this._generatePatches(oldVaultUser, newVaultUser, '/vaultUser'));
-
-        } else if (this.tab === 'smarthost') {
-            rawPatches.push(...this._generatePatches(this.rawConfig.smarthost || {}, newConfig.smarthost || {}, '/smarthost'));
-            rawPatches.push(...this._generatePatches(this.rawVault.smarthost || {}, newVault.smarthost || {}, '/vaultSmarthost'));
-        } else if (this.tab === 'server') {
+            patches.push(...this._generatePatches(oldVaultUser, newVaultUser, '/vaultUser'));
+            return patches;
+        },
+        smarthost: () => {
+            const patches = [];
+            patches.push(...this._generatePatches(this.rawConfig.smarthost || {}, newConfig.smarthost || {}, '/smarthost'));
+            patches.push(...this._generatePatches(this.rawVault.smarthost || {}, newVault.smarthost || {}, '/vaultSmarthost'));
+            return patches;
+        },
+        server: () => {
+            const patches = [];
             const oldSmtp = { ...this.rawConfig.smtp }; delete oldSmtp.listeners;
             const newSmtp = { ...newConfig.smtp }; delete newSmtp.listeners;
-            rawPatches.push(...this._generatePatches(oldSmtp, newSmtp, '/smtp'));
+            patches.push(...this._generatePatches(oldSmtp, newSmtp, '/smtp'));
 
             const oldSmtpListeners = Object.fromEntries((this.rawConfig.smtp?.listeners || []).map(x => [x.bind, x]));
             const newSmtpListeners = Object.fromEntries((newConfig.smtp?.listeners || []).map(x => [x.bind, x]));
-            rawPatches.push(...this._generatePatches(oldSmtpListeners, newSmtpListeners, '/smtpListeners'));
+            patches.push(...this._generatePatches(oldSmtpListeners, newSmtpListeners, '/smtpListeners'));
+            return patches;
         }
-    }
+    };
 
-    // Consolidated patch routing formatting
+    const strategyKey = (formId === 'backend_form' || formId === 'ui_form') ? 'ui' : this.tab;
+    const rawPatches = diffStrategies[strategyKey] ? diffStrategies[strategyKey]() : [];
+
     for (const patch of rawPatches) {
         this.diffModal.changes.push({
             op: patch.op,
