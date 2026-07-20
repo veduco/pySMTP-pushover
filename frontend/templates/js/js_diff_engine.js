@@ -291,10 +291,14 @@ requestSave(formId) {
 
             rawPatches.push(...this._generatePatches(oldMappingsDict, newMappingsDict, '/route_mappings'));
 
-            // Capture positional ordering changes explicitly
-            const oldOrder = oldMappings.map(m => m._uid).join(',');
-            const newOrder = newMappings.map(m => m._uid).join(',');
-            if (oldOrder !== newOrder) {
+            // Capture positional ordering changes explicitly by filtering out non-shared elements first
+            const oldUids = oldMappings.map(m => m._uid);
+            const newUids = newMappings.map(m => m._uid);
+
+            const oldSharedOrder = oldUids.filter(uid => newUids.includes(uid)).join(',');
+            const newSharedOrder = newUids.filter(uid => oldUids.includes(uid)).join(',');
+
+            if (oldSharedOrder !== newSharedOrder) {
                 rawPatches.push({
                     op: 'replace',
                     path: '/route_mappings_order',
