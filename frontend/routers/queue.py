@@ -8,7 +8,7 @@ from frontend.state import app_state
 from frontend.utils import get_active_config_path
 from core.config import SCRIPT_DIR, UI_CONFIG_FILE, load_clean_json, ConfigOrchestrator
 from core.queue_store import get_queue_items, retry_queue_item, delete_queue_item, get_queue_item_raw
-from core.utils import safe_async_lifecycle, parse_bind_string
+from core.utils import safe_async_lifecycle, HttpClientPool
 
 router = APIRouter(prefix="/api/queue")
 
@@ -56,10 +56,9 @@ async def get_queue(request: Request):
     if ui_config.get("backend_mode", "local") == "remote":
         orch = ConfigOrchestrator(ui_config)
         url, sec = orch.get_primary_target_ctx()
-        try:
-            r = await request.state.http_client.get(f"{url}/api/queue", headers={"Authorization": f"Bearer {sec}"}, timeout=5.0)
-            if r.status_code == 200: return JSONResponse(r.json())
-        except Exception: pass
+        ok, data, _ = await HttpClientPool.safe_request(request.state.http_client, "GET", f"{url}/api/queue", headers={"Authorization": f"Bearer {sec}"}, timeout=5.0)
+        if ok and isinstance(data, list):
+            return JSONResponse(data)
         return JSONResponse([])
     else:
         config = load_clean_json(get_active_config_path())
@@ -72,10 +71,9 @@ async def proxy_get_queue_item_eml(request: Request, item_id: str):
     if ui_config.get("backend_mode", "local") == "remote":
         orch = ConfigOrchestrator(ui_config)
         url, sec = orch.get_primary_target_ctx()
-        try:
-            r = await request.state.http_client.get(f"{url}/api/queue/{item_id}/eml", headers={"Authorization": f"Bearer {sec}"}, timeout=5.0)
-            if r.status_code == 200: return JSONResponse(r.json())
-        except Exception: pass
+        ok, data, _ = await HttpClientPool.safe_request(request.state.http_client, "GET", f"{url}/api/queue/{item_id}/eml", headers={"Authorization": f"Bearer {sec}"}, timeout=5.0)
+        if ok and isinstance(data, dict):
+            return JSONResponse(data)
         return JSONResponse({"raw_eml_base64": ""})
     else:
         config = load_clean_json(get_active_config_path())
@@ -88,9 +86,7 @@ async def proxy_retry_queue_item(request: Request, item_id: str):
     if ui_config.get("backend_mode", "local") == "remote":
         orch = ConfigOrchestrator(ui_config)
         url, sec = orch.get_primary_target_ctx()
-        try:
-            await request.state.http_client.post(f"{url}/api/queue/{item_id}/retry", headers={"Authorization": f"Bearer {sec}"}, timeout=5.0)
-        except Exception: pass
+        await HttpClientPool.safe_request(request.state.http_client, "POST", f"{url}/api/queue/{item_id}/retry", headers={"Authorization": f"Bearer {sec}"}, timeout=5.0)
         return JSONResponse({"status": "ok"})
     else:
         config = load_clean_json(get_active_config_path())
@@ -104,9 +100,7 @@ async def proxy_delete_queue_item(request: Request, item_id: str):
     if ui_config.get("backend_mode", "local") == "remote":
         orch = ConfigOrchestrator(ui_config)
         url, sec = orch.get_primary_target_ctx()
-        try:
-            await request.state.http_client.delete(f"{url}/api/queue/{item_id}", headers={"Authorization": f"Bearer {sec}"}, timeout=5.0)
-        except Exception: pass
+        await HttpClientPool.safe_request(request.state.http_client, "DELETE", f"{url}/api/queue/{item_id}", headers={"Authorization": f"Bearer {sec}"}, timeout=5.0)
         return JSONResponse({"status": "ok"})
     else:
         config = load_clean_json(get_active_config_path())
@@ -121,12 +115,12 @@ async def proxy_test_payload(request: Request):
     if ui_config.get("backend_mode", "local") == "remote":
         orch = ConfigOrchestrator(ui_config)
         url, sec = orch.get_primary_target_ctx()
-        try:
-            r = await request.state.http_client.post(f"{url}/api/test", json=data, headers={"Authorization": f"Bearer {sec}"}, timeout=5.0)
-            if r.status_code != 200:
-                return JSONResponse({"error": f"Backend returned {r.status_code}"}, status_code=400)
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
+        ok, resp_data, status = await HttpClientPool.safe_request(request.state.http_client, "POST", f"{url}/api/test", json=data, headers={"Authorization": f"Bearer {sec}"}, timeout=5.0)
+
+        if not ok:
+            err_msg = resp_data.get("error", f"Backend returned {status}") if isinstance(resp_data, dict) else f"Backend returned {status} - {resp_data}"
+            return JSONResponse({"error": err_msg}, status_code=status if status else 500)
+
         return JSONResponse({"status": "ok"})
     else:
         import random

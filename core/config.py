@@ -416,24 +416,22 @@ class ConfigOrchestrator:
                 client = self.http_client or HttpClientPool.get_client("frontend", verify_tls=primary_cfg.get("verify_tls", True))
                 secret = self._get_host_secret(primary_cfg)
                 url = f"https://{primary_cfg['host']}:{primary_cfg['port']}/api/config"
-                try:
-                    r = await client.get(url, headers={"Authorization": f"Bearer {secret}"}, timeout=self.timeout)
-                    if r.status_code == 200:
-                        data = r.json()
-                        config = data.get("config", {})
-                        vault_data = data.get("vault", {})
-                        smtp_meta = data.get("smtp_meta", {})
-                        current_hash = data.get("config_hash", "")
+                ok, data, _ = await HttpClientPool.safe_request(client, "GET", url, headers={"Authorization": f"Bearer {secret}"}, timeout=self.timeout)
+                if ok and isinstance(data, dict):
+                    config = data.get("config", {})
+                    vault_data = data.get("vault", {})
+                    smtp_meta = data.get("smtp_meta", {})
+                    current_hash = data.get("config_hash", "")
 
-                        # Sync status back to success if we connected
-                        primary_cfg["sync_status"] = "success"
-                        primary_cfg["last_secret_hash"] = get_deterministic_hash({"secret": secret})
-                        save_json(UI_CONFIG_FILE, self.ui_config)
-                        clear_ui_config_cache()
+                    # Sync status back to success if we connected
+                    primary_cfg["sync_status"] = "success"
+                    primary_cfg["last_secret_hash"] = get_deterministic_hash({"secret": secret})
+                    save_json(UI_CONFIG_FILE, self.ui_config)
+                    clear_ui_config_cache()
 
-                        config_ok = True
-                except Exception as e:
-                    logging.error(f"Failed to fetch config from primary host {url}: {e}")
+                    config_ok = True
+                elif not ok:
+                    logging.error(f"Failed to fetch config from primary host {url}: {data}")
         else:
             try:
                 parsed = load_config(ignore_missing=True, config_path=self.active_path)
@@ -457,16 +455,14 @@ class ConfigOrchestrator:
             secrets_to_try.append(self.remote_secrets[0])
 
         for secret in secrets_to_try:
-            try:
-                r = await client.post(url, json=payload, headers={"Authorization": f"Bearer {secret}"}, timeout=self.timeout)
-                if r.status_code == 200:
-                    returned_hash = r.json().get("config_hash", "")
-                    if returned_hash == expected_hash:
-                        host_cfg["sync_status"] = "success"
-                        host_cfg["expected_hash"] = expected_hash
-                        host_cfg["last_secret_hash"] = get_deterministic_hash({"secret": secret})
-                        return True
-            except Exception: pass
+            ok, data, _ = await HttpClientPool.safe_request(client, "POST", url, json=payload, headers={"Authorization": f"Bearer {secret}"}, timeout=self.timeout)
+            if ok and isinstance(data, dict):
+                returned_hash = data.get("config_hash", "")
+                if returned_hash == expected_hash:
+                    host_cfg["sync_status"] = "success"
+                    host_cfg["expected_hash"] = expected_hash
+                    host_cfg["last_secret_hash"] = get_deterministic_hash({"secret": secret})
+                    return True
 
         host_cfg["sync_status"] = "failed"
         host_cfg["expected_hash"] = expected_hash
@@ -512,15 +508,13 @@ class ConfigOrchestrator:
 
             primary_success = False
             for secret in secrets_to_try:
-                try:
-                    r = await client.post(url, json=payload, headers={"Authorization": f"Bearer {secret}"}, timeout=self.timeout)
-                    if r.status_code == 200:
-                        primary_cfg["sync_status"] = "success"
-                        primary_cfg["expected_hash"] = r.json().get("config_hash", "")
-                        primary_cfg["last_secret_hash"] = get_deterministic_hash({"secret": secret})
-                        primary_success = True
-                        break
-                except Exception: pass
+                ok, data, _ = await HttpClientPool.safe_request(client, "POST", url, json=payload, headers={"Authorization": f"Bearer {secret}"}, timeout=self.timeout)
+                if ok and isinstance(data, dict):
+                    primary_cfg["sync_status"] = "success"
+                    primary_cfg["expected_hash"] = data.get("config_hash", "")
+                    primary_cfg["last_secret_hash"] = get_deterministic_hash({"secret": secret})
+                    primary_success = True
+                    break
 
             if not primary_success:
                 primary_cfg["sync_status"] = "failed"

@@ -54,6 +54,20 @@ class HttpClientPool:
         return cls._clients[key]
 
     @classmethod
+    async def safe_request(cls, client: httpx.AsyncClient, method: str, url: str, **kwargs) -> tuple:
+        """Uniformly handles HTTP requests, timeout catches, and JSON unwrapping."""
+        try:
+            response = await client.request(method, url, **kwargs)
+            if response.status_code in (200, 201, 202, 204):
+                try:
+                    return True, response.json(), response.status_code
+                except Exception:
+                    return True, response.text, response.status_code
+            return False, response.text, response.status_code
+        except Exception as e:
+            return False, str(e), 0
+
+    @classmethod
     async def close_all(cls):
         for key, client in list(cls._clients.items()):
             try:
