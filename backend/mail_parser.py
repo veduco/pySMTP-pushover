@@ -1,6 +1,7 @@
 import re
 import time
 import base64
+import email.utils
 from email import message_from_bytes, policy
 from email.message import EmailMessage
 from email.utils import parsedate_to_datetime
@@ -156,3 +157,63 @@ def build_test_email(data):
             print(f"Failed to process test attachment {att.get('name')}: {e}")
 
     return msg
+
+class MIMEBuilder:
+    """Dedicated builder class to safely deconstruct and reconstruct MIME payloads based on delivery constraints."""
+
+    @staticmethod
+    def rebuild_payload_bytes(payload: dict, force_plaintext: bool, include_attachments: bool) -> bytes:
+        # If no structural mutation is requested, return the pristine original bytes
+        if not force_plaintext and include_attachments:
+            return base64.b64decode(payload["raw_eml_base64"])
+
+        raw_bytes = base64.b64decode(payload["raw_eml_base64"])
+        original_msg = message_from_bytes(raw_bytes, policy=policy.default)
+
+        raw_plain = ""
+        raw_html = ""
+
+        # Walk the tree to strip attachments and extract pristine text payloads
+        for part in original_msg.walk():
+            if part.get_content_maintype() == 'multipart':
+                continue
+            if "attachment" in str(part.get("Content-Disposition", "")).lower():
+                continue
+
+            ctype = part.get_content_type()
+            if ctype == "text/plain":
+                raw_plain = part.get_payload(decode=True).decode(part.get_content_charset() or 'utf-8', errors='replace')
+            elif ctype == "text/html":
+                raw_html = part.get_payload(decode=True).decode(part.get_content_charset() or 'utf-8', errors='replace')
+
+        msg = EmailMessage()
+
+        # Clone original headers safely, excluding structural boundaries
+        for key, val in original_msg.items():
+            if key.lower() not in ['content-type', 'mime-version', 'content-transfer-encoding', 'content-disposition']:
+                msg[key] = val
+
+        if 'MIME-Version' not in msg:
+            msg['MIME-Version'] = '1.0'
+
+        # Ensure missing essential headers are populated
+        if not msg.get('Subject'): msg['Subject'] = payload.get("title", "No Subject")
+        if not msg.get('From'): msg['From'] = payload.get("sender", "gateway@localhost")
+        if not msg.get('To'): msg['To'] = ", ".join(payload.get("recipients", []))
+        if not msg.get('Date'): msg['Date'] = email.utils.formatdate(localtime=False)
+        if not msg.get('Message-ID'): msg['Message-ID'] = email.utils.make_msgid()
+
+        # Apply structural constraints
+        if force_plaintext:
+            msg.set_content(raw_plain or payload.get("message", ""), charset="utf-8")
+        else:
+            msg.set_content(raw_plain or payload.get("message", ""), charset="utf-8")
+            if raw_html:
+                msg.add_alternative(raw_html, subtype="html", charset="utf-8")
+
+        if include_attachments and payload.get("attachment_base64"):
+            img_bytes = base64.b64decode(payload["attachment_base64"])
+            maintype, subtype = payload.get("attachment_type", "application/octet-stream").split('/', 1)
+            msg.add_attachment(img_bytes, maintype=maintype, subtype=subtype, filename=payload.get("attachment_name", "attachment"))
+
+        return bytes(msg)

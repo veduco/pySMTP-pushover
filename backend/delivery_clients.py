@@ -1,12 +1,10 @@
 import base64
 import logging
 import ssl
-import email.utils
-from email.message import EmailMessage
-from email import message_from_bytes, policy
-from core.config import PUSHOVER_API_URL
 import httpx
 import aiosmtplib
+from core.config import PUSHOVER_API_URL
+from backend.mail_parser import MIMEBuilder
 
 async def send_pushover(payload, client: httpx.AsyncClient, state=None):
     success = False
@@ -75,46 +73,11 @@ async def send_smarthost(payload, state):
         logging.info(f"Smarthost alias '{payload.get('smarthost_alias')}' was removed. Falling back to global default relay '{alias}'.")
 
     try:
-        # Re-read flags directly from the fully resolved context!
-        if ctx.get("force_plaintext") or not ctx.get("attachments"):
-            raw_bytes = base64.b64decode(payload["raw_eml_base64"])
-            original_msg = message_from_bytes(raw_bytes, policy=policy.default)
-            raw_plain = ""; raw_html = ""
-            for part in original_msg.walk():
-                if part.get_content_maintype() == 'multipart': continue
-                if "attachment" in str(part.get("Content-Disposition", "")): continue
-                ctype = part.get_content_type()
-                if ctype == "text/plain":
-                    raw_plain = part.get_payload(decode=True).decode(part.get_content_charset() or 'utf-8', errors='replace')
-                elif ctype == "text/html":
-                    raw_html = part.get_payload(decode=True).decode(part.get_content_charset() or 'utf-8', errors='replace')
+        # Delegate complex MIME payload reconstruction to the dedicated builder class
+        force_pt = ctx.get("force_plaintext", False)
+        incl_att = ctx.get("attachments", True)
 
-            msg = EmailMessage()
-            for key, val in original_msg.items():
-                if key.lower() not in ['content-type', 'mime-version', 'content-transfer-encoding', 'content-disposition']:
-                    msg[key] = val
-            if 'MIME-Version' not in msg:
-                msg['MIME-Version'] = '1.0'
-
-            if not msg.get('Subject'): msg['Subject'] = payload.get("title", "No Subject")
-            if not msg.get('From'): msg['From'] = payload.get("sender", "gateway@localhost")
-            if not msg.get('To'): msg['To'] = ", ".join(payload.get("recipients", []))
-            if not msg.get('Date'): msg['Date'] = email.utils.formatdate(localtime=False)
-            if not msg.get('Message-ID'): msg['Message-ID'] = email.utils.make_msgid()
-
-            if ctx.get("force_plaintext"):
-                msg.set_content(raw_plain or payload.get("message", ""), charset="utf-8")
-            else:
-                msg.set_content(raw_plain or payload.get("message", ""), charset="utf-8")
-                if raw_html: msg.add_alternative(raw_html, subtype="html", charset="utf-8")
-
-            if ctx.get("attachments") and payload.get("attachment_base64"):
-                img_bytes = base64.b64decode(payload["attachment_base64"])
-                maintype, subtype = payload["attachment_type"].split('/', 1)
-                msg.add_attachment(img_bytes, maintype=maintype, subtype=subtype, filename=payload["attachment_name"])
-            final_send_bytes = bytes(msg)
-        else:
-            final_send_bytes = base64.b64decode(payload["raw_eml_base64"])
+        final_send_bytes = MIMEBuilder.rebuild_payload_bytes(payload, force_plaintext=force_pt, include_attachments=incl_att)
 
         host = ctx.get("hostname")
         port = int(ctx.get("port", 25))
