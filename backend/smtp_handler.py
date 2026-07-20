@@ -81,12 +81,74 @@ class GatewayAuthenticator:
             return True
         return False
 
+class DeduplicationEngine:
+    """Standalone evaluation engine for cryptographic alert deduplication tracking."""
+    def __init__(self, max_cache_scale=10000):
+        self._dedupe_cache = {}
+        self._dedupe_lock = threading.Lock()
+        self._max_cache_scale = max_cache_scale
+
+    def is_suppressed(self, state, parsed_data, sender, recipients, client_ip, unique_routes) -> bool:
+        """Assembles signature strings dynamically from criteria options and flags exact matches via SHA-256."""
+        if not state.smtp.get("dedupe_enabled", False):
+            return False
+
+        keys_to_build = state.smtp.get("dedupe_keys", ["sender", "match_reason", "message"])
+        window_str = state.smtp.get("dedupe_window", "10m")
+        window_seconds = ConfigOrchestrator.parse_duration_to_seconds(window_str)
+        now = time.time()
+
+        # Build signature block data array string elements
+        signature_segments = []
+
+        if "recipients" in keys_to_build:
+            signature_segments.append(f"rcpt:{','.join(sorted(recipients))}")
+        if "sender" in keys_to_build:
+            signature_segments.append(f"from:{sender}")
+        if "subject" in keys_to_build:
+            signature_segments.append(f"sub:{parsed_data.get('title', '')}")
+        if "match_reason" in keys_to_build:
+            reasons = [r.get("_match_reason", "") for r in unique_routes if r.get("_match_reason")]
+            signature_segments.append(f"reason:{','.join(sorted(reasons))}")
+        if "message" in keys_to_build:
+            body = parsed_data.get("body_html_processed") or parsed_data.get("body_plain_processed") or "(No message body)"
+            signature_segments.append(f"body:{body}")
+        if "senderip" in keys_to_build:
+            signature_segments.append(f"ip:{client_ip}")
+
+        # Compute pristine cryptographic SHA-256 identifier signature target
+        sig_payload = "||".join(signature_segments).encode('utf-8', errors='replace')
+        sig_hash = hashlib.sha256(sig_payload).hexdigest()
+
+        with self._dedupe_lock:
+            # Passive Eviction Pass: Purge expired records inline
+            expired_keys = [k for k, expire_time in self._dedupe_cache.items() if now >= expire_time]
+            for ek in expired_keys:
+                del self._dedupe_cache[ek]
+
+            # Enforce strict maximum capacity boundaries under heavy alert bursts
+            if len(self._dedupe_cache) >= self._max_cache_scale:
+                # O(1) eviction of the absolute oldest inserted element to maintain deterministic execution scale
+                oldest_key = next(iter(self._dedupe_cache))
+                del self._dedupe_cache[oldest_key]
+
+            if sig_hash in self._dedupe_cache:
+                logging.warning(f"Deduplication Triggered: Dropped incoming email signature tracking payload hash matching active window rules.")
+                return True
+
+            # Insert fresh deduplication contract into memory registry
+            self._dedupe_cache[sig_hash] = now + window_seconds
+            return False
+
 class PushoverSMTPHandler:
     def __init__(self, state, msg_queue, broker=None):
         self.state = state
         self.msg_queue = msg_queue
         self.broker = broker
         self.allowed_cidrs = state.smtp.get("allowed_cidrs", [])
+
+        # Initialize the decoupled deduplication engine
+        self.deduplicator = DeduplicationEngine()
 
         # Thread-safe in-memory cache rings tracking alert duplication bounds
         self._dedupe_cache = {}
@@ -175,58 +237,6 @@ class PushoverSMTPHandler:
                 unique_routes.append(route)
 
         return unique_routes
-
-    def _is_duplicate_suppressed(self, parsed_data, sender, recipients, client_ip, unique_routes) -> bool:
-        """Assembles signature strings dynamically from criteria options and flags exact matches via SHA-256."""
-        if not self.state.smtp.get("dedupe_enabled", False):
-            return False
-
-        keys_to_build = self.state.smtp.get("dedupe_keys", ["sender", "match_reason", "message"])
-        window_str = self.state.smtp.get("dedupe_window", "10m")
-        window_seconds = ConfigOrchestrator.parse_duration_to_seconds(window_str)
-        now = time.time()
-
-        # Build signature block data array string elements
-        signature_segments = []
-
-        if "recipients" in keys_to_build:
-            signature_segments.append(f"rcpt:{','.join(sorted(recipients))}")
-        if "sender" in keys_to_build:
-            signature_segments.append(f"from:{sender}")
-        if "subject" in keys_to_build:
-            signature_segments.append(f"sub:{parsed_data.get('title', '')}")
-        if "match_reason" in keys_to_build:
-            reasons = [r.get("_match_reason", "") for r in unique_routes if r.get("_match_reason")]
-            signature_segments.append(f"reason:{','.join(sorted(reasons))}")
-        if "message" in keys_to_build:
-            body = parsed_data.get("body_html_processed") or parsed_data.get("body_plain_processed") or "(No message body)"
-            signature_segments.append(f"body:{body}")
-        if "senderip" in keys_to_build:
-            signature_segments.append(f"ip:{client_ip}")
-
-        # Compute pristine cryptographic SHA-256 identifier signature target
-        sig_payload = "||".join(signature_segments).encode('utf-8', errors='replace')
-        sig_hash = hashlib.sha256(sig_payload).hexdigest()
-
-        with self._dedupe_lock:
-            # Passive Eviction Pass: Purge expired records inline
-            expired_keys = [k for k, expire_time in self._dedupe_cache.items() if now >= expire_time]
-            for ek in expired_keys:
-                del self._dedupe_cache[ek]
-
-            # Enforce strict maximum capacity boundaries under heavy alert bursts
-            if len(self._dedupe_cache) >= self._max_cache_scale:
-                # O(1) eviction of the absolute oldest inserted element to maintain deterministic execution scale
-                oldest_key = next(iter(self._dedupe_cache))
-                del self._dedupe_cache[oldest_key]
-
-            if sig_hash in self._dedupe_cache:
-                logging.warning(f"Deduplication Triggered: Dropped incoming email signature tracking payload hash matching active window rules.")
-                return True
-
-            # Insert fresh deduplication contract into memory registry
-            self._dedupe_cache[sig_hash] = now + window_seconds
-            return False
 
     async def _enqueue_payloads(self, unique_routes, parsed_data, envelope, sender, recipients):
         raw_content = envelope.content
@@ -323,7 +333,7 @@ class PushoverSMTPHandler:
             unique_routes = self._deduplicate_routes(routes)
 
             # 5. Core Security Intercept Pass: Deduplication Evaluation
-            if self._is_duplicate_suppressed(parsed_data, sender, recipients, client_ip, unique_routes):
+            if self.deduplicator.is_suppressed(self.state, parsed_data, sender, recipients, client_ip, unique_routes):
                 return '250 Message accepted for delivery' # Silent discard compliance contract
 
             # 6. Compile final payloads and dispatch to workers
