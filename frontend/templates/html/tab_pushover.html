@@ -79,8 +79,8 @@
     <table style="margin-bottom: 2.5rem;">
         <thead>
             <tr>
-                <th class="table-sort" style="width: auto;" @click="setVaultSort('name')">Alias Name <span style="font-size: 0.8em;" x-show="vaultSortCol==='name'" x-text="vaultSortDir===1 ? '▲' : '▼'"></span></th>
-                <th class="table-sort table-col-min" @click="setVaultSort('epoch')">Last Modification <span style="font-size: 0.8em;" x-show="vaultSortCol==='epoch'" x-text="vaultSortDir===1 ? '▲' : '▼'"></span></th>
+                <th class="table-sort" style="width: auto;" @click="toggleSort('vault', 'name')">Alias Name <span style="font-size: 0.8em;" x-show="vaultSortCol==='name'" x-text="vaultSortDir===1 ? '▲' : '▼'"></span></th>
+                <th class="table-sort table-col-min" @click="toggleSort('vault', 'epoch')">Last Modification <span style="font-size: 0.8em;" x-show="vaultSortCol==='epoch'" x-text="vaultSortDir===1 ? '▲' : '▼'"></span></th>
                 <th class="table-col-min">Actions</th>
             </tr>
         </thead>

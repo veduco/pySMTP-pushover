@@ -147,8 +147,8 @@
         <table>
             <thead>
                 <tr>
-                    <th class="table-sort" @click="setUiListenerSort('bind')">Bind Address <span style="font-size: 0.8em;" x-show="uiListenerSortCol==='bind'" x-text="uiListenerSortDir===1 ? '▲' : '▼'"></span></th>
-                    <th class="table-sort table-col-min" @click="setUiListenerSort('https')">HTTPS <span style="font-size: 0.8em;" x-show="uiListenerSortCol==='https'" x-text="uiListenerSortDir===1 ? '▲' : '▼'"></span></th>
+                    <th class="table-sort" @click="toggleSort('uiListener', 'bind')">Bind Address <span style="font-size: 0.8em;" x-show="uiListenerSortCol==='bind'" x-text="uiListenerSortDir===1 ? '▲' : '▼'"></span></th>
+                    <th class="table-sort table-col-min" @click="toggleSort('uiListener', 'https')">HTTPS <span style="font-size: 0.8em;" x-show="uiListenerSortCol==='https'" x-text="uiListenerSortDir===1 ? '▲' : '▼'"></span></th>
                     <th>Dedicated TLS Cert File</th>
                     <th>Dedicated TLS Key File</th>
                     <th class="table-col-min">Actions</th>

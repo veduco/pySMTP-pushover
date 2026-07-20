@@ -110,8 +110,8 @@
         <table>
             <thead>
                 <tr>
-                    <th class="table-sort" @click="smtpSortCol = 'name'; smtpSortDir *= -1">Username <span x-show="smtpSortCol === 'name'" x-text="smtpSortDir === 1 ? '▲' : '▼'"></span></th>
-                    <th class="table-sort table-col-min" @click="smtpSortCol = 'epoch'; smtpSortDir *= -1">Last Modification <span x-show="smtpSortCol === 'epoch'" x-text="smtpSortDir === 1 ? '▲' : '▼'"></span></th>
+                    <th class="table-sort" @click="toggleSort('smtp', 'name')">Username <span x-show="smtpSortCol === 'name'" x-text="smtpSortDir === 1 ? '▲' : '▼'"></span></th>
+                    <th class="table-sort table-col-min" @click="toggleSort('smtp', 'epoch')">Last Modification <span x-show="smtpSortCol === 'epoch'" x-text="smtpSortDir === 1 ? '▲' : '▼'"></span></th>
                     <th style="width: 80px;">Actions</th>
                 </tr>
             </thead>
@@ -148,10 +148,10 @@
         <table>
             <thead>
                 <tr>
-                    <th class="table-sort" @click="smtpListenerSortCol = 'bind'; smtpListenerSortDir *= -1">Bind Address <span x-show="smtpListenerSortCol === 'bind'" x-text="smtpListenerSortDir === 1 ? '▲' : '▼'"></span></th>
-                    <th class="table-sort table-col-min" @click="smtpListenerSortCol = 'starttls'; smtpListenerSortDir *= -1">STARTTLS <span x-show="smtpListenerSortCol === 'starttls'" x-text="smtpListenerSortDir === 1 ? '▲' : '▼'"></span></th>
-                    <th class="table-sort table-col-min" @click="smtpListenerSortCol = 'proxy_protocol'; smtpListenerSortDir *= -1">PROXY v2 <span x-show="smtpListenerSortCol === 'proxy_protocol'" x-text="smtpListenerSortDir === 1 ? '▲' : '▼'"></span></th>
-                    <th class="table-sort table-col-min" @click="smtpListenerSortCol = 'hostname'; smtpListenerSortDir *= -1">Hostname <span x-show="smtpListenerSortCol === 'hostname'" x-text="smtpListenerSortDir === 1 ? '▲' : '▼'"></span></th>
+                    <th class="table-sort" @click="toggleSort('smtpListener', 'bind')">Bind Address <span x-show="smtpListenerSortCol === 'bind'" x-text="smtpListenerSortDir === 1 ? '▲' : '▼'"></span></th>
+                    <th class="table-sort table-col-min" @click="toggleSort('smtpListener', 'starttls')">STARTTLS <span x-show="smtpListenerSortCol === 'starttls'" x-text="smtpListenerSortDir === 1 ? '▲' : '▼'"></span></th>
+                    <th class="table-sort table-col-min" @click="toggleSort('smtpListener', 'proxy_protocol')">PROXY v2 <span x-show="smtpListenerSortCol === 'proxy_protocol'" x-text="smtpListenerSortDir === 1 ? '▲' : '▼'"></span></th>
+                    <th class="table-sort table-col-min" @click="toggleSort('smtpListener', 'hostname')">Hostname <span x-show="smtpListenerSortCol === 'hostname'" x-text="smtpListenerSortDir === 1 ? '▲' : '▼'"></span></th>
                     <th>Dedicated TLS Cert File</th>
                     <th>Dedicated TLS Key File</th>
                     <th style="width: 80px;">Actions</th>

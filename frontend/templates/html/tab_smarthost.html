@@ -33,12 +33,12 @@
         <table>
             <thead>
                 <tr>
-                    <th class="table-sort" @click="setSmarthostSort('alias')">Alias <span x-show="smarthostSortCol === 'alias'" x-text="smarthostSortDir === 1 ? '▲' : '▼'"></span></th>
-                    <th class="table-sort" @click="setSmarthostSort('address')">Address <span x-show="smarthostSortCol === 'address'" x-text="smarthostSortDir === 1 ? '▲' : '▼'"></span></th>
-                    <th class="table-sort table-col-min" @click="setSmarthostSort('starttls')">STARTTLS <span x-show="smarthostSortCol === 'starttls'" x-text="smarthostSortDir === 1 ? '▲' : '▼'"></span></th>
-                    <th class="table-sort table-col-min" @click="setSmarthostSort('auth')">Auth <span x-show="smarthostSortCol === 'auth'" x-text="smarthostSortDir === 1 ? '▲' : '▼'"></span></th>
-                    <th class="table-sort table-col-min" @click="setSmarthostSort('disable_attachments')">No Attach <span x-show="smarthostSortCol === 'disable_attachments'" x-text="smarthostSortDir === 1 ? '▲' : '▼'"></span></th>
-                    <th class="table-sort table-col-min" @click="setSmarthostSort('force_plaintext')">Plaintext <span x-show="smarthostSortCol === 'force_plaintext'" x-text="smarthostSortDir === 1 ? '▲' : '▼'"></span></th>
+                    <th class="table-sort" @click="toggleSort('smarthost', 'alias')">Alias <span x-show="smarthostSortCol === 'alias'" x-text="smarthostSortDir === 1 ? '▲' : '▼'"></span></th>
+                    <th class="table-sort" @click="toggleSort('smarthost', 'address')">Address <span x-show="smarthostSortCol === 'address'" x-text="smarthostSortDir === 1 ? '▲' : '▼'"></span></th>
+                    <th class="table-sort table-col-min" @click="toggleSort('smarthost', 'starttls')">STARTTLS <span x-show="smarthostSortCol === 'starttls'" x-text="smarthostSortDir === 1 ? '▲' : '▼'"></span></th>
+                    <th class="table-sort table-col-min" @click="toggleSort('smarthost', 'auth')">Auth <span x-show="smarthostSortCol === 'auth'" x-text="smarthostSortDir === 1 ? '▲' : '▼'"></span></th>
+                    <th class="table-sort table-col-min" @click="toggleSort('smarthost', 'disable_attachments')">No Attach <span x-show="smarthostSortCol === 'disable_attachments'" x-text="smarthostSortDir === 1 ? '▲' : '▼'"></span></th>
+                    <th class="table-sort table-col-min" @click="toggleSort('smarthost', 'force_plaintext')">Plaintext <span x-show="smarthostSortCol === 'force_plaintext'" x-text="smarthostSortDir === 1 ? '▲' : '▼'"></span></th>
                     <th class="table-col-min">Actions</th>
                 </tr>
             </thead>

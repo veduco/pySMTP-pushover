@@ -1,31 +1,13 @@
-setVaultSort(col) {
-    if(this.vaultSortCol === col) { this.vaultSortDir = this.vaultSortDir === 1 ? -1 : 1; }
-    else { this.vaultSortCol = col; this.vaultSortDir = 1; }
-},
+toggleSort(context, col) {
+    const colKey = `${context}SortCol`;
+    const dirKey = `${context}SortDir`;
 
-setSmtpSort(col) {
-    if(this.smtpSortCol === col) { this.smtpSortDir = this.smtpSortDir === 1 ? -1 : 1; }
-    else { this.smtpSortCol = col; this.smtpSortDir = 1; }
-},
-
-setSmarthostSort(col) {
-    if(this.smarthostSortCol === col) { this.smarthostSortDir = this.smarthostSortDir === 1 ? -1 : 1; }
-    else { this.smarthostSortCol = col; this.smarthostSortDir = 1; }
-},
-
-setListenerSort(col) {
-    if(this.listenerSortCol === col) { this.listenerSortDir = this.listenerSortDir === 1 ? -1 : 1; }
-    else { this.listenerSortCol = col; this.listenerSortDir = 1; }
-},
-
-setUiListenerSort(col) {
-    if(this.uiListenerSortCol === col) { this.uiListenerSortDir = this.uiListenerSortDir === 1 ? -1 : 1; }
-    else { this.uiListenerSortCol = col; this.uiListenerSortDir = 1; }
-},
-
-setUiHostSort(col) {
-    if(this.uiHostSortCol === col) { this.uiHostSortDir = this.uiHostSortDir === 1 ? -1 : 1; }
-    else { this.uiHostSortCol = col; this.uiHostSortDir = 1; }
+    if (this[colKey] === col) {
+        this[dirKey] = this[dirKey] === 1 ? -1 : 1;
+    } else {
+        this[colKey] = col;
+        this[dirKey] = 1;
+    }
 },
 
 get sortedVaultApp() {

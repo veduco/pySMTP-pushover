@@ -46,8 +46,8 @@
             <table>
                 <thead>
                     <tr>
-                        <th class="table-sort" style="width: auto;" @click="setUiHostSort('alias')">Alias <span style="font-size: 0.8em;" x-show="uiHostSortCol==='alias'" x-text="uiHostSortDir===1 ? '▲' : '▼'"></span></th>
-                        <th class="table-sort" style="width: auto;" @click="setUiHostSort('address')">Target Address <span style="font-size: 0.8em;" x-show="uiHostSortCol==='address'" x-text="uiHostSortDir===1 ? '▲' : '▼'"></span></th>
+                        <th class="table-sort" style="width: auto;" @click="toggleSort('uiHost', 'alias')">Alias <span style="font-size: 0.8em;" x-show="uiHostSortCol==='alias'" x-text="uiHostSortDir===1 ? '▲' : '▼'"></span></th>
+                        <th class="table-sort" style="width: auto;" @click="toggleSort('uiHost', 'address')">Target Address <span style="font-size: 0.8em;" x-show="uiHostSortCol==='address'" x-text="uiHostSortDir===1 ? '▲' : '▼'"></span></th>
                         <th class="table-col-min">Verify TLS</th>
                         <th class="table-col-min">Sync Status</th>
                         <th class="table-col-min">Actions</th>
