@@ -344,7 +344,6 @@ requestSave(formId) {
         smarthost: () => {
             const patches = [];
             patches.push(...this._generatePatches(this.rawConfig.smarthost || {}, newConfig.smarthost || {}, '/smarthost'));
-            patches.push(...this._generatePatches(this.rawVault.smarthost || {}, newVault.smarthost || {}, '/vaultSmarthost'));
             return patches;
         },
         server: () => {
