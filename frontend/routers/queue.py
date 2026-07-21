@@ -6,11 +6,16 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from frontend.state import app_state
 from frontend.utils import get_active_config_path
-from core.config import SCRIPT_DIR, load_clean_json, ConfigOrchestrator, get_cached_ui_config
+from core.config import load_clean_json, ConfigOrchestrator, get_cached_ui_config, load_config
 from core.queue_store import get_queue_items, retry_queue_item, delete_queue_item, get_queue_item_raw
 from core.utils import safe_async_lifecycle, HttpClientPool
 
 router = APIRouter(prefix="/api/queue")
+
+def _get_local_queue_dir():
+    """Safely resolves the local queue directory identically to the backend daemon."""
+    state = load_config(ignore_missing=True, config_path=get_active_config_path())
+    return state.smtp.get("queue_dir", "data/queue") if state else "data/queue"
 
 @router.get("/stream")
 async def queue_stream(request: Request):
@@ -61,9 +66,7 @@ async def get_queue(request: Request):
             return JSONResponse(data)
         return JSONResponse([])
     else:
-        config = load_clean_json(get_active_config_path())
-        q_path = os.path.normpath(os.path.join(SCRIPT_DIR, config.get("smtp", {}).get("queue_dir", "queue")))
-        return JSONResponse(get_queue_items(q_path))
+        return JSONResponse(get_queue_items(_get_local_queue_dir()))
 
 @router.get("/{item_id}/eml")
 async def proxy_get_queue_item_eml(request: Request, item_id: str):
@@ -76,9 +79,7 @@ async def proxy_get_queue_item_eml(request: Request, item_id: str):
             return JSONResponse(data)
         return JSONResponse({"raw_eml_base64": ""})
     else:
-        config = load_clean_json(get_active_config_path())
-        q_path = os.path.normpath(os.path.join(SCRIPT_DIR, config.get("smtp", {}).get("queue_dir", "queue")))
-        return JSONResponse({"raw_eml_base64": get_queue_item_raw(q_path, item_id)})
+        return JSONResponse({"raw_eml_base64": get_queue_item_raw(_get_local_queue_dir(), item_id)})
 
 @router.post("/{item_id}/retry")
 async def proxy_retry_queue_item(request: Request, item_id: str):
@@ -89,9 +90,7 @@ async def proxy_retry_queue_item(request: Request, item_id: str):
         await HttpClientPool.safe_request(request.state.http_client, "POST", f"{url}/api/queue/{item_id}/retry", headers={"Authorization": f"Bearer {sec}"}, timeout=5.0)
         return JSONResponse({"status": "ok"})
     else:
-        config = load_clean_json(get_active_config_path())
-        q_path = os.path.normpath(os.path.join(SCRIPT_DIR, config.get("smtp", {}).get("queue_dir", "queue")))
-        retry_queue_item(q_path, item_id)
+        retry_queue_item(_get_local_queue_dir(), item_id)
         return JSONResponse({"status": "ok"})
 
 @router.delete("/{item_id}")
@@ -103,9 +102,7 @@ async def proxy_delete_queue_item(request: Request, item_id: str):
         await HttpClientPool.safe_request(request.state.http_client, "DELETE", f"{url}/api/queue/{item_id}", headers={"Authorization": f"Bearer {sec}"}, timeout=5.0)
         return JSONResponse({"status": "ok"})
     else:
-        config = load_clean_json(get_active_config_path())
-        q_path = os.path.normpath(os.path.join(SCRIPT_DIR, config.get("smtp", {}).get("queue_dir", "queue")))
-        delete_queue_item(q_path, item_id)
+        delete_queue_item(_get_local_queue_dir(), item_id)
         return JSONResponse({"status": "ok"})
 
 @router.post("/test")

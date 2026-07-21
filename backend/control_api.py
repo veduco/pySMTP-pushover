@@ -123,9 +123,16 @@ async def api_get_queue(request: Request):
 
 @app.post("/api/queue/{item_id}/retry", dependencies=[Depends(verify_token)])
 async def api_retry_queue_item(request: Request, item_id: str):
-    from core.queue_store import retry_queue_item
+    from core.queue_store import retry_queue_item, get_queue_items
     state = request.app.state.gateway_state
     retry_queue_item(state.smtp["queue_dir"], item_id)
+
+    # Broadcast the state reset to connected UI streams
+    for item in get_queue_items(state.smtp["queue_dir"]):
+        if item["id"] == item_id:
+            broker.publish("update", item)
+            break
+
     return JSONResponse({"status": "ok"})
 
 @app.delete("/api/queue/{item_id}", dependencies=[Depends(verify_token)])
@@ -133,6 +140,9 @@ async def api_delete_queue_item(request: Request, item_id: str):
     from core.queue_store import delete_queue_item
     state = request.app.state.gateway_state
     delete_queue_item(state.smtp["queue_dir"], item_id)
+
+    # Broadcast the removal to connected UI streams
+    broker.publish("delete", {"id": item_id})
     return JSONResponse({"status": "ok"})
 
 @app.post("/api/test", dependencies=[Depends(verify_token)])
