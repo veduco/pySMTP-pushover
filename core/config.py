@@ -17,18 +17,95 @@ _UI_CONFIG_CACHE = None
 
 SCHEMA_FILE = os.path.join(SCRIPT_DIR, "schema.json")
 
+def _execute_ui_snapshot(ui_data):
+    """Creates a rotating valid snapshot of the UI configuration."""
+    try:
+        max_backups = 20
+        conf_dir = os.path.dirname(UI_CONFIG_FILE) or "."
+        base_name = os.path.basename(UI_CONFIG_FILE)
+
+        snapshots = []
+        for entry in os.listdir(conf_dir):
+            if entry.startswith(f".{base_name}.valid.") and entry.endswith(".json"):
+                snapshots.append(os.path.join(conf_dir, entry))
+
+        snapshots.sort(key=os.path.getmtime)
+
+        if snapshots:
+            latest_backup_path = snapshots[-1]
+            cached_data = load_clean_json(latest_backup_path)
+            if ui_data == cached_data:
+                return
+
+        epoch = int(time.time())
+        backup_path = os.path.join(conf_dir, f".{base_name}.valid.{epoch}.json")
+
+        with open(backup_path, 'w') as f:
+            json.dump(ui_data, f, indent=2)
+
+        snapshots.append(backup_path)
+
+        while len(snapshots) > max_backups:
+            oldest = snapshots.pop(0)
+            try:
+                os.remove(oldest)
+            except OSError:
+                pass
+    except Exception:
+        pass
+
+def load_ui_config_with_fallback():
+    """Attempts to load the UI config, falling back to historical snapshots on failure."""
+    if os.path.exists(UI_CONFIG_FILE):
+        try:
+            with open(UI_CONFIG_FILE, 'r') as f:
+                data = json.load(f)
+            _execute_ui_snapshot(data)
+            return data
+        except Exception as e:
+            logging.error(f"Failed to load primary UI config ({e}). Searching for viable backups...")
+    else:
+        return {} # Fresh install or missing file
+
+    conf_dir = os.path.dirname(UI_CONFIG_FILE) or "."
+    base_name = os.path.basename(UI_CONFIG_FILE)
+    snapshots = []
+    try:
+        for entry in os.listdir(conf_dir):
+            if entry.startswith(f".{base_name}.valid.") and entry.endswith(".json"):
+                snapshots.append(os.path.join(conf_dir, entry))
+    except Exception:
+        pass
+
+    snapshots.sort(key=os.path.getmtime, reverse=True)
+
+    for backup in snapshots:
+        try:
+            with open(backup, 'r') as f:
+                data = json.load(f)
+            logging.info(f"Successfully recovered UI configuration from backup: {backup}")
+
+            # Restore the broken primary file with the good backup data
+            save_json(UI_CONFIG_FILE, data)
+            _execute_ui_snapshot(data)
+            return data
+        except Exception:
+            continue
+
+    logging.warning("No valid UI configuration backups found. Falling back to clean defaults.")
+    return {}
+
 def get_cached_ui_config(force_refresh=False):
     """Serves the UI configuration from RAM, falling back to disk read on cache miss."""
     global _UI_CONFIG_CACHE
     if _UI_CONFIG_CACHE is None or force_refresh:
-        _UI_CONFIG_CACHE = load_clean_json(UI_CONFIG_FILE)
+        _UI_CONFIG_CACHE = load_ui_config_with_fallback()
     return _UI_CONFIG_CACHE
 
 def clear_ui_config_cache():
     """Flushes the in-memory cache, forcing the next lookup to sync with disk."""
     global _UI_CONFIG_CACHE
     _UI_CONFIG_CACHE = None
-
 
 class AppState:
     def __init__(self, config_file):

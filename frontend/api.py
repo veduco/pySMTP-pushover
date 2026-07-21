@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from frontend.state import app_state
 from frontend.routers import queue, ui
-from core.config import UI_CONFIG_FILE, load_clean_json
+from core.config import UI_CONFIG_FILE, load_clean_json, get_cached_ui_config
 from core.utils import is_valid_network_target, HttpClientPool
 from core.security import create_secure_app
 
@@ -45,7 +45,7 @@ async def lifespan(app: FastAPI):
 
 def frontend_config_resolver(request: Request):
     """Dynamically parses the UI file schema structure to extract real-time web panel settings."""
-    ui_config = load_clean_json(UI_CONFIG_FILE)
+    ui_config = get_cached_ui_config()
     return {
         "allowed_cidrs": ui_config.get("allowed_cidrs", []),
         "trust_proxy": ui_config.get("trust_proxy", False),
@@ -54,7 +54,7 @@ def frontend_config_resolver(request: Request):
 
 def frontend_pre_hook(request: Request):
     """Binds the specific event loop's HTTP client to the transient request state before dispatch."""
-    ui_config = load_clean_json(UI_CONFIG_FILE)
+    ui_config = get_cached_ui_config()
     verify_tls = ui_config.get("remote_verify_tls", False)
     request.state.http_client = HttpClientPool.get_client("frontend", verify_tls=verify_tls)
 

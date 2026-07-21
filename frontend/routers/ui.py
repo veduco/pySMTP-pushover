@@ -4,7 +4,7 @@ import signal
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from core.config import UI_CONFIG_FILE, load_clean_json, save_json, ConfigOrchestrator, clear_ui_config_cache
+from core.config import load_clean_json, save_json, ConfigOrchestrator, clear_ui_config_cache, get_cached_ui_config, UI_CONFIG_FILE
 
 router = APIRouter()
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "templates")
@@ -20,7 +20,7 @@ async def index(request: Request):
     schema = load_clean_json(schema_path)
     ui_schema_defaults = schema.get("ui_config", {})
 
-    ui_config = load_clean_json(UI_CONFIG_FILE)
+    ui_config = get_cached_ui_config()
 
     # Safely merge defaults into actual payload
     safe_ui_config = {**ui_schema_defaults, **ui_config}
@@ -62,7 +62,7 @@ async def index(request: Request):
 
 @router.post("/save/config")
 async def save_config(request: Request, config_json: str = Form(...), vault_json: str = Form(None)):
-    ui_config = load_clean_json(UI_CONFIG_FILE)
+    ui_config = get_cached_ui_config()
     manager = ConfigOrchestrator(ui_config, http_client=request.state.http_client)
 
     try:
@@ -113,7 +113,7 @@ async def save_ui(
     trust_proxy_cidrs_json: str = Form("[]")
 ):
     # Isolate the old listeners to determine if a socket teardown is required
-    old_ui_config = load_clean_json(UI_CONFIG_FILE)
+    old_ui_config = get_cached_ui_config()
     old_listeners = old_ui_config.get("listeners", [])
 
     try: listeners = json.loads(ui_listeners_json)
@@ -174,7 +174,7 @@ async def save_ui(
 
 @router.post("/save/secret")
 async def save_secret(request: Request, new_secret: str = Form(...)):
-    ui_config = load_clean_json(UI_CONFIG_FILE)
+    ui_config = get_cached_ui_config()
     secrets = ui_config.get("remote_secrets", [])
 
     # Prepend new secret to make it the active index

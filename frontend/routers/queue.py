@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from frontend.state import app_state
 from frontend.utils import get_active_config_path
-from core.config import SCRIPT_DIR, UI_CONFIG_FILE, load_clean_json, ConfigOrchestrator
+from core.config import SCRIPT_DIR, load_clean_json, ConfigOrchestrator, get_cached_ui_config
 from core.queue_store import get_queue_items, retry_queue_item, delete_queue_item, get_queue_item_raw
 from core.utils import safe_async_lifecycle, HttpClientPool
 
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/queue")
 
 @router.get("/stream")
 async def queue_stream(request: Request):
-    ui_config = load_clean_json(UI_CONFIG_FILE)
+    ui_config = get_cached_ui_config()
     bmode = ui_config.get("backend_mode", "local")
 
     if bmode == "remote":
@@ -52,7 +52,7 @@ async def queue_stream(request: Request):
 
 @router.get("")
 async def get_queue(request: Request):
-    ui_config = load_clean_json(UI_CONFIG_FILE)
+    ui_config = get_cached_ui_config()
     if ui_config.get("backend_mode", "local") == "remote":
         orch = ConfigOrchestrator(ui_config)
         url, sec = orch.get_primary_target_ctx()
@@ -67,7 +67,7 @@ async def get_queue(request: Request):
 
 @router.get("/{item_id}/eml")
 async def proxy_get_queue_item_eml(request: Request, item_id: str):
-    ui_config = load_clean_json(UI_CONFIG_FILE)
+    ui_config = get_cached_ui_config()
     if ui_config.get("backend_mode", "local") == "remote":
         orch = ConfigOrchestrator(ui_config)
         url, sec = orch.get_primary_target_ctx()
@@ -82,7 +82,7 @@ async def proxy_get_queue_item_eml(request: Request, item_id: str):
 
 @router.post("/{item_id}/retry")
 async def proxy_retry_queue_item(request: Request, item_id: str):
-    ui_config = load_clean_json(UI_CONFIG_FILE)
+    ui_config = get_cached_ui_config()
     if ui_config.get("backend_mode", "local") == "remote":
         orch = ConfigOrchestrator(ui_config)
         url, sec = orch.get_primary_target_ctx()
@@ -96,7 +96,7 @@ async def proxy_retry_queue_item(request: Request, item_id: str):
 
 @router.delete("/{item_id}")
 async def proxy_delete_queue_item(request: Request, item_id: str):
-    ui_config = load_clean_json(UI_CONFIG_FILE)
+    ui_config = get_cached_ui_config()
     if ui_config.get("backend_mode", "local") == "remote":
         orch = ConfigOrchestrator(ui_config)
         url, sec = orch.get_primary_target_ctx()
@@ -111,7 +111,7 @@ async def proxy_delete_queue_item(request: Request, item_id: str):
 @router.post("/test")
 async def proxy_test_payload(request: Request):
     data = await request.json()
-    ui_config = load_clean_json(UI_CONFIG_FILE)
+    ui_config = get_cached_ui_config()
     if ui_config.get("backend_mode", "local") == "remote":
         orch = ConfigOrchestrator(ui_config)
         url, sec = orch.get_primary_target_ctx()
