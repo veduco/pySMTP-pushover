@@ -163,12 +163,21 @@ class MIMEBuilder:
 
     @staticmethod
     def rebuild_payload_bytes(payload: dict, force_plaintext: bool, include_attachments: bool) -> bytes:
-        # If no structural mutation is requested, return the pristine original bytes
-        if not force_plaintext and include_attachments:
-            return base64.b64decode(payload["raw_eml_base64"])
-
         raw_bytes = base64.b64decode(payload["raw_eml_base64"])
         original_msg = message_from_bytes(raw_bytes, policy=policy.default)
+
+        # Always enforce a structurally valid RFC 5322 From header for egress relays
+        orig_from = str(original_msg.get('From', ''))
+        name, _ = email.utils.parseaddr(orig_from)
+        clean_sender = payload.get("sender", "gateway@localhost")
+        safe_from = email.utils.formataddr((name, clean_sender))
+
+        del original_msg['From']
+        original_msg['From'] = safe_from
+
+        # If no structural mutation is requested, return the pristine original bytes (with fixed header)
+        if not force_plaintext and include_attachments:
+            return bytes(original_msg)
 
         raw_plain = ""
         raw_html = ""
@@ -188,17 +197,18 @@ class MIMEBuilder:
 
         msg = EmailMessage()
 
-        # Clone original headers safely, excluding structural boundaries
+        # Clone original headers safely, excluding structural boundaries and the old From header
         for key, val in original_msg.items():
-            if key.lower() not in ['content-type', 'mime-version', 'content-transfer-encoding', 'content-disposition']:
+            if key.lower() not in ['content-type', 'mime-version', 'content-transfer-encoding', 'content-disposition', 'from']:
                 msg[key] = val
+
+        msg['From'] = safe_from
 
         if 'MIME-Version' not in msg:
             msg['MIME-Version'] = '1.0'
 
         # Ensure missing essential headers are populated
         if not msg.get('Subject'): msg['Subject'] = payload.get("title", "No Subject")
-        if not msg.get('From'): msg['From'] = payload.get("sender", "gateway@localhost")
         if not msg.get('To'): msg['To'] = ", ".join(payload.get("recipients", []))
         if not msg.get('Date'): msg['Date'] = email.utils.formatdate(localtime=False)
         if not msg.get('Message-ID'): msg['Message-ID'] = email.utils.make_msgid()

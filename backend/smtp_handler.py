@@ -14,6 +14,23 @@ from core.config import ConfigOrchestrator
 from backend.mail_parser import parse_email_content
 from core.utils import is_ip_allowed
 
+from email.utils import parseaddr
+import re
+
+def extract_clean_email(raw_addr):
+    """Extractor to isolate the raw email address from malformed envelope strings."""
+    if not raw_addr:
+        return ""
+
+    # 1. Pluck the raw email address using standard character boundaries, ignoring mangled quotes/brackets
+    match = re.search(r'([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)', raw_addr)
+    if match:
+        return match.group(1).lower().strip()
+
+    # 2. Fallback to standard parsing if regex misses
+    parsed = parseaddr(raw_addr)[1].lower().strip()
+    return parsed if parsed else raw_addr.lower().strip()
+
 try:
     from passlib.hash import sha256_crypt, sha512_crypt, md5_crypt
     HAS_PASSLIB = True
@@ -189,13 +206,13 @@ class PushoverSMTPHandler:
 
         return routes_to_trigger
 
-    def _apply_fallbacks(self, routes_to_trigger, sender, recipients):
+    def _apply_fallbacks(self, routes_to_trigger, sender, recipients, raw_sender="", raw_recipients=None):
         if not routes_to_trigger:
             def_route = self.state.smtp.get("default_route", "pushover")
 
-            # Format clean addresses for the log output
-            log_from = sender if sender else "Unknown"
-            log_to = ", ".join(recipients) if recipients else "Unknown"
+            # Format addresses for the log output, preserving original casing from the raw unmutated strings
+            log_from = raw_sender if raw_sender else (sender if sender else "Unknown")
+            log_to = ", ".join(raw_recipients) if raw_recipients else (", ".join(recipients) if recipients else "Unknown")
             base_log_msg = f"No explicit mappings matched [To: {log_to}, From: {log_from}]"
 
             if def_route == "pushover":
@@ -319,15 +336,21 @@ class PushoverSMTPHandler:
         try:
             # 1. Parse the raw email byte payload
             parsed_data = parse_email_content(envelope.content)
-            sender = envelope.mail_from.lower() if envelope.mail_from else ""
-            recipients = [r.lower() for r in envelope.rcpt_tos]
+
+            # Use regex extraction to isolate the email string
+            raw_sender = envelope.mail_from if envelope.mail_from else ""
+            sender = extract_clean_email(raw_sender)
+
+            raw_recipients = envelope.rcpt_tos
+            recipients = [extract_clean_email(r) for r in raw_recipients]
+
             client_ip = session.peer[0] if session and session.peer else "127.0.0.1"
 
             # 2. Evaluate explicit routing rules
             routes = self._match_explicit_routes(sender, recipients)
 
             # 3. Apply global fallbacks if no explicit routes matched
-            routes = self._apply_fallbacks(routes, sender, recipients)
+            routes = self._apply_fallbacks(routes, sender, recipients, raw_sender=raw_sender, raw_recipients=raw_recipients)
 
             # 4. Deduplicate identical destinations
             unique_routes = self._deduplicate_routes(routes)
