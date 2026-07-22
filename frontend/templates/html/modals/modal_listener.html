@@ -2,7 +2,7 @@
 
 {% call modal_frame(open_model="modals.listener.open", title_text="modals.listener.mode === 'add' ? 'Add SMTP Listener' : 'Modify SMTP Listener'") %}
 
-    {{ listener_network_block(ip_model="modals.listener.fields.ip", port_model="modals.listener.fields.port") }}
+    {{ listener_network_block(ip_model="modals.listener.fields.ip", port_model="modals.listener.fields.port", on_input="modals.listener.portModified = true") }}
 
     <div class="form-group" style="margin-bottom: 1.5rem;">
         <label>Hostname Override</label>
@@ -13,7 +13,7 @@
         {{ toggle(model="modals.listener.fields.proxy_protocol", label="Expect PROXY Protocol v2 Header") }}
     </div>
 
-    {{ listener_security_toggle(model="modals.listener.fields.starttls", label_text="Use STARTTLS") }}
+    {{ listener_security_toggle(model="modals.listener.fields.starttls", label_text="Use STARTTLS", on_change="if (!modals.listener.portModified) modals.listener.fields.port = modals.listener.fields.starttls ? 587 : 25") }}
 
     <div x-show="modals.listener.fields.starttls" style="margin-bottom: 1rem;">
         <div class="form-group" style="margin-bottom: 0.5rem;">

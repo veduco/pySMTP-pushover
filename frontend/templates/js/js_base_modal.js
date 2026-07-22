@@ -144,6 +144,7 @@ class SmarthostModal extends GatewayModal {
     openModal(mode, alias = '') {
         if (mode === 'add') {
             this.initOpen('add', { oldAlias: '', alias: '', port: 25, auth: false, username: '', password: '', hostname: '', advertised_hostname: '', disable_attachments: false, force_plaintext: false });
+            this.portModified = false;
         } else {
             const sh = this.app.smarthosts[alias] || {};
             this.initOpen('edit', {
@@ -153,6 +154,7 @@ class SmarthostModal extends GatewayModal {
                 auth: sh.auth === true, username: sh.username || '', password: '',
                 disable_attachments: sh.disable_attachments === true, force_plaintext: sh.force_plaintext === true
             });
+            this.portModified = ![25, 587].includes(sh.port || 25);
         }
     }
     save() {
@@ -231,6 +233,7 @@ class ListenerModal extends GatewayModal {
                     idx: null, ip: '', port: 25, hostname: '',
                     starttls: false, proxy_protocol: false, tls_cert_file: '', tls_key_file: ''
                 });
+                this.portModified = false;
             } else {
                 const l = this.app.smtp.listeners[idx];
                 const { ip, port } = this.app.parseBindString(l.bind, 25);
@@ -239,6 +242,7 @@ class ListenerModal extends GatewayModal {
                     starttls: l.starttls === true, proxy_protocol: l.proxy_protocol === true,
                     tls_cert_file: l.tls_cert_file || '', tls_key_file: l.tls_key_file || ''
                 });
+                this.portModified = ![25, 587].includes(port);
             }
         } else {
             if (mode === 'add') {
