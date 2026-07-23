@@ -165,8 +165,6 @@ def build_access_middleware(
     Polymorphic middleware factory that unifies ACL blocking, proxy resolution,
     and HTTP access logging across both gateway microservices.
     """
-    if excluded_paths is None:
-        excluded_paths = ["/healthcheck"]
 
     async def access_log_middleware(request: Request, call_next):
         # Execute transient injections before processing (e.g. threading http clients into state)
