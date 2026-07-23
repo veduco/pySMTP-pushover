@@ -36,32 +36,32 @@
         <div class="tabs desktop-tabs">
             <template x-if="configOk">
                 <div style="display: flex; gap: 1rem;">
-                    <div class="tab" :class="{ 'active': tab === 'routes' }" @click="tab = 'routes'">Routes</div>
-                    <div class="tab" :class="{ 'active': tab === 'queue' }" @click="tab = 'queue'">Queue Stream</div>
-                    <div class="tab" :class="{ 'active': tab === 'pushover' }" @click="tab = 'pushover'">Pushover</div>
-                    <div class="tab" :class="{ 'active': tab === 'smarthost' }" @click="tab = 'smarthost'">Smarthosts</div>
-                    <div class="tab" :class="{ 'active': tab === 'server' }" @click="tab = 'server'">SMTP Server</div>
-                    <div class="tab" :class="{ 'active': tab === 'test' }" @click="tab = 'test'">Test Payload</div>
+                    <div class="tab" :class="{ 'active': tab === 'routes' }" @click="switchTab('routes')">Routes</div>
+                    <div class="tab" :class="{ 'active': tab === 'queue' }" @click="switchTab('queue')">Queue Stream</div>
+                    <div class="tab" :class="{ 'active': tab === 'pushover' }" @click="switchTab('pushover')">Pushover</div>
+                    <div class="tab" :class="{ 'active': tab === 'smarthost' }" @click="switchTab('smarthost')">Smarthosts</div>
+                    <div class="tab" :class="{ 'active': tab === 'server' }" @click="switchTab('server')">SMTP Server</div>
+                    <div class="tab" :class="{ 'active': tab === 'test' }" @click="switchTab('test')">Test Payload</div>
                 </div>
             </template>
-            <div class="tab" :class="{ 'active': tab === 'backend' }" @click="tab = 'backend'">Backend Config</div>
-            <div class="tab" :class="{ 'active': tab === 'ui' }" @click="tab = 'ui'">UI Settings</div>
+            <div class="tab" :class="{ 'active': tab === 'backend' }" @click="switchTab('backend')">Backend Config</div>
+            <div class="tab" :class="{ 'active': tab === 'ui' }" @click="switchTab('ui')">UI Settings</div>
         </div>
 
         <!-- Mobile View Dropdown Overlay -->
         <div class="mobile-menu-dropdown" :class="{ 'is-open': mobileMenuOpen }" x-show="mobileMenuOpen" @click.away="mobileMenuOpen = false" x-transition.opacity style="display: none;">
             <template x-if="configOk">
                 <div style="display: flex; flex-direction: column;">
-                    <div class="tab" :class="{ 'active': tab === 'routes' }" @click="tab = 'routes'; mobileMenuOpen = false">Routes</div>
-                    <div class="tab" :class="{ 'active': tab === 'queue' }" @click="tab = 'queue'; mobileMenuOpen = false">Queue Stream</div>
-                    <div class="tab" :class="{ 'active': tab === 'pushover' }" @click="tab = 'pushover'; mobileMenuOpen = false">Pushover</div>
-                    <div class="tab" :class="{ 'active': tab === 'smarthost' }" @click="tab = 'smarthost'; mobileMenuOpen = false">Smarthosts</div>
-                    <div class="tab" :class="{ 'active': tab === 'server' }" @click="tab = 'server'; mobileMenuOpen = false">SMTP Server</div>
-                    <div class="tab" :class="{ 'active': tab === 'test' }" @click="tab = 'test'; mobileMenuOpen = false">Test Payload</div>
+                    <div class="tab" :class="{ 'active': tab === 'routes' }" @click="switchTab('routes'); mobileMenuOpen = false">Routes</div>
+                    <div class="tab" :class="{ 'active': tab === 'queue' }" @click="switchTab('queue'); mobileMenuOpen = false">Queue Stream</div>
+                    <div class="tab" :class="{ 'active': tab === 'pushover' }" @click="switchTab('pushover'); mobileMenuOpen = false">Pushover</div>
+                    <div class="tab" :class="{ 'active': tab === 'smarthost' }" @click="switchTab('smarthost'); mobileMenuOpen = false">Smarthosts</div>
+                    <div class="tab" :class="{ 'active': tab === 'server' }" @click="switchTab('server'); mobileMenuOpen = false">SMTP Server</div>
+                    <div class="tab" :class="{ 'active': tab === 'test' }" @click="switchTab('test'); mobileMenuOpen = false">Test Payload</div>
                 </div>
             </template>
-            <div class="tab" :class="{ 'active': tab === 'backend' }" @click="tab = 'backend'; mobileMenuOpen = false">Backend Config</div>
-            <div class="tab" :class="{ 'active': tab === 'ui' }" @click="tab = 'ui'; mobileMenuOpen = false">UI Settings</div>
+            <div class="tab" :class="{ 'active': tab === 'backend' }" @click="switchTab('backend'); mobileMenuOpen = false">Backend Config</div>
+            <div class="tab" :class="{ 'active': tab === 'ui' }" @click="switchTab('ui'); mobileMenuOpen = false">UI Settings</div>
         </div>
 
         <form id="app_form" hx-post="/save/config" hx-trigger="confirmedSave" hx-target="#status" @htmx:config-request.camel="if(configOk){ $event.detail.parameters['config_json'] = preparePayload();$event.detail.parameters['vault_json'] = prepareVaultPayload(); }">

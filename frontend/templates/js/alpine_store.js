@@ -96,9 +96,6 @@ document.addEventListener('alpine:init', () => {
             this.$watch('theme', val => { localStorage.setItem('theme', val); document.documentElement.setAttribute('data-theme', val); });
 
             this.$watch('tab', (newVal, oldVal) => {
-                if (['routes', 'pushover', 'smarthost', 'server', 'ui', 'backend'].includes(oldVal)) {
-                    this.resetTab(oldVal);
-                }
                 localStorage.setItem('activeTab', newVal);
                 if (newVal === 'queue') this.connectStream();
                 else if (this.sseSource) { this.sseSource.close(); this.sseSource = null; }

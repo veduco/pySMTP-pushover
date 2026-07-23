@@ -86,7 +86,7 @@ smtpListenerSortCol: 'bind', smtpListenerSortDir: 1,
 uiListenerSortCol: 'bind', uiListenerSortDir: 1,
 uiHostSortCol: 'alias', uiHostSortDir: 1,
 
-diffModal: { open: false, changes: [], targetForm: '' },
+diffModal: { open: false, changes: [], targetForm: '', isTabSwitch: false, pendingTab: '' },
 alertModal: { open: false, title: '', message: '' },
 
 // Bootstrapped Polymorphic Modal Component Engine Bindings will be injected on init

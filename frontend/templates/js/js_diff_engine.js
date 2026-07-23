@@ -280,8 +280,10 @@ takeSnapshot() {
     });
 },
 
-requestSave(formId) {
+requestSave(formId, isTabSwitch = false, pendingTab = '') {
     this.diffModal.targetForm = formId;
+    this.diffModal.isTabSwitch = isTabSwitch;
+    this.diffModal.pendingTab = pendingTab;
     this.diffModal.changes = [];
 
     const newConfig = JSON.parse(this.preparePayload());
@@ -375,7 +377,11 @@ requestSave(formId) {
     }
 
     if (this.diffModal.changes.length === 0) {
-        this.confirmSave();
+        if (isTabSwitch) {
+            this.tab = pendingTab;
+        } else {
+            this.confirmSave();
+        }
         return;
     }
 

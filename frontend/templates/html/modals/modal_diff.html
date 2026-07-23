@@ -1,8 +1,10 @@
 <div x-show="diffModal.open" class="modal-overlay" style="display: none;" x-transition @keydown.escape.window="diffModal.open = false">
     <div class="modal-content" @click.away="diffModal.open = false" style="width: max-content; max-width: 100%; box-sizing: border-box;">
-        <h3 style="margin-top: 0; border-bottom: 2px solid var(--primary-color); padding-bottom: 0.5rem;">Review Configuration Changes</h3>
+        <h3 style="margin-top: 0; border-bottom: 2px solid var(--primary-color); padding-bottom: 0.5rem;" x-text="diffModal.isTabSwitch ? 'Unsaved Changes Detected' : 'Review Configuration Changes'"></h3>
 
-        <p style="font-size: 0.9rem; margin-bottom: 1rem;">The following modifications will be committed to the server. Active connections may be temporarily paused for hot-reloads.</p>
+        <p style="font-size: 0.9rem; margin-bottom: 1rem;" x-show="!diffModal.isTabSwitch">The following modifications will be committed to the server. Active connections may be temporarily paused for hot-reloads.</p>
+
+        <p style="font-size: 0.9rem; margin-bottom: 1rem; color: var(--warning-color); font-weight: 500;" x-show="diffModal.isTabSwitch">Switching between tabs causes all values to be reset. The modified values are shown below.</p>
 
         <table style="margin-bottom: 1.5rem; width: 100%; min-width: 500px;">
             <thead>
@@ -31,10 +33,16 @@
             </tbody>
         </table>
 
-        <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+        <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
             <button type="button" class="outline" @click="diffModal.open = false">Cancel</button>
-            <button type="button" class="warning" @click="discardAllChanges()">Discard All</button>
-            <button type="button" @click="confirmSave()">Commit</button>
+
+            <!-- Standard Save Actions -->
+            <button type="button" class="warning" x-show="!diffModal.isTabSwitch" @click="discardAllChanges()">Discard All</button>
+            <button type="button" x-show="!diffModal.isTabSwitch" @click="confirmSave()">Commit</button>
+
+            <!-- Tab Switch Actions -->
+            <button type="button" class="warning" x-show="diffModal.isTabSwitch" @click="discardAndSwitchTab()">Discard and Switch Tab</button>
+            <button type="button" x-show="diffModal.isTabSwitch" @click="commitAndSwitchTab()">Commit and Switch Tab</button>
         </div>
     </div>
 </div>

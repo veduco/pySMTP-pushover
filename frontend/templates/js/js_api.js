@@ -32,6 +32,33 @@ addMapping() {
 },
 
 // --- GENERAL API METHODS ---
+switchTab(targetTab) {
+    if (this.tab === targetTab) return;
+
+    if (this.hasActiveTabChanges) {
+        // Map the current tab to its designated HTMX form
+        let formId = 'app_form';
+        if (this.tab === 'backend') formId = 'backend_form';
+        if (this.tab === 'ui') formId = 'ui_form';
+
+        this.requestSave(formId, true, targetTab);
+    } else {
+        this.tab = targetTab;
+    }
+},
+
+discardAndSwitchTab() {
+    const target = this.diffModal.pendingTab;
+    this.discardAllChanges();
+    this.tab = target;
+},
+
+commitAndSwitchTab() {
+    const target = this.diffModal.pendingTab;
+    this.confirmSave();
+    this.tab = target;
+},
+
 confirmSave() {
     if (this.diffModal.targetForm === 'ui_form') {
         if (!this.checkTimezone()) {
