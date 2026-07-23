@@ -193,15 +193,19 @@ async def start_control_api(api_conf, reload_event, mappings_reload_event, gatew
 
     logging.debug(f"Attempting to start HTTPS Control API listener at https://{host}:{port}")
 
-    # Disable uvicorn's internal logging so our custom access_log_middleware handles everything uniformly
-    config = uvicorn.Config(
-        app=app, host=host, port=port, ssl_keyfile=key_path, ssl_certfile=cert_path,
-        log_config=None, access_log=False
-    )
-    server = uvicorn.Server(config)
-    active_server = server
-
     try:
+        # Disable uvicorn's internal logging so our custom access_log_middleware handles everything uniformly
+        config = uvicorn.Config(
+            app=app, host=host, port=port, ssl_keyfile=key_path, ssl_certfile=cert_path,
+            log_config=None, access_log=False
+        )
+        server = uvicorn.Server(config)
+
+        # Safely prevent Uvicorn from hijacking the asyncio loop's OS shutdown signals
+        server.install_signal_handlers = lambda: None
+
+        active_server = server
+
         logging.info(f"HTTPS Control API listener started at https://{host}:{port}")
         await server.serve()
     except asyncio.CancelledError:

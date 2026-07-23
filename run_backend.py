@@ -329,7 +329,20 @@ async def main():
         await worker_task
 
         if os.path.exists(SMTP_PID_FILE):
-            os.remove(SMTP_PID_FILE)
+            try:
+                os.remove(SMTP_PID_FILE)
+            except OSError:
+                pass
+
+        # Forcefully terminate any orphaned tasks (e.g., active SMTP client sockets, SSE streams)
+        # This prevents asyncio.run() from silently hanging during its implicit teardown phase.
+        pending = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+        if pending:
+            logging.debug(f"Cancelling {len(pending)} orphaned background tasks...")
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+
         logging.info("Shutdown complete.")
 
 if __name__ == "__main__":
