@@ -310,17 +310,6 @@ def load_config(ignore_missing=False, config_path=None):
     for k, v in schema.get("smtp", {}).items():
         state.smtp.setdefault(k, v)
 
-    # Inject deduplication defaults natively from parsing block schema
-    state.smtp.setdefault("dedupe_enabled", False)
-    state.smtp.setdefault("dedupe_window", "10m")
-    state.smtp.setdefault("dedupe_keys", ["sender", "match_reason", "message"])
-
-    # Inject flood protection defaults natively
-    state.smtp.setdefault("flood_enabled", False)
-    state.smtp.setdefault("flood_limit", 60)
-    state.smtp.setdefault("flood_window", "1m")
-    state.smtp.setdefault("flood_scope", "ip")
-
     # 2. Extract Pushover and Smarthost structures natively from Schema
     state.pushover = data.get("pushover", {})
     for k, v in schema.get("pushover", {}).items():

@@ -210,16 +210,17 @@ document.addEventListener('alpine:init', () => {
                 this.pushGlobals.force_plaintext = (po.force_plaintext === true);
 
                 this.smtp = this.rawConfig.smtp || {};
-                if(!this.smtp.listeners) this.smtp.listeners = [];
-                if(!this.smtp.auth) this.smtp.auth = {};
-                if(!this.smtp.default_route) this.smtp.default_route = 'pushover';
-                if(this.smtp.disable_persistence === undefined) this.smtp.disable_persistence = false;
 
-                if(this.smtp.dedupe_enabled === undefined) this.smtp.dedupe_enabled = false;
-                if(!this.smtp.dedupe_window) this.smtp.dedupe_window = '10m';
-                if(!this.smtp.dedupe_keys || !Array.isArray(this.smtp.dedupe_keys)) {
-                    this.smtp.dedupe_keys = ['sender', 'match_reason', 'message'];
+                // Dynamically inject any missing keys from the schema Source of Truth
+                const smtpDefaults = schemaSource.gateway_config.smtp || {};
+                for (const key in smtpDefaults) {
+                    if (this.smtp[key] === undefined) {
+                        this.smtp[key] = JSON.parse(JSON.stringify(smtpDefaults[key]));
+                    }
                 }
+
+                // Ensure auth dictionary exists for legacy structural safety
+                if (!this.smtp.auth) this.smtp.auth = {};
             }
 
             this.takeSnapshot();
