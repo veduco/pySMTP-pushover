@@ -24,6 +24,13 @@ def _execute_ui_snapshot(ui_data):
         conf_dir = os.path.dirname(UI_CONFIG_FILE) or "."
         base_name = os.path.basename(UI_CONFIG_FILE)
 
+        # 1. Sanitize the live data state to ignore transient telemetry updates
+        live_compare = json.loads(json.dumps(ui_data))
+        for host in live_compare.get("remote_hosts", []):
+            host.pop("sync_status", None)
+            host.pop("last_secret_hash", None)
+            host.pop("expected_hash", None)
+
         snapshots = []
         for entry in os.listdir(conf_dir):
             if entry.startswith(f".{base_name}.valid.") and entry.endswith(".json"):
@@ -34,7 +41,16 @@ def _execute_ui_snapshot(ui_data):
         if snapshots:
             latest_backup_path = snapshots[-1]
             cached_data = load_clean_json(latest_backup_path)
-            if ui_data == cached_data:
+
+            # 2. Sanitize the cached data state identically
+            cached_compare = json.loads(json.dumps(cached_data))
+            for host in cached_compare.get("remote_hosts", []):
+                host.pop("sync_status", None)
+                host.pop("last_secret_hash", None)
+                host.pop("expected_hash", None)
+
+            # 3. Perform a strict structural diff (ignoring hashes and statuses)
+            if live_compare == cached_compare:
                 return
 
         epoch = int(time.time())
