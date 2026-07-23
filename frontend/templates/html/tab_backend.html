@@ -88,6 +88,8 @@
     $event.detail.parameters['ui_listeners_json'] = JSON.stringify(uiListeners);
     $event.detail.parameters['remote_hosts_json'] = JSON.stringify(ui_remote_hosts);
     $event.detail.parameters['remote_secrets_json'] = JSON.stringify(ui_remote_secrets);
+    $event.detail.parameters['ui_allowed_cidrs_json'] = JSON.stringify(ui_allowed_cidrs);
+    $event.detail.parameters['trust_proxy_cidrs_json'] = JSON.stringify(ui_trust_proxy_cidrs);
 ">
     <input type="hidden" name="timezone" :value="ui_tz">
     <input type="hidden" name="date_format" :value="ui_fmt">
