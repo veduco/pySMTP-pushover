@@ -48,7 +48,7 @@ const GatewayStore = {
                 if (m.method === 'smarthost' && (!m.smarthost_alias || m.smarthost_alias.trim() === '')) return false;
             }
         } else if (tab === 'server') {
-            if (ctx.errors.smtpCidr || ctx.errors.dedupeWindow) return false;
+            if (ctx.errors.smtpCidr || ctx.errors.dedupeWindow || ctx.errors.floodWindow) return false;
             if (ctx.smtp.default_route === 'pushover') {
                 if (!ctx.pushGlobals.token || !ctx.pushGlobals.user) return false;
             } else if (ctx.smtp.default_route === 'smarthost') {

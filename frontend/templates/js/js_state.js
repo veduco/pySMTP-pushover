@@ -37,7 +37,8 @@ errors: {
     uiCidr: '',
     smtpCidr: '',
     dedupeWindow: '',
-    uiTrustProxyCidr: ''
+    uiTrustProxyCidr: '',
+    floodWindow: ''
 },
 
 rawConfig: {{ config_json | safe }},
@@ -46,7 +47,25 @@ rawUiConfig: {{ ui_config_json | safe }},
 
 queueItems: [],
 
-smtp: { listeners: [], default_route: 'pushover', loglevel: 'INFO', hostname: '', queue_dir: '', tls_cert_file: '', tls_key_file: '', disable_persistence: false, auth: {}, allowed_cidrs: [], dedupe_enabled: false, dedupe_window: '10m', dedupe_keys: ['sender', 'match_reason', 'message'] },
+smtp: {
+    listeners: [],
+    default_route: 'pushover',
+    loglevel: 'INFO',
+    hostname: '',
+    queue_dir: '',
+    tls_cert_file: '',
+    tls_key_file: '',
+    disable_persistence: false,
+    auth: {},
+    allowed_cidrs: [],
+    dedupe_enabled: false,
+    dedupe_window: '10m',
+    dedupe_keys: ['sender', 'match_reason', 'message'],
+    flood_enabled: false,
+    flood_limit: 60,
+    flood_window: '1m',
+    flood_scope: 'ip'
+},
 smtp_meta: {{ smtp_meta_json | safe }},
 
 vaultMeta: {{ vault_meta_json | safe }},

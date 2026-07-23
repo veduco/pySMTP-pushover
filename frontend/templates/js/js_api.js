@@ -170,3 +170,18 @@ async sendTestPayload() {
         this.testPayload.loading = false;
     }
 },
+
+validateFloodWindow() {
+    const val = (this.smtp.flood_window || '').trim().toLowerCase();
+    if (!val) {
+        this.errors.floodWindow = '';
+        return true;
+    }
+    const regex = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/;
+    if (!regex.test(val)) {
+        this.errors.floodWindow = 'Invalid window string format definition constraint.';
+        return false;
+    }
+    this.errors.floodWindow = '';
+    return true;
+},

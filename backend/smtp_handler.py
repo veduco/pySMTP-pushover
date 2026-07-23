@@ -57,6 +57,39 @@ def verify_password(plain_password, stored_value):
         else: return False
     return plain_password == stored_value
 
+class RateLimitEngine:
+    """O(1) Memory-bounded fixed window transactional rate limit evaluation."""
+    def __init__(self, max_cache_scale=10000):
+        self._cache = {}
+        self._lock = threading.Lock()
+        self._max_cache_scale = max_cache_scale
+
+    def is_limited(self, key: str, limit: int, window_seconds: int) -> bool:
+        now = time.time()
+        with self._lock:
+            # Clean expired keys dynamically when approaching capacity
+            if len(self._cache) >= self._max_cache_scale:
+                expired_keys = [k for k, v in self._cache.items() if now >= v['reset_at']]
+                for k in expired_keys:
+                    del self._cache[k]
+
+                # If still constrained, force O(1) eviction of an arbitrary key
+                if len(self._cache) >= self._max_cache_scale:
+                    oldest_key = next(iter(self._cache))
+                    del self._cache[oldest_key]
+
+            record = self._cache.get(key)
+
+            if not record or now >= record['reset_at']:
+                self._cache[key] = {'count': 1, 'reset_at': now + window_seconds}
+                return False
+
+            record['count'] += 1
+            if record['count'] > limit:
+                return True
+
+            return False
+
 class GatewaySMTP(SMTP):
     async def smtp_CONNECT(self, server, session, envelope):
         session.allowed_cidrs = getattr(self.event_handler, "allowed_cidrs", [])
@@ -66,6 +99,14 @@ class GatewaySMTP(SMTP):
             logging.warning(f"Inbound SMTP connection dropped: Remote IP {client_ip} violated whitelist boundaries.")
             return "554 Transaction rejected: Client IP access denied by gateway security ACL policy restrictions."
 
+        state = getattr(self.event_handler, "state", None)
+        if state and state.smtp.get("flood_enabled") and state.smtp.get("flood_scope") in ("ip", "both"):
+            limit = int(state.smtp.get("flood_limit", 60))
+            window_seconds = ConfigOrchestrator.parse_duration_to_seconds(state.smtp.get("flood_window", "1m"))
+            if getattr(self.event_handler, "rate_limiter", None) and self.event_handler.rate_limiter.is_limited(f"ip:{client_ip}", limit, window_seconds):
+                logging.warning(f"Flood Protection Triggered: IP {client_ip} exceeded {limit} connections/{window_seconds}s.")
+                return '421 4.7.1 Too many connections, try again later'
+
         return await super().smtp_CONNECT(server, session, envelope)
 
     async def smtp_MAIL(self, arg):
@@ -73,7 +114,24 @@ class GatewaySMTP(SMTP):
             arg = re.sub(r'(?i)\s+AUTH=[^\s]*', '', arg)
             arg = re.sub(r'(?i)\s+RET=[^\s]*', '', arg)
             arg = re.sub(r'(?i)\s+ENVID=[^\s]*', '', arg)
-        return await super().smtp_MAIL(arg)
+
+        result = await super().smtp_MAIL(arg)
+
+        # If the superclass already rejected the command, just pass it along
+        if not str(result).startswith('250'):
+            return result
+
+        state = getattr(self.event_handler, "state", None)
+        if state and state.smtp.get("flood_enabled") and state.smtp.get("flood_scope") in ("sender", "both"):
+            limit = int(state.smtp.get("flood_limit", 60))
+            window_seconds = ConfigOrchestrator.parse_duration_to_seconds(state.smtp.get("flood_window", "1m"))
+
+            sender = extract_clean_email(self.envelope.mail_from)
+            if getattr(self.event_handler, "rate_limiter", None) and self.event_handler.rate_limiter.is_limited(f"sender:{sender}", limit, window_seconds):
+                logging.warning(f"Flood Protection Triggered: Sender {sender} exceeded {limit} msgs/{window_seconds}s.")
+                return '421 4.7.1 Sender rate limit exceeded, try again later'
+
+        return result
 
     async def smtp_RCPT(self, arg):
         if arg:
@@ -164,8 +222,9 @@ class PushoverSMTPHandler:
         self.broker = broker
         self.allowed_cidrs = state.smtp.get("allowed_cidrs", [])
 
-        # Initialize the decoupled deduplication engine
+        # Initialize the decoupled memory engines
         self.deduplicator = DeduplicationEngine()
+        self.rate_limiter = RateLimitEngine()
 
         # Thread-safe in-memory cache rings tracking alert duplication bounds
         self._dedupe_cache = {}

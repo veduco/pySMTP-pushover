@@ -96,7 +96,11 @@ translatePatchToHuman(patchItem) {
         'retry': 'Retry Interval',
         'expire': 'Expiration Time',
         'token': 'App Token',
-        'user': 'User Key'
+        'user': 'User Key',
+        'flood_enabled': 'Flood Protection Status',
+        'flood_limit': 'Flood Connection Limit',
+        'flood_window': 'Flood Time Window',
+        'flood_scope': 'Flood Tracking Scope'
     };
 
     if (segments[0] === 'route_mappings' && segments[1]) {
@@ -589,5 +593,6 @@ resetTab(tabContext) {
         this.smtpCidrInput = '';
         this.errors.smtpCidr = '';
         this.errors.dedupeWindow = '';
+        this.errors.floodWindow = '';
     }
 },

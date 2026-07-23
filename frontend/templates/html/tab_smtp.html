@@ -98,6 +98,44 @@
 </div>
 
 <div class="card" style="margin-bottom: 1.5rem;">
+    <h3>Inbound Flood Protection & Rate Limiting</h3>
+    <p style="margin-top: 0; font-size: 0.9rem; opacity: 0.8;">Defend the gateway from sudden bursts of inbound messages by outright rejecting the SMTP connections before processing the payload body.</p>
+
+    <div class="flex-row" style="margin-bottom: 1.5rem; justify-content: flex-start;">
+        {{ toggle(model="smtp.flood_enabled", label="Enable Protocol-Level Flood Protection") }}
+    </div>
+
+    <div x-show="smtp.flood_enabled" x-transition style="display: none; padding-top: 0.5rem; border-top: 1px dashed var(--border-color);">
+        <div class="flex-row" style="margin-bottom: 1rem; align-items: flex-end;">
+            <div style="flex: 0 0 auto; width: 270px; max-width: 100%;">
+                <label style="margin-bottom: 0.25rem;">Tracking Scope Target</label>
+                {{ segment_track(
+                    model="smtp.flood_scope",
+                    options=[
+                        {"value": "ip", "label": "Client IP"},
+                        {"value": "sender", "label": "Sender"},
+                        {"value": "both", "label": "Both"}
+                    ],
+                    thumb_style="'width: calc(33.333% - 2px); transform: translateX(' + (Math.max(0, ['ip','sender','both'].indexOf(smtp.flood_scope)) * 100) + '%);'"
+                ) }}
+            </div>
+
+            <div class="flex-col" style="flex: 1; min-width: 150px;">
+                <label>Max Allowed Connections</label>
+                <input type="number" x-model.number="smtp.flood_limit" min="1" max="10000" style="width: 100%;">
+            </div>
+
+            <div class="flex-col" style="flex: 1; min-width: 150px;">
+                <label>Time Window</label>
+                <input type="text" x-model="smtp.flood_window" @input="validateFloodWindow()" placeholder="e.g. 1m, 30s, 1h" autocomplete="off" style="width: 100%;">
+            </div>
+        </div>
+        <span class="validation-error" x-show="errors.floodWindow" x-text="errors.floodWindow" style="color: var(--danger-color); font-size: 0.8rem; font-weight: bold; margin-top: 0.25rem; display: block;"></span>
+        <span class="helper-text" x-show="!errors.floodWindow" style="font-size: 0.8rem; opacity: 0.6; display: block; margin-top: 0.25rem;">Limit defines how many connections are permitted within the defined sliding window duration. Target receives an SMTP 421 backoff response.</span>
+    </div>
+</div>
+
+<div class="card" style="margin-bottom: 1.5rem;">
     <div class="table-header-row" style="margin-top: 0;">
         <h3 style="display: flex; align-items: center; gap: 0.75rem; margin: 0;">SMTP Authentication Users
             <button type="button" class="outline success icon-btn" @click="modals.smtpUser.openModal()" title="Add User" style="padding: 0.2rem 0.4rem;">
