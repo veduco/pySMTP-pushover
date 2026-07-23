@@ -59,7 +59,15 @@
             </div>
 
             <div class="flex-col" style="flex: 1; min-width: 200px; padding-bottom: 2px;">
-                <label>Display Timezone Location</label>
+                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.25rem;">
+                    <label style="margin-bottom: 0;">Display Timezone Location</label>
+                    <a style="font-size: 0.75rem; color: var(--primary-color); cursor: pointer; font-weight: 600; text-decoration: none;"
+                       @click="ui_tz = Intl.DateTimeFormat().resolvedOptions().timeZone; checkTimezone()"
+                       onmouseover="this.style.textDecoration='underline'"
+                       onmouseout="this.style.textDecoration='none'">
+                        Sync With Browser
+                    </a>
+                </div>
                 <input type="text" x-model="ui_tz" @blur="checkTimezone()" @input="errors.tz = ''" :class="errors.tz ? 'input-invalid' : ''" list="timezone-list" placeholder="Search timezone... e.g. America/New_York" autocomplete="off" style="width: 100%;">
                 <span class="validation-error" x-show="errors.tz" x-text="errors.tz" style="display: none;"></span>
                 <datalist id="timezone-list">
