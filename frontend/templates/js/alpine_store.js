@@ -56,6 +56,14 @@ const GatewayStore = {
             }
         } else if (tab === 'ui') {
             if (ctx.errors.tz || ctx.errors.uiCidr || ctx.errors.uiTrustProxyCidr) return false;
+
+            // Strictly enforce OIDC requirements when the feature is toggled active
+            if (ctx.ui_enable_oidc) {
+                if (!ctx.ui_oidc_issuer_url || !ctx.ui_oidc_issuer_url.trim()) return false;
+                if (!ctx.ui_oidc_client_id || !ctx.ui_oidc_client_id.trim()) return false;
+                if (!ctx.ui_oidc_client_secret || !ctx.ui_oidc_client_secret.trim()) return false;
+                if (!ctx.ui_oidc_cookie_secret || !ctx.ui_oidc_cookie_secret.trim()) return false;
+            }
         }
         return true;
     }

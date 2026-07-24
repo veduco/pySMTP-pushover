@@ -209,18 +209,21 @@ collectionManager(arrayPath, isCidrField = true) {
 
             // Preserve user context: set the warning, but do NOT clear inputValue destructively
             if (this.targetArray.includes(val)) {
-                this.errorMessage = 'This item has already been added to the collection whitelists.';
+                this.errorMessage = 'This item has already been added to the collection list.';
                 return;
             }
 
             this.isLoading = true;
             this.errorMessage = '';
 
-            const valid = await fetch('/api/validate/network', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ target: val, allow_cidr: isCidrField })
-            }).then(res => res.json()).then(data => data.valid).catch(() => false);
+            let valid = true;
+            if (isCidrField) {
+                valid = await fetch('/api/validate/network', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target: val, allow_cidr: true })
+                }).then(res => res.json()).then(data => data.valid).catch(() => false);
+            }
 
             if (this.inputValue.trim() !== val) {
                 this.isLoading = false;
@@ -230,9 +233,7 @@ collectionManager(arrayPath, isCidrField = true) {
             this.isLoading = false;
 
             if (!valid) {
-                this.errorMessage = isCidrField
-                    ? `Invalid Network Target or Subnet Mask specification: ${val}`
-                    : `Invalid IP Address declaration: ${val}`;
+                this.errorMessage = `Invalid Network Target or Subnet Mask specification: ${val}`;
                 return;
             }
 

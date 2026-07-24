@@ -48,6 +48,15 @@
     "remote_secrets": [],
     "allowed_cidrs": [],
     "trust_proxy_cidrs": [],
-    "listeners": [{"bind": "0.0.0.0:8443", "https": true}]
+    "listeners": [{"bind": "0.0.0.0:8443", "https": true}],
+    "enable_oidc": false,
+    "oidc_auto_redirect": true,
+    "oidc_issuer_url": "",
+    "oidc_client_id": "",
+    "oidc_client_secret": "",
+    "oidc_scopes": "openid profile email",
+    "oidc_claim_name": "groups",
+    "oidc_allowed_groups": [],
+    "oidc_cookie_secret": ""
   }
 }

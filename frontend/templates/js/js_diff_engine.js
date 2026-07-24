@@ -16,7 +16,16 @@ _buildUiStatePayload() {
         remote_hosts: this.clone(this.ui_remote_hosts || []),
         remote_secrets: this.clone(this.ui_remote_secrets || []),
         allowed_cidrs: this.clone(this.ui_allowed_cidrs || []),
-        trust_proxy_cidrs: this.clone(this.ui_trust_proxy_cidrs || [])
+        trust_proxy_cidrs: this.clone(this.ui_trust_proxy_cidrs || []),
+        enable_oidc: this.ui_enable_oidc,
+        oidc_auto_redirect: this.ui_oidc_auto_redirect,
+        oidc_issuer_url: this.ui_oidc_issuer_url,
+        oidc_client_id: this.ui_oidc_client_id,
+        oidc_client_secret: this.ui_oidc_client_secret,
+        oidc_scopes: this.ui_oidc_scopes,
+        oidc_claim_name: this.ui_oidc_claim_name,
+        oidc_allowed_groups: this.clone(this.ui_oidc_allowed_groups || []),
+        oidc_cookie_secret: this.ui_oidc_cookie_secret
     };
 },
 
@@ -100,7 +109,16 @@ translatePatchToHuman(patchItem) {
         'flood_enabled': 'Flood Protection Status',
         'flood_limit': 'Flood Connection Limit',
         'flood_window': 'Flood Time Window',
-        'flood_scope': 'Flood Tracking Scope'
+        'flood_scope': 'Flood Tracking Scope',
+        'enable_oidc': 'OIDC Single Sign-On',
+        'oidc_auto_redirect': 'OIDC Auto Redirect',
+        'oidc_issuer_url': 'OIDC Issuer URL',
+        'oidc_client_id': 'OIDC Client ID',
+        'oidc_client_secret': 'OIDC Client Secret',
+        'oidc_scopes': 'OIDC Requested Scopes',
+        'oidc_claim_name': 'OIDC RBAC Claim Name',
+        'oidc_allowed_groups': 'OIDC Allowed Groups',
+        'oidc_cookie_secret': 'OIDC Cookie Encryption Seed'
     };
 
     if (segments[0] === 'route_mappings' && segments[1]) {
@@ -163,7 +181,9 @@ isPathSensitive(path) {
            lower.includes('password') ||
            lower.includes('secret') ||
            lower.includes('auth') ||
-           lower.includes('vaultsmarthost');
+           lower.includes('vaultsmarthost') ||
+           lower.includes('oidc_client_secret') ||
+           lower.includes('oidc_cookie_secret');
 },
 
 preparePayload() {
@@ -567,6 +587,8 @@ resetTab(tabContext) {
         this.errors.tz = '';
         this.uiCidrInput = '';
         this.errors.uiCidr = '';
+        this.ui_oidc_allowed_groups = this.clone(uiObj.oidc_allowed_groups || []);
+        this.uiOidcGroupInput = '';
     }
 
     if (tabContext === 'pushover') {

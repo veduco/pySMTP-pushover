@@ -1,4 +1,4 @@
-{% from "components.html" import toggle, cidr_input, segment_track, tab_save_actions, btn_edit, btn_delete, status_icon %}
+{% from "components.html" import toggle, cidr_input, segment_track, tab_save_actions, btn_edit, btn_delete, status_icon, secret_input %}
 <style>
     .segment-label.compact {
         padding: 0.3rem 0;
@@ -36,7 +36,16 @@
         remote_secrets_json: JSON.stringify(ui_remote_secrets),
         ui_allowed_cidrs_json: JSON.stringify(ui_allowed_cidrs),
         trust_proxy_cidrs_json: JSON.stringify(ui_trust_proxy_cidrs),
-        ui_listeners_json: JSON.stringify(uiListeners)
+        ui_listeners_json: JSON.stringify(uiListeners),
+        enable_oidc: ui_enable_oidc,
+        oidc_auto_redirect: ui_oidc_auto_redirect,
+        oidc_issuer_url: ui_oidc_issuer_url,
+        oidc_client_id: ui_oidc_client_id,
+        oidc_client_secret: ui_oidc_client_secret,
+        oidc_scopes: ui_oidc_scopes,
+        oidc_claim_name: ui_oidc_claim_name,
+        oidc_cookie_secret: ui_oidc_cookie_secret,
+        oidc_allowed_groups_json: JSON.stringify(ui_oidc_allowed_groups)
     });
 ">
 
@@ -138,6 +147,85 @@
                 placeholder="e.g. 192.168.1.0/24",
                 is_cidr="true"
             ) }}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="table-header-row" style="margin-top: 0;">
+            <h3>Single Sign-On (OIDC)</h3>
+        </div>
+        <p style="margin-top: 0.5rem; font-size: 0.9rem; opacity: 0.8;">Integrate your Identity Provider (IdP) to enforce zero-trust authentication across the Gateway control plane. If you become locked out, disable OIDC from the backend JSON configuration and issue a SIGUSR2 signal to hot-reload the UI.</p>
+
+        <div class="flex-row" style="margin-bottom: 1.5rem;">
+            {{ toggle(model="ui_enable_oidc", label="Enable OIDC Authentication") }}
+        </div>
+
+        <div x-show="ui_enable_oidc" x-transition style="display: none; padding-top: 0.5rem; border-top: 1px dashed var(--border-color);">
+            <div x-data="{ showIdpHelp: false }" style="margin-bottom: 1.5rem;">
+                <a style="font-size: 0.85rem; color: var(--primary-color); cursor: pointer; font-weight: 600; text-decoration: none; display: inline-block; margin-bottom: 0.75rem;"
+                   @click="showIdpHelp = !showIdpHelp"
+                   @mouseover="$el.style.textDecoration='underline'"
+                   @mouseout="$el.style.textDecoration='none'">
+                    <span x-text="showIdpHelp ? 'Hide IdP Setup Requirements' : 'Show IdP Setup Requirements'"></span>
+                </a>
+
+                <div x-show="showIdpHelp" x-transition style="display: none; background: var(--secondary-bg); padding: 1rem; border-radius: 6px; font-size: 0.85rem; border: 1px solid var(--border-color);">
+                    <strong style="display: block; margin-bottom: 0.5rem; color: var(--primary-color);">Identity Provider (IdP) Setup Requirements:</strong>
+                    <ul style="margin: 0; padding-left: 1.5rem; opacity: 0.85; line-height: 1.5;">
+                        <li><strong>Redirect URI / Callback URL:</strong> <code x-text="window.location.origin + '/auth/callback'"></code></li>
+                        <li><strong>Grant Type:</strong> <code>authorization_code</code></li>
+                        <li><strong>Response Type:</strong> <code>code</code></li>
+                        <li><strong>Client Authentication Method:</strong> <code>Client Secret Post</code></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="flex-row" style="margin-bottom: 1rem;">
+                <div class="flex-col" style="flex: 2; min-width: 250px;">
+                    <label>Issuer Discovery URL</label>
+                    <input type="text" x-model="ui_oidc_issuer_url" placeholder="https://auth.example.com/realms/master" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+                </div>
+                <div class="flex-col" style="flex: 1; min-width: 200px;">
+                    <label>Cookie Encryption Seed Phrase</label>
+                    {{ secret_input(value_model="ui_oidc_cookie_secret", show_model="uiOidcShowCookieSecret", placeholder_text="Random string to encrypt session tokens") }}
+                </div>
+            </div>
+
+            <div class="flex-row" style="margin-bottom: 1rem;">
+                <div class="flex-col" style="flex: 1; min-width: 200px;">
+                    <label>Client ID</label>
+                    <input type="text" x-model="ui_oidc_client_id" placeholder="smtp-gateway" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+                </div>
+                <div class="flex-col" style="flex: 1; min-width: 200px;">
+                    <label>Client Secret</label>
+                    {{ secret_input(value_model="ui_oidc_client_secret", show_model="uiOidcShowClientSecret", placeholder_text="IdP Application Secret") }}
+                </div>
+            </div>
+
+            <div class="flex-row" style="margin-bottom: 1rem;">
+                <div class="flex-col" style="flex: 1; min-width: 200px;">
+                    <label>Requested Scopes</label>
+                    <input type="text" x-model="ui_oidc_scopes" placeholder="openid profile email" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+                </div>
+                <div class="flex-col" style="flex: 1; min-width: 200px;">
+                    <label>RBAC Claim Name</label>
+                    <input type="text" x-model="ui_oidc_claim_name" placeholder="groups" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true" style="width: 100%;">
+                </div>
+            </div>
+
+            <div style="margin-bottom: 1.5rem;">
+                <label style="font-weight: bold; margin-bottom: 0.35rem; display: block;">Allowed Authorization Groups</label>
+                <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; opacity: 0.7;">Restrict access to users possessing specific values within the Claim defined above. Leave blank to allow any authenticated user. Press <strong>Enter</strong> to add.</p>
+                {{ cidr_input(
+                    list_model="ui_oidc_allowed_groups",
+                    ref_name="uiOidcGroupInput",
+                    placeholder="e.g. gateway-admins",
+                    is_cidr="false"
+                ) }}
+            </div>
+
+            <div class="flex-row">
+                {{ toggle(model="ui_oidc_auto_redirect", label="Auto-Redirect unauthenticated traffic to Identity Provider") }}
+            </div>
         </div>
     </div>
 

@@ -110,7 +110,16 @@ async def save_ui(
     remote_hosts_json: str = Form("[]"), remote_secrets_json: str = Form("[]"),
     local_config_path: str = Form(""),
     ui_allowed_cidrs_json: str = Form("[]"),
-    trust_proxy_cidrs_json: str = Form("[]")
+    trust_proxy_cidrs_json: str = Form("[]"),
+    enable_oidc: bool = Form(False),
+    oidc_auto_redirect: bool = Form(True),
+    oidc_issuer_url: str = Form(""),
+    oidc_client_id: str = Form(""),
+    oidc_client_secret: str = Form(""),
+    oidc_scopes: str = Form("openid profile email"),
+    oidc_claim_name: str = Form("groups"),
+    oidc_cookie_secret: str = Form(""),
+    oidc_allowed_groups_json: str = Form("[]")
 ):
     # Isolate the old listeners to determine if a socket teardown is required
     old_ui_config = get_cached_ui_config()
@@ -131,6 +140,9 @@ async def save_ui(
     try: ui_cidrs = json.loads(ui_allowed_cidrs_json)
     except Exception: ui_cidrs = []
 
+    try: oidc_allowed_groups = json.loads(oidc_allowed_groups_json)
+    except Exception: oidc_allowed_groups = []
+
     save_json(UI_CONFIG_FILE, {
         "listeners": listeners, "timezone": timezone, "date_format": date_format,
         "relative_time": relative_time, "expand_adv": expand_adv, "trust_proxy": trust_proxy,
@@ -139,7 +151,16 @@ async def save_ui(
         "primary_host": primary_host, "remote_hosts": remote_hosts, "remote_secrets": remote_secrets,
         "local_config_path": local_config_path,
         "allowed_cidrs": ui_cidrs,
-        "trust_proxy_cidrs": trust_proxy_cidrs
+        "trust_proxy_cidrs": trust_proxy_cidrs,
+        "enable_oidc": enable_oidc,
+        "oidc_auto_redirect": oidc_auto_redirect,
+        "oidc_issuer_url": oidc_issuer_url,
+        "oidc_client_id": oidc_client_id,
+        "oidc_client_secret": oidc_client_secret,
+        "oidc_scopes": oidc_scopes,
+        "oidc_claim_name": oidc_claim_name,
+        "oidc_cookie_secret": oidc_cookie_secret,
+        "oidc_allowed_groups": oidc_allowed_groups
     })
 
     # Flush UI State Cache globally
@@ -148,7 +169,7 @@ async def save_ui(
     if backend_mode == "local" and local_config_path:
         os.environ["GATEWAY_CONFIG"] = local_config_path
 
-# Only nuke the Python network sockets if the binding interfaces were physically altered
+    # Only nuke the Python network sockets if the binding interfaces were physically altered
     if old_listeners != listeners:
         os.kill(os.getpid(), signal.SIGUSR1)
         trigger = "reconnectLink"
@@ -161,7 +182,7 @@ async def save_ui(
 
     html_alert = f"""
     <div style="background: var(--secondary-bg); border-left: 4px solid var(--warning-color); padding: 1rem; border-radius: 4px; color: var(--text-color); margin-top: 1.5rem; display: flex; align-items: center; gap: 0.75rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="var(--warning-color)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M21.5 2v6h-6M2.13 15.57a9 9 0 1 0 1.63-10.45l-3.23 2.9"></path></svg>
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="var(--warning-color)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M21.5 2v6h-6M2.13 15.57a9 9 0 1 1-1.63-10.45l-3.23 2.9"></path></svg>
         <div>
             <strong style="display: block; margin-bottom: 0.25rem;">Applying Context</strong>
             <span style="font-size: 0.9rem; opacity: 0.9;">{msg}</span>
